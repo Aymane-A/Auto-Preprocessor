@@ -1,0 +1,2001 @@
+surface_m2,nb_pieces,ville,etat,annee_construction,ascenseur,parking,etage,description,prix_dh
+97.0,3,Tanger,bon,1986,oui,2,11.0,bel appartement lumineux proche tramway,699000.0
+25.0,1,Casablanca,bon,1967,oui,1,10.0,residence securisee avec jardin,231000.0
+137.0,6,Tanger,bon,1981,oui,0,9.0,residence securisee avec jardin,1043000.0
+43.0,1,Rabat,,2019,oui,1,5.0,residence securisee avec jardin,295000.0
+98.0,3,Casablanca,a renover,1965,non,1,1.0,bel appartement lumineux proche tramway,730000.0
+45.0,1,Fès,bon,1988,oui,1,4.0,bel appartement lumineux proche tramway,250000.0
+136.0,5,Marrakech,a renover,2013,oui,0,5.0,studio refait a neuf centre ville,740000.0
+56.0,2,Rabat,neuf,1979,non,0,10.0,bel appartement lumineux proche tramway,599000.0
+106.0,3,Tanger,bon,1975,non,1,2.0,grand salon cuisine equipee,604000.0
+114.0,4,Rabat,a renover,1992,non,0,6.0,studio refait a neuf centre ville,747000.0
+72.0,3,Casablanca,neuf,2015,oui,1,1.0,grand salon cuisine equipee,740000.0
+145.0,7,Rabat,neuf,1982,non,1,0.0,studio refait a neuf centre ville,1330000.0
+76.0,2,Fès,a renover,1973,oui,1,5.0,studio refait a neuf centre ville,392000.0
+118.0,5,Casablanca,neuf,1983,oui,1,3.0,grand salon cuisine equipee,1148000.0
+140.0,5,Casablanca,bon,2014,oui,1,9.0,studio refait a neuf centre ville,1000000.0
+90.0,4,Marrakech,bon,1979,oui,0,,grand salon cuisine equipee,657000.0
+70.0,4,Marrakech,bon,1976,non,0,9.0,studio refait a neuf centre ville,584000.0
+,2,Marrakech,neuf,1968,non,0,0.0,studio refait a neuf centre ville,613000.0
+120.0,5,Marrakech,neuf,1986,oui,1,,grand salon cuisine equipee,1261000.0
+127.0,4,Tanger,a renover,2010,oui,1,6.0,bel appartement lumineux proche tramway,770000.0
+126.0,5,Tanger,a renover,2008,non,1,2.0,grand salon cuisine equipee,725000.0
+106.0,3,Rabat,neuf,1994,non,0,9.0,residence securisee avec jardin,1175000.0
+70.0,2,Tanger,a renover,1997,oui,0,10.0,bel appartement lumineux proche tramway,430000.0
+59.0,3,Rabat,neuf,2008,non,2,11.0,grand salon cuisine equipee,669000.0
+76.0,2,Tanger,bon,2003,oui,0,1.0,residence securisee avec jardin,558000.0
+140.0,4,Fès,bon,1973,non,0,9.0,grand salon cuisine equipee,1094000.0
+80.0,2,Marrakech,bon,1993,non,1,6.0,studio refait a neuf centre ville,716000.0
+134.0,5,Casablanca,a renover,1987,oui,1,11.0,residence securisee avec jardin,865000.0
+73.0,3,Fès,neuf,2010,non,1,10.0,bel appartement lumineux proche tramway,521000.0
+103.0,3,Casablanca,neuf,1986,non,1,2.0,studio refait a neuf centre ville,1325000.0
+79.0,4,Marrakech,bon,1982,oui,1,0.0,grand salon cuisine equipee,622000.0
+100.0,3,Casablanca,bon,1993,non,1,0.0,bel appartement lumineux proche tramway,1046000.0
+59.0,2,Marrakech,neuf,2011,non,0,4.0,residence securisee avec jardin,594000.0
+77.0,4,Casablanca,a renover,2005,oui,0,0.0,residence securisee avec jardin,711000.0
+64.0,2,Tanger,a renover,1984,oui,0,9.0,studio refait a neuf centre ville,396000.0
+100.0,4,Marrakech,a renover,1980,non,1,1.0,residence securisee avec jardin,638000.0
+154.0,6,Casablanca,bon,2019,oui,0,7.0,residence securisee avec jardin,1700000.0
+35.0,2,Casablanca,a renover,1990,oui,1,6.0,residence securisee avec jardin,280000.0
+115.0,4,Rabat,a renover,1989,oui,0,7.0,bel appartement lumineux proche tramway,875000.0
+125.0,6,Casablanca,bon,2013,oui,0,11.0,studio refait a neuf centre ville,9984000.0
+133.0,5,Fès,neuf,1990,non,0,6.0,studio refait a neuf centre ville,769000.0
+150.0,6,Casablanca,neuf,2003,non,1,,studio refait a neuf centre ville,1736000.0
+110.0,3,Casablanca,bon,1998,oui,0,5.0,residence securisee avec jardin,1115000.0
+92.0,3,Casablanca,neuf,2000,oui,1,7.0,bel appartement lumineux proche tramway,1063000.0
+127.0,6,Marrakech,neuf,1985,non,1,5.0,grand salon cuisine equipee,1255000.0
+111.0,4,Casablanca,bon,2006,oui,1,9.0,residence securisee avec jardin,1059000.0
+111.0,5,Marrakech,a renover,1982,oui,1,,grand salon cuisine equipee,601000.0
+100.0,3,Marrakech,bon,1995,non,2,5.0,studio refait a neuf centre ville,700000.0
+116.0,3,Marrakech,bon,1997,non,0,2.0,studio refait a neuf centre ville,841000.0
+158.0,5,Fès,bon,2000,oui,2,0.0,grand salon cuisine equipee,815000.0
+115.0,4,Marrakech,bon,1974,non,1,10.0,bel appartement lumineux proche tramway,759000.0
+110.0,4,Rabat,bon,2009,oui,2,1.0,bel appartement lumineux proche tramway,917000.0
+42.0,2,Rabat,bon,1996,oui,1,6.0,residence securisee avec jardin,328000.0
+66.0,3,Rabat,a renover,1998,non,0,3.0,bel appartement lumineux proche tramway,472000.0
+53.0,3,Rabat,bon,2006,oui,1,6.0,residence securisee avec jardin,406000.0
+79.0,3,Tanger,bon,1972,non,2,4.0,bel appartement lumineux proche tramway,526000.0
+88.0,3,Rabat,neuf,2013,non,0,3.0,bel appartement lumineux proche tramway,1129000.0
+98.0,3,Casablanca,bon,1983,non,1,11.0,studio refait a neuf centre ville,919000.0
+53.0,2,Rabat,bon,2010,non,1,,bel appartement lumineux proche tramway,474000.0
+82.0,2,Marrakech,bon,1964,oui,0,2.0,studio refait a neuf centre ville,592000.0
+107.0,4,Tanger,neuf,2008,non,0,8.0,bel appartement lumineux proche tramway,972000.0
+166.0,7,Tanger,a renover,1980,non,2,5.0,residence securisee avec jardin,909000.0
+85.0,2,Marrakech,bon,1992,non,1,5.0,grand salon cuisine equipee,640000.0
+80.0,4,Tanger,neuf,1997,non,0,10.0,residence securisee avec jardin,651000.0
+68.0,3,Casablanca,bon,1975,non,1,4.0,studio refait a neuf centre ville,614000.0
+94.0,4,Rabat,neuf,1961,non,1,,grand salon cuisine equipee,964000.0
+126.0,5,Rabat,neuf,1996,non,1,10.0,residence securisee avec jardin,1860000.0
+90.0,3,Marrakech,neuf,1973,oui,1,0.0,residence securisee avec jardin,773000.0
+121.0,4,Tanger,,1992,non,1,11.0,studio refait a neuf centre ville,780000.0
+74.0,3,Rabat,neuf,1981,non,2,,grand salon cuisine equipee,786000.0
+76.0,1,Marrakech,a renover,1960,non,0,9.0,residence securisee avec jardin,453000.0
+132.0,5,Fès,neuf,2020,non,0,0.0,residence securisee avec jardin,907000.0
+96.0,2,Tanger,bon,2017,oui,1,5.0,grand salon cuisine equipee,788000.0
+77.0,3,Rabat,bon,1992,oui,0,1.0,residence securisee avec jardin,690000.0
+114.0,4,Rabat,neuf,1972,oui,1,7.0,studio refait a neuf centre ville,1104000.0
+134.0,5,Marrakech,neuf,1979,oui,1,11.0,bel appartement lumineux proche tramway,1105000.0
+74.0,2,Casablanca,a renover,1988,oui,1,11.0,bel appartement lumineux proche tramway,581000.0
+81.0,3,Tanger,bon,1971,oui,0,3.0,grand salon cuisine equipee,566000.0
+53.0,2,Casablanca,neuf,1969,oui,0,3.0,residence securisee avec jardin,569000.0
+150.0,6,Rabat,neuf,1961,non,1,3.0,studio refait a neuf centre ville,1371000.0
+99.0,4,Casablanca,bon,1978,non,0,8.0,studio refait a neuf centre ville,844000.0
+130.0,5,Casablanca,bon,2015,oui,0,8.0,bel appartement lumineux proche tramway,1370000.0
+32.0,1,Marrakech,neuf,2001,oui,0,0.0,studio refait a neuf centre ville,327000.0
+25.0,2,Rabat,bon,1986,oui,2,3.0,grand salon cuisine equipee,237000.0
+60.0,2,Tanger,bon,1994,non,1,,bel appartement lumineux proche tramway,447000.0
+141.0,6,Marrakech,neuf,1980,oui,0,6.0,grand salon cuisine equipee,1711000.0
+105.0,4,Marrakech,bon,1985,non,1,8.0,residence securisee avec jardin,712000.0
+42.0,1,Marrakech,bon,2009,oui,0,,studio refait a neuf centre ville,346000.0
+49.0,2,Tanger,bon,1999,non,0,4.0,residence securisee avec jardin,364000.0
+56.0,3,Rabat,bon,1976,oui,2,2.0,residence securisee avec jardin,477000.0
+117.0,4,Casablanca,bon,2007,non,0,4.0,studio refait a neuf centre ville,1104000.0
+79.0,3,Marrakech,bon,1971,non,1,0.0,residence securisee avec jardin,620000.0
+68.0,1,Marrakech,a renover,2006,oui,1,1.0,residence securisee avec jardin,404000.0
+136.0,4,Tanger,bon,1960,oui,0,1.0,studio refait a neuf centre ville,915000.0
+118.0,5,Casablanca,bon,2002,oui,0,10.0,studio refait a neuf centre ville,1072000.0
+63.0,2,Marrakech,bon,2017,non,0,3.0,grand salon cuisine equipee,517000.0
+102.0,4,Fès,bon,1962,non,1,11.0,studio refait a neuf centre ville,466000.0
+112.0,3,Rabat,bon,2019,non,1,3.0,studio refait a neuf centre ville,911000.0
+96.0,3,Casablanca,bon,1987,oui,0,8.0,studio refait a neuf centre ville,923000.0
+117.0,4,Rabat,bon,1980,oui,0,6.0,studio refait a neuf centre ville,986000.0
+119.0,4,Marrakech,neuf,1971,non,1,7.0,bel appartement lumineux proche tramway,939000.0
+69.0,3,Rabat,bon,1980,oui,0,6.0,residence securisee avec jardin,463000.0
+150.0,5,Casablanca,a renover,2007,non,1,,grand salon cuisine equipee,1297000.0
+85.0,3,Tanger,neuf,1989,non,1,8.0,bel appartement lumineux proche tramway,559000.0
+135.0,5,Marrakech,bon,1990,oui,1,8.0,bel appartement lumineux proche tramway,944000.0
+53.0,2,Fès,bon,1999,oui,1,5.0,residence securisee avec jardin,238000.0
+,4,Tanger,neuf,2001,oui,1,6.0,grand salon cuisine equipee,1077000.0
+117.0,4,Casablanca,bon,1978,oui,1,9.0,residence securisee avec jardin,1148000.0
+134.0,4,Casablanca,bon,2008,oui,2,8.0,grand salon cuisine equipee,1244000.0
+127.0,4,Marrakech,a renover,2022,non,1,8.0,grand salon cuisine equipee,863000.0
+108.0,4,Rabat,bon,1987,non,1,2.0,studio refait a neuf centre ville,859000.0
+144.0,5,Tanger,neuf,1993,oui,1,7.0,studio refait a neuf centre ville,1185000.0
+110.0,4,Casablanca,bon,1999,non,1,3.0,studio refait a neuf centre ville,1170000.0
+120.0,4,Fès,bon,2008,oui,1,5.0,studio refait a neuf centre ville,637000.0
+153.0,5,Casablanca,bon,1989,non,1,9.0,bel appartement lumineux proche tramway,1433000.0
+52.0,2,Casablanca,bon,1999,oui,0,9.0,bel appartement lumineux proche tramway,435000.0
+,4,Rabat,bon,1987,oui,1,8.0,residence securisee avec jardin,949000.0
+63.0,3,Rabat,a renover,1993,non,0,0.0,residence securisee avec jardin,377000.0
+81.0,3,Casablanca,bon,1975,oui,0,7.0,grand salon cuisine equipee,671000.0
+126.0,5,Marrakech,a renover,2015,oui,1,7.0,residence securisee avec jardin,859000.0
+100.0,3,Rabat,a renover,1960,oui,2,8.0,studio refait a neuf centre ville,685000.0
+,1,Tanger,neuf,1967,oui,0,,studio refait a neuf centre ville,394000.0
+74.0,2,Fès,bon,2021,oui,0,,grand salon cuisine equipee,446000.0
+47.0,1,Casablanca,neuf,2022,non,0,10.0,studio refait a neuf centre ville,4896000.0
+52.0,2,Casablanca,bon,2015,non,1,11.0,residence securisee avec jardin,527000.0
+111.0,4,Casablanca,neuf,1980,oui,1,5.0,bel appartement lumineux proche tramway,1361000.0
+117.0,4,Marrakech,a renover,1985,non,0,3.0,residence securisee avec jardin,699000.0
+84.0,4,Casablanca,a renover,1990,non,0,5.0,residence securisee avec jardin,627000.0
+115.0,4,Casablanca,a renover,1985,non,0,2.0,grand salon cuisine equipee,995000.0
+128.0,4,Rabat,bon,1971,non,0,,residence securisee avec jardin,1344000.0
+115.0,4,Casablanca,neuf,1988,non,0,11.0,grand salon cuisine equipee,1422000.0
+149.0,6,Rabat,bon,2000,non,0,0.0,bel appartement lumineux proche tramway,1514000.0
+73.0,2,Tanger,a renover,1985,oui,0,5.0,grand salon cuisine equipee,314000.0
+101.0,4,Casablanca,bon,1974,non,1,6.0,bel appartement lumineux proche tramway,1010000.0
+49.0,3,Rabat,bon,2009,non,1,6.0,bel appartement lumineux proche tramway,465000.0
+99.0,4,Tanger,bon,1998,non,1,2.0,residence securisee avec jardin,567000.0
+71.0,2,Fès,bon,2018,oui,0,3.0,studio refait a neuf centre ville,384000.0
+114.0,3,Fès,bon,1967,oui,1,4.0,residence securisee avec jardin,798000.0
+,4,Rabat,neuf,2001,oui,0,0.0,studio refait a neuf centre ville,837000.0
+62.0,3,Fès,neuf,1961,oui,0,11.0,studio refait a neuf centre ville,331000.0
+80.0,3,Marrakech,neuf,1963,non,2,10.0,grand salon cuisine equipee,952000.0
+111.0,4,Casablanca,bon,1960,oui,1,11.0,bel appartement lumineux proche tramway,849000.0
+61.0,2,Tanger,bon,2012,oui,1,9.0,grand salon cuisine equipee,384000.0
+98.0,3,Rabat,a renover,1979,oui,0,11.0,grand salon cuisine equipee,653000.0
+78.0,3,Rabat,neuf,1993,oui,1,6.0,studio refait a neuf centre ville,706000.0
+92.0,3,Rabat,bon,1992,non,0,,grand salon cuisine equipee,707000.0
+80.0,2,Tanger,neuf,1985,oui,1,3.0,residence securisee avec jardin,746000.0
+133.0,5,Casablanca,bon,2005,non,1,8.0,grand salon cuisine equipee,1579000.0
+112.0,4,Rabat,bon,1981,non,2,0.0,bel appartement lumineux proche tramway,910000.0
+99.0,4,Rabat,a renover,1987,oui,1,,studio refait a neuf centre ville,650000.0
+107.0,3,Marrakech,bon,1968,non,0,2.0,bel appartement lumineux proche tramway,701000.0
+164.0,5,Rabat,bon,1980,non,0,6.0,grand salon cuisine equipee,1195000.0
+97.0,3,Marrakech,neuf,1986,non,0,11.0,bel appartement lumineux proche tramway,745000.0
+133.0,5,Marrakech,a renover,1988,oui,1,7.0,bel appartement lumineux proche tramway,780000.0
+112.0,4,Casablanca,a renover,1992,non,0,2.0,residence securisee avec jardin,691000.0
+98.0,3,Rabat,bon,1969,non,1,6.0,studio refait a neuf centre ville,992000.0
+111.0,5,Casablanca,bon,1987,non,0,1.0,bel appartement lumineux proche tramway,788000.0
+75.0,3,Marrakech,neuf,1980,oui,0,7.0,studio refait a neuf centre ville,648000.0
+118.0,4,Casablanca,neuf,1985,non,2,1.0,bel appartement lumineux proche tramway,1307000.0
+118.0,4,Casablanca,neuf,1984,non,1,1.0,bel appartement lumineux proche tramway,1410000.0
+48.0,2,Marrakech,neuf,2016,non,0,1.0,grand salon cuisine equipee,467000.0
+97.0,3,Rabat,neuf,2009,non,2,10.0,studio refait a neuf centre ville,1144000.0
+55.0,1,Rabat,a renover,1979,non,1,8.0,bel appartement lumineux proche tramway,407000.0
+82.0,2,Casablanca,a renover,1992,non,1,7.0,grand salon cuisine equipee,556000.0
+100.0,4,Casablanca,bon,2018,oui,1,11.0,grand salon cuisine equipee,1097000.0
+82.0,3,Casablanca,bon,1970,non,0,7.0,residence securisee avec jardin,721000.0
+124.0,4,Marrakech,bon,2005,oui,1,3.0,bel appartement lumineux proche tramway,1105000.0
+145.0,5,Casablanca,bon,2001,non,0,9.0,studio refait a neuf centre ville,1336000.0
+37.0,2,Rabat,a renover,2002,non,1,5.0,studio refait a neuf centre ville,305000.0
+80.0,3,Marrakech,bon,1983,non,1,,residence securisee avec jardin,546000.0
+123.0,5,Tanger,bon,1975,oui,0,,grand salon cuisine equipee,606000.0
+100.0,3,Rabat,neuf,1989,non,0,8.0,grand salon cuisine equipee,8968000.0
+140.0,5,Marrakech,bon,2014,oui,0,5.0,studio refait a neuf centre ville,1232000.0
+148.0,5,Casablanca,a renover,1971,non,0,1.0,bel appartement lumineux proche tramway,898000.0
+124.0,5,Casablanca,bon,1973,oui,1,6.0,bel appartement lumineux proche tramway,865000.0
+87.0,3,Tanger,a renover,1985,non,0,4.0,bel appartement lumineux proche tramway,409000.0
+111.0,4,Rabat,a renover,1960,non,1,3.0,studio refait a neuf centre ville,783000.0
+91.0,4,Tanger,bon,1982,non,1,3.0,bel appartement lumineux proche tramway,493000.0
+66.0,3,Casablanca,,1991,non,1,7.0,bel appartement lumineux proche tramway,702000.0
+71.0,3,Casablanca,bon,2005,oui,1,9.0,grand salon cuisine equipee,691000.0
+92.0,4,Casablanca,bon,1986,oui,0,4.0,residence securisee avec jardin,956000.0
+86.0,3,Casablanca,a renover,2000,non,0,,grand salon cuisine equipee,575000.0
+58.0,1,Marrakech,bon,1972,oui,0,1.0,grand salon cuisine equipee,457000.0
+72.0,2,Rabat,bon,1977,oui,2,6.0,studio refait a neuf centre ville,526000.0
+137.0,4,Rabat,neuf,2006,oui,1,3.0,residence securisee avec jardin,1585000.0
+182.0,7,Casablanca,bon,2010,non,1,2.0,grand salon cuisine equipee,1581000.0
+74.0,2,Rabat,bon,2005,oui,2,10.0,residence securisee avec jardin,650000.0
+78.0,3,Tanger,bon,1961,non,0,6.0,residence securisee avec jardin,395000.0
+83.0,3,Casablanca,neuf,1974,non,1,1.0,grand salon cuisine equipee,871000.0
+115.0,3,Casablanca,bon,2009,oui,1,,bel appartement lumineux proche tramway,1197000.0
+83.0,3,Marrakech,neuf,1961,non,0,,bel appartement lumineux proche tramway,605000.0
+117.0,4,Marrakech,a renover,2006,non,1,,bel appartement lumineux proche tramway,619000.0
+92.0,4,Rabat,bon,2005,oui,0,9.0,grand salon cuisine equipee,758000.0
+111.0,4,Casablanca,a renover,1993,oui,1,8.0,grand salon cuisine equipee,872000.0
+65.0,2,Fès,bon,2017,non,0,4.0,grand salon cuisine equipee,398000.0
+124.0,4,Rabat,a renover,1985,non,1,1.0,bel appartement lumineux proche tramway,883000.0
+62.0,2,Rabat,bon,1965,non,0,10.0,residence securisee avec jardin,576000.0
+99.0,3,Marrakech,bon,1977,oui,2,11.0,bel appartement lumineux proche tramway,891000.0
+63.0,3,Rabat,,1968,oui,2,5.0,residence securisee avec jardin,625000.0
+51.0,2,Tanger,neuf,1969,non,1,1.0,bel appartement lumineux proche tramway,382000.0
+80.0,3,Rabat,,1971,oui,1,7.0,studio refait a neuf centre ville,560000.0
+161.0,6,Tanger,bon,2021,oui,1,1.0,residence securisee avec jardin,1080000.0
+139.0,5,Rabat,bon,1983,non,1,7.0,grand salon cuisine equipee,1051000.0
+60.0,1,Rabat,bon,1982,oui,0,,residence securisee avec jardin,496000.0
+83.0,2,Tanger,a renover,1977,oui,0,2.0,bel appartement lumineux proche tramway,432000.0
+122.0,3,Rabat,bon,1991,oui,1,5.0,residence securisee avec jardin,1007000.0
+99.0,3,Fès,neuf,2004,oui,1,1.0,studio refait a neuf centre ville,772000.0
+105.0,3,Tanger,neuf,1978,non,1,10.0,residence securisee avec jardin,891000.0
+136.0,4,Marrakech,bon,2002,non,0,3.0,grand salon cuisine equipee,1102000.0
+120.0,3,Rabat,neuf,2022,non,1,6.0,residence securisee avec jardin,1461000.0
+148.0,6,Rabat,bon,2014,non,1,7.0,grand salon cuisine equipee,1184000.0
+65.0,3,Marrakech,a renover,1982,oui,0,1.0,bel appartement lumineux proche tramway,440000.0
+65.0,1,Casablanca,a renover,1973,oui,0,1.0,bel appartement lumineux proche tramway,419000.0
+54.0,2,Rabat,a renover,2020,oui,2,,studio refait a neuf centre ville,563000.0
+100.0,4,Casablanca,bon,1998,non,1,5.0,residence securisee avec jardin,895000.0
+129.0,5,Rabat,,2009,non,1,11.0,residence securisee avec jardin,882000.0
+97.0,4,Rabat,bon,1980,oui,1,1.0,grand salon cuisine equipee,796000.0
+37.0,2,Casablanca,bon,1982,non,1,,studio refait a neuf centre ville,364000.0
+151.0,7,Rabat,neuf,1986,non,0,10.0,bel appartement lumineux proche tramway,1568000.0
+120.0,5,Tanger,neuf,1982,oui,0,,studio refait a neuf centre ville,993000.0
+92.0,3,Casablanca,bon,2010,oui,0,1.0,residence securisee avec jardin,820000.0
+103.0,3,Casablanca,bon,1982,non,1,,bel appartement lumineux proche tramway,822000.0
+113.0,5,Casablanca,a renover,1960,non,0,9.0,studio refait a neuf centre ville,754000.0
+46.0,2,Casablanca,,2001,oui,2,9.0,residence securisee avec jardin,486000.0
+58.0,2,Rabat,neuf,1995,oui,2,1.0,grand salon cuisine equipee,682000.0
+65.0,2,Casablanca,bon,1969,oui,2,4.0,bel appartement lumineux proche tramway,503000.0
+,4,Marrakech,bon,1987,non,2,7.0,residence securisee avec jardin,614000.0
+175.0,6,Casablanca,bon,2015,non,1,6.0,studio refait a neuf centre ville,1380000.0
+132.0,5,Casablanca,bon,2017,oui,0,6.0,residence securisee avec jardin,1078000.0
+100.0,3,Fès,bon,1996,oui,1,8.0,bel appartement lumineux proche tramway,555000.0
+25.0,1,Rabat,bon,1989,oui,1,2.0,studio refait a neuf centre ville,240000.0
+68.0,3,Casablanca,bon,1974,non,2,,grand salon cuisine equipee,553000.0
+171.0,7,Marrakech,bon,2006,oui,1,7.0,bel appartement lumineux proche tramway,1372000.0
+96.0,3,Fès,bon,1971,non,1,8.0,bel appartement lumineux proche tramway,545000.0
+,3,Casablanca,bon,2004,non,2,5.0,residence securisee avec jardin,739000.0
+104.0,3,Casablanca,bon,1987,non,1,11.0,bel appartement lumineux proche tramway,896000.0
+88.0,4,Rabat,bon,1999,non,1,3.0,bel appartement lumineux proche tramway,719000.0
+,5,Fès,neuf,1961,non,1,1.0,bel appartement lumineux proche tramway,795000.0
+,1,Fès,bon,1974,oui,0,5.0,studio refait a neuf centre ville,303000.0
+113.0,3,Rabat,a renover,1979,non,1,6.0,bel appartement lumineux proche tramway,792000.0
+122.0,4,Marrakech,a renover,1976,oui,0,4.0,bel appartement lumineux proche tramway,689000.0
+127.0,5,Casablanca,bon,1976,non,1,5.0,bel appartement lumineux proche tramway,1208000.0
+113.0,4,Marrakech,a renover,1995,non,0,6.0,grand salon cuisine equipee,544000.0
+89.0,2,Rabat,bon,1986,oui,1,10.0,residence securisee avec jardin,770000.0
+73.0,3,Casablanca,bon,1982,non,1,11.0,residence securisee avec jardin,703000.0
+85.0,4,Marrakech,bon,1988,oui,0,0.0,residence securisee avec jardin,555000.0
+119.0,3,Rabat,,1990,oui,1,1.0,grand salon cuisine equipee,890000.0
+168.0,5,Marrakech,neuf,1973,oui,0,,studio refait a neuf centre ville,1563000.0
+80.0,4,Casablanca,bon,1983,oui,0,0.0,grand salon cuisine equipee,744000.0
+126.0,4,Fès,bon,1979,oui,2,0.0,grand salon cuisine equipee,712000.0
+124.0,5,Casablanca,neuf,1986,oui,0,11.0,grand salon cuisine equipee,1711000.0
+87.0,3,Casablanca,bon,2000,non,0,,residence securisee avec jardin,837000.0
+62.0,2,Marrakech,neuf,2021,oui,1,7.0,residence securisee avec jardin,653000.0
+130.0,5,Tanger,a renover,2004,non,2,5.0,grand salon cuisine equipee,635000.0
+60.0,3,Rabat,bon,1999,non,1,2.0,residence securisee avec jardin,502000.0
+57.0,2,Marrakech,a renover,2005,oui,1,4.0,bel appartement lumineux proche tramway,333000.0
+115.0,4,Rabat,neuf,1988,non,1,9.0,grand salon cuisine equipee,1193000.0
+39.0,1,Casablanca,a renover,2020,non,0,6.0,bel appartement lumineux proche tramway,285000.0
+86.0,4,Tanger,bon,1998,non,0,3.0,bel appartement lumineux proche tramway,658000.0
+92.0,5,Marrakech,bon,1968,oui,1,3.0,grand salon cuisine equipee,797000.0
+25.0,1,Rabat,neuf,1978,non,0,2.0,studio refait a neuf centre ville,251000.0
+69.0,2,Tanger,bon,1968,non,1,11.0,grand salon cuisine equipee,444000.0
+94.0,4,Marrakech,a renover,2005,non,0,,residence securisee avec jardin,583000.0
+111.0,4,Casablanca,neuf,1989,non,0,,bel appartement lumineux proche tramway,1458000.0
+92.0,2,Casablanca,a renover,2002,oui,0,1.0,bel appartement lumineux proche tramway,711000.0
+143.0,6,Casablanca,bon,1999,non,1,6.0,residence securisee avec jardin,1180000.0
+119.0,5,Tanger,a renover,2020,non,0,4.0,residence securisee avec jardin,719000.0
+90.0,3,Casablanca,a renover,2019,oui,1,8.0,grand salon cuisine equipee,586000.0
+81.0,3,Tanger,bon,2022,oui,0,3.0,bel appartement lumineux proche tramway,574000.0
+88.0,4,Casablanca,bon,1993,non,0,5.0,studio refait a neuf centre ville,748000.0
+61.0,3,Casablanca,neuf,1986,non,0,6.0,studio refait a neuf centre ville,669000.0
+115.0,4,Fès,bon,1967,oui,0,9.0,grand salon cuisine equipee,730000.0
+78.0,3,Casablanca,neuf,1983,non,1,10.0,bel appartement lumineux proche tramway,857000.0
+87.0,4,Marrakech,bon,1989,oui,1,1.0,studio refait a neuf centre ville,610000.0
+29.0,1,Tanger,neuf,2023,oui,1,4.0,bel appartement lumineux proche tramway,269000.0
+164.0,6,Marrakech,bon,1993,non,0,6.0,studio refait a neuf centre ville,1353000.0
+137.0,4,Casablanca,bon,1981,non,1,10.0,bel appartement lumineux proche tramway,1304000.0
+39.0,1,Casablanca,neuf,2017,oui,0,2.0,residence securisee avec jardin,426000.0
+83.0,3,Rabat,a renover,2005,oui,1,5.0,studio refait a neuf centre ville,532000.0
+101.0,3,Tanger,bon,1976,oui,0,11.0,studio refait a neuf centre ville,642000.0
+86.0,3,Casablanca,bon,1977,oui,1,9.0,grand salon cuisine equipee,682000.0
+85.0,4,Rabat,bon,2010,oui,0,10.0,residence securisee avec jardin,872000.0
+63.0,2,Rabat,neuf,1983,oui,0,5.0,residence securisee avec jardin,588000.0
+111.0,3,Marrakech,bon,1969,oui,2,11.0,residence securisee avec jardin,772000.0
+140.0,5,Rabat,bon,1977,non,0,0.0,residence securisee avec jardin,1313000.0
+95.0,3,Casablanca,bon,1992,oui,1,11.0,residence securisee avec jardin,818000.0
+144.0,5,Rabat,bon,2021,non,1,2.0,studio refait a neuf centre ville,1430000.0
+161.0,6,Rabat,bon,1961,non,1,5.0,bel appartement lumineux proche tramway,1622000.0
+74.0,3,Fès,bon,1965,oui,1,6.0,bel appartement lumineux proche tramway,443000.0
+81.0,3,Marrakech,a renover,1988,oui,1,8.0,grand salon cuisine equipee,479000.0
+98.0,3,Casablanca,bon,1978,oui,0,6.0,bel appartement lumineux proche tramway,799000.0
+125.0,3,Casablanca,bon,2004,non,1,9.0,residence securisee avec jardin,1195000.0
+119.0,4,Marrakech,bon,2018,non,0,3.0,bel appartement lumineux proche tramway,986000.0
+64.0,2,Tanger,neuf,2001,non,2,4.0,bel appartement lumineux proche tramway,567000.0
+133.0,5,Rabat,bon,1984,oui,2,6.0,residence securisee avec jardin,1065000.0
+138.0,5,Tanger,neuf,2011,non,0,8.0,residence securisee avec jardin,1143000.0
+150.0,4,Rabat,bon,1982,non,0,1.0,grand salon cuisine equipee,1218000.0
+103.0,4,Marrakech,bon,1992,non,0,3.0,studio refait a neuf centre ville,931000.0
+78.0,4,Casablanca,bon,2019,oui,1,7.0,studio refait a neuf centre ville,5440000.0
+54.0,2,Casablanca,bon,1979,oui,1,1.0,bel appartement lumineux proche tramway,520000.0
+91.0,4,Rabat,a renover,2013,oui,1,5.0,grand salon cuisine equipee,641000.0
+50.0,2,Casablanca,a renover,2016,oui,1,6.0,grand salon cuisine equipee,383000.0
+79.0,3,Casablanca,neuf,1980,oui,1,7.0,studio refait a neuf centre ville,841000.0
+127.0,3,Casablanca,bon,2022,oui,1,8.0,grand salon cuisine equipee,1343000.0
+107.0,3,Casablanca,bon,1999,oui,0,2.0,studio refait a neuf centre ville,1253000.0
+96.0,3,Tanger,bon,2012,oui,1,8.0,residence securisee avec jardin,744000.0
+91.0,3,Fès,a renover,2013,non,2,2.0,residence securisee avec jardin,403000.0
+101.0,4,Rabat,bon,1988,non,0,9.0,studio refait a neuf centre ville,919000.0
+,4,Casablanca,a renover,2009,oui,1,7.0,studio refait a neuf centre ville,1067000.0
+132.0,5,Casablanca,bon,1974,non,0,0.0,residence securisee avec jardin,963000.0
+96.0,4,Rabat,neuf,1983,oui,0,10.0,studio refait a neuf centre ville,1009000.0
+98.0,3,Casablanca,,1993,oui,1,4.0,residence securisee avec jardin,10448000.0
+,2,Rabat,bon,2004,oui,1,,grand salon cuisine equipee,784000.0
+140.0,5,Fès,neuf,2013,non,1,5.0,residence securisee avec jardin,1178000.0
+114.0,5,Casablanca,a renover,1971,non,0,1.0,grand salon cuisine equipee,808000.0
+95.0,4,Marrakech,bon,1973,non,1,10.0,grand salon cuisine equipee,769000.0
+57.0,3,Rabat,bon,1980,oui,1,8.0,residence securisee avec jardin,485000.0
+130.0,5,Fès,bon,1974,oui,1,8.0,bel appartement lumineux proche tramway,573000.0
+67.0,1,Casablanca,bon,1982,oui,0,7.0,grand salon cuisine equipee,473000.0
+104.0,3,Casablanca,bon,1981,oui,2,,bel appartement lumineux proche tramway,931000.0
+77.0,4,Casablanca,bon,2004,non,1,,grand salon cuisine equipee,763000.0
+148.0,4,Rabat,,2001,oui,0,11.0,grand salon cuisine equipee,1085000.0
+36.0,1,Rabat,bon,1990,oui,0,,residence securisee avec jardin,313000.0
+91.0,3,Fès,a renover,2000,oui,0,7.0,bel appartement lumineux proche tramway,356000.0
+93.0,3,Casablanca,bon,1995,non,0,11.0,residence securisee avec jardin,828000.0
+112.0,4,Casablanca,bon,2012,non,0,11.0,bel appartement lumineux proche tramway,1195000.0
+146.0,5,Casablanca,bon,1994,oui,1,2.0,grand salon cuisine equipee,1072000.0
+,3,Casablanca,neuf,2007,non,2,,residence securisee avec jardin,859000.0
+71.0,3,Marrakech,bon,1972,non,1,,bel appartement lumineux proche tramway,539000.0
+109.0,4,Casablanca,bon,1969,oui,2,0.0,grand salon cuisine equipee,938000.0
+51.0,2,Fès,bon,1960,oui,1,1.0,bel appartement lumineux proche tramway,261000.0
+73.0,2,Fès,bon,1985,non,0,4.0,residence securisee avec jardin,384000.0
+118.0,5,Fès,a renover,1988,oui,1,4.0,bel appartement lumineux proche tramway,513000.0
+80.0,3,Casablanca,bon,1985,oui,0,0.0,grand salon cuisine equipee,608000.0
+94.0,4,Rabat,a renover,1989,oui,2,,residence securisee avec jardin,579000.0
+34.0,1,Casablanca,a renover,1964,oui,2,10.0,bel appartement lumineux proche tramway,280000.0
+56.0,3,Casablanca,neuf,1963,non,1,8.0,grand salon cuisine equipee,586000.0
+52.0,1,Rabat,,1994,oui,2,5.0,studio refait a neuf centre ville,523000.0
+,3,Casablanca,a renover,1984,non,1,11.0,studio refait a neuf centre ville,527000.0
+89.0,3,Casablanca,neuf,2000,oui,1,5.0,studio refait a neuf centre ville,1006000.0
+84.0,4,Marrakech,neuf,1966,non,1,9.0,grand salon cuisine equipee,813000.0
+111.0,3,Rabat,bon,1964,oui,0,11.0,residence securisee avec jardin,1085000.0
+134.0,6,Tanger,neuf,1993,oui,0,8.0,bel appartement lumineux proche tramway,1092000.0
+92.0,3,Rabat,neuf,1985,oui,1,2.0,bel appartement lumineux proche tramway,1077000.0
+159.0,5,Casablanca,bon,1993,non,0,9.0,grand salon cuisine equipee,1390000.0
+82.0,3,Rabat,neuf,1999,non,0,3.0,residence securisee avec jardin,957000.0
+67.0,4,Marrakech,neuf,2015,non,1,4.0,bel appartement lumineux proche tramway,621000.0
+82.0,3,Tanger,neuf,1989,oui,2,6.0,bel appartement lumineux proche tramway,732000.0
+122.0,4,Rabat,neuf,1984,non,1,6.0,grand salon cuisine equipee,1340000.0
+103.0,4,Casablanca,bon,1994,oui,0,8.0,grand salon cuisine equipee,1036000.0
+103.0,3,Casablanca,neuf,2004,oui,0,4.0,grand salon cuisine equipee,1308000.0
+48.0,1,Tanger,neuf,1991,non,1,7.0,studio refait a neuf centre ville,398000.0
+51.0,1,Rabat,bon,2003,non,1,,residence securisee avec jardin,476000.0
+,3,Casablanca,,1983,oui,1,3.0,bel appartement lumineux proche tramway,790000.0
+100.0,4,Tanger,bon,1992,non,1,2.0,grand salon cuisine equipee,580000.0
+130.0,4,Rabat,neuf,1981,oui,1,10.0,studio refait a neuf centre ville,1565000.0
+106.0,3,Rabat,bon,1984,non,1,6.0,bel appartement lumineux proche tramway,846000.0
+151.0,6,Rabat,neuf,2020,oui,0,3.0,residence securisee avec jardin,1595000.0
+94.0,4,Rabat,neuf,1985,non,0,11.0,residence securisee avec jardin,973000.0
+36.0,1,Fès,bon,1997,oui,1,2.0,bel appartement lumineux proche tramway,208000.0
+87.0,2,Casablanca,bon,1966,non,1,1.0,residence securisee avec jardin,695000.0
+138.0,4,Tanger,bon,2009,oui,1,8.0,grand salon cuisine equipee,844000.0
+77.0,4,Marrakech,neuf,2004,non,0,6.0,bel appartement lumineux proche tramway,688000.0
+84.0,2,Marrakech,a renover,1989,oui,0,,studio refait a neuf centre ville,560000.0
+85.0,3,Fès,bon,1992,oui,1,8.0,residence securisee avec jardin,493000.0
+119.0,4,Tanger,neuf,1965,oui,1,6.0,grand salon cuisine equipee,763000.0
+108.0,4,Casablanca,bon,1974,oui,1,0.0,bel appartement lumineux proche tramway,1030000.0
+99.0,4,Rabat,bon,2001,oui,2,1.0,residence securisee avec jardin,753000.0
+85.0,2,Rabat,neuf,2021,oui,0,4.0,residence securisee avec jardin,1145000.0
+77.0,3,Rabat,bon,1987,non,1,,residence securisee avec jardin,557000.0
+113.0,4,Rabat,bon,2023,oui,1,3.0,grand salon cuisine equipee,1134000.0
+64.0,2,Casablanca,bon,2006,oui,0,,grand salon cuisine equipee,566000.0
+99.0,4,Marrakech,bon,2005,oui,2,6.0,residence securisee avec jardin,755000.0
+107.0,3,Marrakech,bon,2004,oui,2,2.0,studio refait a neuf centre ville,748000.0
+66.0,3,Casablanca,bon,1976,oui,1,7.0,studio refait a neuf centre ville,581000.0
+138.0,5,Fès,bon,2014,oui,2,7.0,studio refait a neuf centre ville,838000.0
+88.0,4,Rabat,bon,1967,oui,0,9.0,residence securisee avec jardin,738000.0
+188.0,7,Marrakech,neuf,1983,oui,1,,residence securisee avec jardin,1482000.0
+71.0,3,Fès,bon,1999,non,0,,grand salon cuisine equipee,394000.0
+100.0,4,Tanger,bon,1983,oui,1,,studio refait a neuf centre ville,578000.0
+32.0,1,Casablanca,neuf,1999,non,2,3.0,grand salon cuisine equipee,273000.0
+118.0,4,Rabat,bon,1960,oui,1,7.0,residence securisee avec jardin,721000.0
+98.0,5,Fès,bon,1992,oui,1,7.0,studio refait a neuf centre ville,523000.0
+95.0,3,Casablanca,neuf,2011,non,2,2.0,residence securisee avec jardin,990000.0
+35.0,1,Casablanca,bon,1986,non,0,5.0,bel appartement lumineux proche tramway,273000.0
+118.0,3,Tanger,bon,1998,non,1,6.0,grand salon cuisine equipee,726000.0
+104.0,4,Marrakech,bon,1980,non,0,,bel appartement lumineux proche tramway,631000.0
+87.0,3,Casablanca,bon,1973,non,0,6.0,grand salon cuisine equipee,920000.0
+111.0,5,Marrakech,bon,1976,non,0,6.0,studio refait a neuf centre ville,833000.0
+104.0,4,Casablanca,neuf,1981,non,1,6.0,grand salon cuisine equipee,1361000.0
+93.0,3,Casablanca,neuf,2014,oui,0,5.0,bel appartement lumineux proche tramway,1050000.0
+138.0,5,Rabat,a renover,2012,non,2,3.0,residence securisee avec jardin,950000.0
+122.0,5,Casablanca,neuf,1987,non,1,7.0,studio refait a neuf centre ville,1406000.0
+25.0,2,Tanger,bon,2001,oui,1,6.0,bel appartement lumineux proche tramway,159000.0
+75.0,2,Rabat,bon,2014,non,1,,studio refait a neuf centre ville,536000.0
+111.0,4,Rabat,bon,1997,oui,1,4.0,studio refait a neuf centre ville,1267000.0
+103.0,3,Rabat,neuf,1970,oui,1,,grand salon cuisine equipee,1073000.0
+94.0,4,Casablanca,bon,2022,non,1,3.0,residence securisee avec jardin,780000.0
+68.0,3,Rabat,bon,1969,non,1,0.0,residence securisee avec jardin,527000.0
+124.0,3,Rabat,bon,1993,oui,1,8.0,studio refait a neuf centre ville,836000.0
+48.0,2,Tanger,bon,2006,oui,1,11.0,grand salon cuisine equipee,268000.0
+100.0,4,Marrakech,bon,1979,non,1,5.0,studio refait a neuf centre ville,813000.0
+100.0,4,Marrakech,neuf,2010,non,2,,residence securisee avec jardin,1061000.0
+147.0,5,Casablanca,bon,1976,non,0,0.0,studio refait a neuf centre ville,1407000.0
+67.0,2,Rabat,neuf,2002,oui,1,9.0,studio refait a neuf centre ville,661000.0
+124.0,4,Fès,a renover,1971,oui,1,,grand salon cuisine equipee,481000.0
+111.0,4,Casablanca,bon,1974,non,0,0.0,studio refait a neuf centre ville,909000.0
+80.0,3,Casablanca,neuf,1984,oui,1,11.0,grand salon cuisine equipee,938000.0
+98.0,4,Rabat,neuf,1972,oui,0,9.0,studio refait a neuf centre ville,1146000.0
+59.0,2,Rabat,neuf,2010,non,0,5.0,grand salon cuisine equipee,543000.0
+108.0,4,Marrakech,bon,1991,non,1,0.0,grand salon cuisine equipee,993000.0
+82.0,4,Casablanca,a renover,2013,non,0,9.0,bel appartement lumineux proche tramway,808000.0
+93.0,5,Tanger,bon,1994,oui,2,8.0,studio refait a neuf centre ville,702000.0
+88.0,4,Marrakech,a renover,1988,non,2,11.0,residence securisee avec jardin,551000.0
+99.0,4,Casablanca,bon,1974,non,0,0.0,grand salon cuisine equipee,814000.0
+143.0,6,Fès,neuf,1999,oui,1,9.0,grand salon cuisine equipee,1087000.0
+134.0,5,Fès,bon,1984,oui,0,4.0,bel appartement lumineux proche tramway,686000.0
+93.0,3,Casablanca,bon,1962,oui,0,2.0,grand salon cuisine equipee,942000.0
+84.0,2,Casablanca,bon,1999,non,0,10.0,residence securisee avec jardin,722000.0
+112.0,4,Rabat,neuf,2021,oui,0,7.0,grand salon cuisine equipee,1164000.0
+88.0,3,Casablanca,neuf,2010,non,2,6.0,bel appartement lumineux proche tramway,1044000.0
+93.0,3,Casablanca,a renover,1968,oui,1,5.0,residence securisee avec jardin,687000.0
+29.0,1,Rabat,neuf,1987,oui,1,0.0,grand salon cuisine equipee,240000.0
+139.0,5,Casablanca,bon,1968,non,1,,residence securisee avec jardin,1071000.0
+31.0,2,Fès,bon,1988,oui,0,7.0,grand salon cuisine equipee,154000.0
+130.0,5,Casablanca,bon,1963,oui,0,8.0,grand salon cuisine equipee,1286000.0
+129.0,4,Fès,neuf,1978,oui,0,9.0,studio refait a neuf centre ville,706000.0
+166.0,6,Tanger,a renover,2016,oui,1,,studio refait a neuf centre ville,988000.0
+60.0,2,Tanger,a renover,2021,non,1,4.0,residence securisee avec jardin,333000.0
+67.0,3,Casablanca,a renover,2009,non,1,11.0,residence securisee avec jardin,483000.0
+121.0,4,Casablanca,neuf,1979,oui,0,1.0,studio refait a neuf centre ville,1456000.0
+31.0,1,Rabat,bon,2013,oui,0,,studio refait a neuf centre ville,270000.0
+88.0,2,Fès,neuf,1999,non,0,5.0,studio refait a neuf centre ville,600000.0
+114.0,5,Fès,bon,1996,oui,1,5.0,bel appartement lumineux proche tramway,548000.0
+151.0,5,Casablanca,neuf,2020,non,0,7.0,grand salon cuisine equipee,1534000.0
+,4,Rabat,bon,2002,oui,2,10.0,studio refait a neuf centre ville,1067000.0
+46.0,1,Casablanca,a renover,2015,non,1,4.0,studio refait a neuf centre ville,300000.0
+25.0,1,Rabat,a renover,2009,non,1,1.0,grand salon cuisine equipee,153000.0
+,3,Casablanca,,1993,non,0,5.0,bel appartement lumineux proche tramway,795000.0
+112.0,4,Tanger,a renover,2017,non,1,8.0,bel appartement lumineux proche tramway,762000.0
+95.0,2,Tanger,bon,1984,oui,2,7.0,residence securisee avec jardin,689000.0
+108.0,4,Casablanca,bon,1971,non,0,6.0,grand salon cuisine equipee,979000.0
+149.0,6,Rabat,neuf,1980,non,1,2.0,grand salon cuisine equipee,12448000.0
+82.0,3,Rabat,neuf,1977,oui,1,2.0,residence securisee avec jardin,897000.0
+109.0,3,Rabat,bon,1987,non,0,0.0,bel appartement lumineux proche tramway,864000.0
+51.0,2,Casablanca,bon,2001,oui,1,3.0,grand salon cuisine equipee,481000.0
+83.0,2,Tanger,bon,1967,non,1,1.0,residence securisee avec jardin,541000.0
+61.0,1,Casablanca,bon,2006,non,1,10.0,residence securisee avec jardin,573000.0
+87.0,4,Marrakech,bon,2013,oui,1,,bel appartement lumineux proche tramway,716000.0
+145.0,4,Rabat,neuf,2013,non,1,1.0,bel appartement lumineux proche tramway,1545000.0
+25.0,2,Rabat,a renover,1982,non,0,9.0,grand salon cuisine equipee,187000.0
+102.0,4,Rabat,a renover,1969,oui,2,4.0,bel appartement lumineux proche tramway,665000.0
+73.0,3,Rabat,bon,1961,non,1,,grand salon cuisine equipee,608000.0
+62.0,2,Marrakech,bon,2021,non,0,6.0,grand salon cuisine equipee,579000.0
+82.0,3,Casablanca,bon,1979,oui,1,2.0,bel appartement lumineux proche tramway,677000.0
+71.0,3,Marrakech,bon,2018,non,1,8.0,studio refait a neuf centre ville,498000.0
+,3,Rabat,bon,2012,oui,1,11.0,bel appartement lumineux proche tramway,874000.0
+120.0,4,Rabat,bon,2014,non,0,1.0,bel appartement lumineux proche tramway,1135000.0
+131.0,5,Marrakech,bon,1996,oui,1,0.0,bel appartement lumineux proche tramway,1074000.0
+122.0,5,Fès,a renover,1981,oui,0,11.0,grand salon cuisine equipee,523000.0
+97.0,4,Tanger,neuf,1968,oui,0,11.0,studio refait a neuf centre ville,842000.0
+88.0,3,Fès,neuf,1992,oui,0,6.0,residence securisee avec jardin,621000.0
+97.0,3,Rabat,neuf,1968,non,1,7.0,studio refait a neuf centre ville,935000.0
+128.0,4,Casablanca,bon,1968,non,1,6.0,residence securisee avec jardin,1109000.0
+117.0,4,Fès,bon,2012,non,0,11.0,studio refait a neuf centre ville,661000.0
+75.0,3,Marrakech,neuf,1980,non,2,0.0,studio refait a neuf centre ville,631000.0
+113.0,4,Casablanca,neuf,1969,oui,2,0.0,residence securisee avec jardin,1305000.0
+91.0,4,Casablanca,neuf,2014,oui,1,5.0,studio refait a neuf centre ville,740000.0
+141.0,4,Casablanca,neuf,1960,non,2,11.0,bel appartement lumineux proche tramway,1089000.0
+138.0,6,Casablanca,a renover,1972,non,2,10.0,studio refait a neuf centre ville,914000.0
+55.0,3,Rabat,bon,2010,non,0,9.0,bel appartement lumineux proche tramway,583000.0
+111.0,3,Marrakech,neuf,2013,oui,1,1.0,grand salon cuisine equipee,1085000.0
+38.0,1,Marrakech,bon,2015,non,1,5.0,bel appartement lumineux proche tramway,284000.0
+85.0,3,Marrakech,neuf,2012,non,2,,grand salon cuisine equipee,1008000.0
+68.0,2,Fès,bon,1999,non,0,6.0,bel appartement lumineux proche tramway,377000.0
+112.0,4,Tanger,bon,1962,oui,1,,bel appartement lumineux proche tramway,667000.0
+25.0,1,Casablanca,a renover,1967,non,2,,studio refait a neuf centre ville,182000.0
+123.0,5,Rabat,neuf,2022,oui,2,2.0,studio refait a neuf centre ville,1275000.0
+47.0,2,Casablanca,bon,1976,non,0,3.0,residence securisee avec jardin,407000.0
+59.0,2,Rabat,bon,1979,oui,0,10.0,grand salon cuisine equipee,571000.0
+116.0,4,Marrakech,neuf,1999,non,1,7.0,residence securisee avec jardin,925000.0
+59.0,2,Casablanca,a renover,1989,oui,0,1.0,grand salon cuisine equipee,425000.0
+70.0,1,Casablanca,neuf,2014,oui,1,,grand salon cuisine equipee,782000.0
+108.0,4,Marrakech,neuf,1994,oui,1,8.0,bel appartement lumineux proche tramway,990000.0
+67.0,2,Marrakech,a renover,1995,oui,2,1.0,bel appartement lumineux proche tramway,453000.0
+68.0,2,Rabat,neuf,1977,oui,1,2.0,studio refait a neuf centre ville,708000.0
+113.0,4,Marrakech,bon,1973,oui,0,5.0,residence securisee avec jardin,853000.0
+126.0,5,Marrakech,bon,1974,oui,1,2.0,studio refait a neuf centre ville,1027000.0
+45.0,1,Rabat,a renover,2023,non,1,3.0,residence securisee avec jardin,294000.0
+94.0,3,Rabat,a renover,1971,non,1,1.0,grand salon cuisine equipee,645000.0
+99.0,3,Fès,bon,2020,oui,0,,bel appartement lumineux proche tramway,604000.0
+120.0,4,Casablanca,a renover,1979,oui,1,0.0,grand salon cuisine equipee,800000.0
+129.0,4,Casablanca,bon,1968,non,0,1.0,grand salon cuisine equipee,1173000.0
+102.0,4,Casablanca,neuf,1999,non,2,8.0,bel appartement lumineux proche tramway,969000.0
+165.0,6,Tanger,neuf,2023,oui,1,4.0,residence securisee avec jardin,1425000.0
+,4,Marrakech,bon,1966,oui,1,7.0,bel appartement lumineux proche tramway,844000.0
+143.0,5,Rabat,a renover,1976,non,0,4.0,residence securisee avec jardin,989000.0
+57.0,2,Casablanca,bon,1965,non,0,5.0,bel appartement lumineux proche tramway,448000.0
+128.0,4,Rabat,bon,1990,oui,1,7.0,bel appartement lumineux proche tramway,902000.0
+40.0,2,Casablanca,neuf,1997,oui,1,2.0,grand salon cuisine equipee,451000.0
+49.0,1,Marrakech,a renover,2022,oui,1,8.0,residence securisee avec jardin,314000.0
+63.0,1,Fès,neuf,2006,oui,0,,grand salon cuisine equipee,400000.0
+125.0,4,Tanger,bon,1974,non,1,3.0,residence securisee avec jardin,831000.0
+103.0,3,Rabat,neuf,2021,non,0,5.0,grand salon cuisine equipee,1140000.0
+130.0,4,Casablanca,bon,2020,oui,0,8.0,residence securisee avec jardin,1306000.0
+97.0,3,Marrakech,bon,1966,non,1,9.0,grand salon cuisine equipee,598000.0
+115.0,4,Rabat,neuf,2011,non,0,6.0,studio refait a neuf centre ville,1198000.0
+127.0,4,Casablanca,bon,1982,oui,0,11.0,studio refait a neuf centre ville,967000.0
+103.0,4,Marrakech,neuf,1998,non,1,7.0,bel appartement lumineux proche tramway,853000.0
+107.0,4,Casablanca,bon,2015,oui,0,5.0,residence securisee avec jardin,1492000.0
+51.0,2,Rabat,bon,1976,non,0,4.0,grand salon cuisine equipee,369000.0
+78.0,3,Casablanca,bon,2021,non,1,0.0,residence securisee avec jardin,676000.0
+142.0,5,Casablanca,bon,2007,oui,1,,bel appartement lumineux proche tramway,1278000.0
+68.0,2,Casablanca,bon,2010,oui,2,,studio refait a neuf centre ville,584000.0
+186.0,6,Marrakech,bon,1964,non,0,10.0,grand salon cuisine equipee,1587000.0
+54.0,2,Marrakech,neuf,1985,oui,0,1.0,studio refait a neuf centre ville,600000.0
+100.0,3,Casablanca,bon,1976,oui,2,2.0,residence securisee avec jardin,802000.0
+132.0,5,Rabat,neuf,2019,non,1,,studio refait a neuf centre ville,1480000.0
+73.0,2,Tanger,bon,2018,oui,1,5.0,residence securisee avec jardin,525000.0
+93.0,4,Fès,a renover,2020,non,2,,studio refait a neuf centre ville,458000.0
+127.0,4,Casablanca,neuf,1989,non,0,4.0,residence securisee avec jardin,1660000.0
+125.0,5,Tanger,bon,1977,non,1,1.0,residence securisee avec jardin,739000.0
+109.0,4,Marrakech,,1985,oui,2,0.0,bel appartement lumineux proche tramway,707000.0
+87.0,3,Rabat,neuf,1984,oui,0,,studio refait a neuf centre ville,923000.0
+111.0,4,Casablanca,a renover,2004,oui,2,,residence securisee avec jardin,1026000.0
+65.0,3,Marrakech,,1975,oui,0,10.0,grand salon cuisine equipee,659000.0
+109.0,4,Casablanca,a renover,1998,non,0,5.0,bel appartement lumineux proche tramway,847000.0
+28.0,1,Rabat,,1976,oui,0,1.0,residence securisee avec jardin,190000.0
+149.0,7,Fès,bon,2022,non,0,1.0,grand salon cuisine equipee,959000.0
+51.0,2,Tanger,bon,2000,oui,1,9.0,grand salon cuisine equipee,418000.0
+118.0,5,Fès,neuf,2006,oui,0,9.0,residence securisee avec jardin,877000.0
+114.0,4,Fès,bon,1982,oui,1,,residence securisee avec jardin,653000.0
+154.0,5,Rabat,neuf,1966,non,0,,grand salon cuisine equipee,1695000.0
+114.0,4,Tanger,neuf,2020,non,2,0.0,grand salon cuisine equipee,982000.0
+150.0,4,Tanger,bon,1976,non,0,11.0,bel appartement lumineux proche tramway,1018000.0
+114.0,4,Rabat,bon,1997,non,0,3.0,studio refait a neuf centre ville,1025000.0
+46.0,1,Tanger,,2016,non,1,9.0,residence securisee avec jardin,437000.0
+107.0,4,Fès,neuf,1984,oui,1,3.0,grand salon cuisine equipee,769000.0
+121.0,4,Casablanca,neuf,1984,oui,1,9.0,studio refait a neuf centre ville,1210000.0
+144.0,6,Rabat,a renover,2010,oui,1,,bel appartement lumineux proche tramway,1016000.0
+88.0,4,Casablanca,neuf,2023,non,2,1.0,studio refait a neuf centre ville,989000.0
+139.0,5,Rabat,neuf,1988,oui,0,1.0,studio refait a neuf centre ville,1392000.0
+77.0,3,Marrakech,bon,2015,oui,1,,residence securisee avec jardin,633000.0
+83.0,4,Fès,bon,2006,oui,0,11.0,grand salon cuisine equipee,407000.0
+126.0,5,Rabat,bon,1969,oui,2,8.0,grand salon cuisine equipee,913000.0
+128.0,6,Tanger,bon,1967,non,0,1.0,studio refait a neuf centre ville,739000.0
+,4,Casablanca,a renover,2001,oui,1,5.0,residence securisee avec jardin,812000.0
+55.0,2,Casablanca,neuf,2020,non,1,3.0,studio refait a neuf centre ville,746000.0
+169.0,7,Casablanca,neuf,1992,oui,2,8.0,residence securisee avec jardin,1584000.0
+67.0,3,Tanger,bon,1978,non,0,6.0,grand salon cuisine equipee,417000.0
+141.0,5,Fès,bon,2009,oui,1,4.0,residence securisee avec jardin,944000.0
+118.0,3,Tanger,,2020,non,1,9.0,bel appartement lumineux proche tramway,797000.0
+83.0,3,Rabat,bon,1960,oui,1,9.0,bel appartement lumineux proche tramway,459000.0
+178.0,6,Fès,neuf,1960,oui,1,10.0,studio refait a neuf centre ville,1243000.0
+76.0,3,Casablanca,neuf,2010,oui,1,9.0,studio refait a neuf centre ville,845000.0
+58.0,3,Tanger,neuf,1987,non,1,3.0,bel appartement lumineux proche tramway,459000.0
+99.0,3,Rabat,bon,1991,oui,0,11.0,bel appartement lumineux proche tramway,879000.0
+119.0,5,Tanger,bon,1979,oui,0,10.0,residence securisee avec jardin,928000.0
+86.0,2,Marrakech,bon,1976,non,2,1.0,bel appartement lumineux proche tramway,610000.0
+127.0,5,Casablanca,bon,1960,oui,1,2.0,studio refait a neuf centre ville,1111000.0
+91.0,4,Marrakech,bon,2020,non,0,7.0,studio refait a neuf centre ville,813000.0
+47.0,1,Tanger,bon,2006,oui,1,10.0,studio refait a neuf centre ville,311000.0
+136.0,5,Tanger,a renover,2022,non,2,3.0,grand salon cuisine equipee,839000.0
+120.0,4,Tanger,bon,2007,oui,1,8.0,residence securisee avec jardin,811000.0
+129.0,4,Fès,bon,1966,oui,2,3.0,bel appartement lumineux proche tramway,604000.0
+123.0,5,Casablanca,bon,1963,oui,2,9.0,residence securisee avec jardin,989000.0
+128.0,5,Tanger,bon,1979,oui,0,6.0,studio refait a neuf centre ville,927000.0
+82.0,2,Rabat,bon,2005,non,0,4.0,studio refait a neuf centre ville,735000.0
+130.0,5,Tanger,bon,2012,oui,2,,bel appartement lumineux proche tramway,731000.0
+86.0,3,Marrakech,bon,1987,non,1,,bel appartement lumineux proche tramway,671000.0
+51.0,1,Marrakech,a renover,1971,non,0,3.0,studio refait a neuf centre ville,341000.0
+58.0,2,Casablanca,a renover,1978,non,0,11.0,bel appartement lumineux proche tramway,408000.0
+100.0,3,Marrakech,bon,2014,non,0,5.0,studio refait a neuf centre ville,812000.0
+102.0,4,Rabat,bon,1979,non,0,0.0,residence securisee avec jardin,749000.0
+25.0,1,Marrakech,bon,2016,oui,2,9.0,studio refait a neuf centre ville,234000.0
+114.0,4,Fès,neuf,1995,oui,0,5.0,bel appartement lumineux proche tramway,844000.0
+83.0,3,Casablanca,,1984,oui,0,6.0,residence securisee avec jardin,610000.0
+122.0,5,Rabat,neuf,2009,non,0,8.0,grand salon cuisine equipee,1462000.0
+95.0,5,Casablanca,neuf,1974,non,0,5.0,residence securisee avec jardin,863000.0
+48.0,1,Casablanca,a renover,2005,oui,1,6.0,residence securisee avec jardin,396000.0
+51.0,2,Marrakech,a renover,1985,non,1,8.0,residence securisee avec jardin,324000.0
+110.0,4,Rabat,bon,1961,non,0,5.0,studio refait a neuf centre ville,787000.0
+,3,Rabat,bon,1990,non,1,9.0,studio refait a neuf centre ville,684000.0
+84.0,3,Casablanca,bon,1963,non,0,,studio refait a neuf centre ville,614000.0
+138.0,5,Casablanca,a renover,1988,oui,1,11.0,studio refait a neuf centre ville,913000.0
+142.0,5,Tanger,bon,2010,non,1,2.0,residence securisee avec jardin,732000.0
+132.0,4,Rabat,bon,2021,oui,0,9.0,studio refait a neuf centre ville,1601000.0
+,6,Rabat,bon,1986,non,0,10.0,grand salon cuisine equipee,1475000.0
+65.0,2,Rabat,bon,2017,oui,0,9.0,bel appartement lumineux proche tramway,650000.0
+87.0,3,Casablanca,bon,1962,oui,0,8.0,studio refait a neuf centre ville,698000.0
+126.0,4,Marrakech,bon,2002,oui,0,,grand salon cuisine equipee,1150000.0
+111.0,3,Marrakech,a renover,2005,non,0,0.0,grand salon cuisine equipee,616000.0
+65.0,2,Marrakech,bon,1981,oui,1,10.0,bel appartement lumineux proche tramway,571000.0
+,4,Fès,neuf,2012,oui,1,,studio refait a neuf centre ville,621000.0
+106.0,4,Tanger,a renover,1974,non,1,4.0,grand salon cuisine equipee,682000.0
+79.0,3,Rabat,bon,1972,oui,2,,grand salon cuisine equipee,504000.0
+145.0,5,Marrakech,neuf,2015,non,1,,residence securisee avec jardin,1471000.0
+118.0,3,Rabat,bon,1964,non,1,5.0,residence securisee avec jardin,895000.0
+84.0,3,Rabat,neuf,1996,oui,1,9.0,bel appartement lumineux proche tramway,7864000.0
+85.0,4,Fès,a renover,2002,oui,0,0.0,bel appartement lumineux proche tramway,375000.0
+139.0,4,Rabat,bon,2012,oui,0,7.0,studio refait a neuf centre ville,1209000.0
+136.0,5,Casablanca,bon,1972,non,1,10.0,residence securisee avec jardin,1051000.0
+61.0,2,Rabat,a renover,1995,non,0,3.0,studio refait a neuf centre ville,398000.0
+109.0,3,Marrakech,neuf,2021,non,0,6.0,studio refait a neuf centre ville,993000.0
+132.0,4,Casablanca,bon,1973,non,1,4.0,residence securisee avec jardin,1162000.0
+58.0,2,Rabat,bon,2006,oui,1,3.0,bel appartement lumineux proche tramway,516000.0
+92.0,4,Rabat,neuf,2023,oui,0,5.0,grand salon cuisine equipee,875000.0
+25.0,1,Rabat,bon,1993,non,1,,bel appartement lumineux proche tramway,230000.0
+132.0,4,Casablanca,bon,2004,oui,0,0.0,residence securisee avec jardin,1263000.0
+99.0,3,Tanger,bon,1995,oui,0,2.0,grand salon cuisine equipee,667000.0
+65.0,3,Casablanca,neuf,1963,oui,0,5.0,studio refait a neuf centre ville,908000.0
+103.0,4,Rabat,bon,2020,non,0,4.0,bel appartement lumineux proche tramway,817000.0
+,1,Marrakech,a renover,1963,oui,1,3.0,grand salon cuisine equipee,253000.0
+91.0,3,Fès,bon,2005,non,1,7.0,bel appartement lumineux proche tramway,440000.0
+75.0,2,Casablanca,a renover,1998,non,1,2.0,residence securisee avec jardin,517000.0
+68.0,2,Tanger,neuf,1992,oui,0,8.0,studio refait a neuf centre ville,606000.0
+59.0,3,Rabat,a renover,1961,oui,0,7.0,residence securisee avec jardin,345000.0
+86.0,3,Casablanca,bon,1963,oui,1,10.0,grand salon cuisine equipee,539000.0
+102.0,4,Tanger,neuf,2015,oui,0,1.0,residence securisee avec jardin,964000.0
+,1,Fès,bon,1960,non,0,,residence securisee avec jardin,308000.0
+25.0,1,Rabat,neuf,2006,non,1,,studio refait a neuf centre ville,257000.0
+121.0,4,Tanger,neuf,2015,oui,1,1.0,bel appartement lumineux proche tramway,1089000.0
+59.0,2,Fès,bon,2020,non,0,3.0,studio refait a neuf centre ville,426000.0
+103.0,4,Marrakech,neuf,2006,oui,1,4.0,residence securisee avec jardin,1016000.0
+101.0,3,Marrakech,bon,2007,non,1,3.0,grand salon cuisine equipee,983000.0
+114.0,5,Casablanca,bon,2005,oui,0,,residence securisee avec jardin,1097000.0
+49.0,2,Casablanca,bon,2011,non,0,0.0,bel appartement lumineux proche tramway,534000.0
+106.0,3,Tanger,bon,1965,non,1,11.0,residence securisee avec jardin,586000.0
+53.0,1,Tanger,neuf,2004,oui,1,3.0,bel appartement lumineux proche tramway,451000.0
+86.0,3,Tanger,,2005,oui,1,9.0,bel appartement lumineux proche tramway,686000.0
+145.0,6,Tanger,bon,1992,non,1,6.0,bel appartement lumineux proche tramway,698000.0
+91.0,3,Marrakech,bon,1994,non,0,10.0,grand salon cuisine equipee,740000.0
+138.0,5,Rabat,bon,2021,oui,2,3.0,residence securisee avec jardin,1279000.0
+48.0,2,Fès,bon,2019,non,0,7.0,studio refait a neuf centre ville,341000.0
+121.0,4,Marrakech,a renover,1987,oui,0,2.0,residence securisee avec jardin,672000.0
+82.0,3,Tanger,bon,2020,oui,0,,residence securisee avec jardin,692000.0
+116.0,4,Marrakech,bon,2019,oui,0,9.0,studio refait a neuf centre ville,870000.0
+140.0,4,Casablanca,a renover,2014,non,0,5.0,bel appartement lumineux proche tramway,1103000.0
+105.0,4,Casablanca,bon,2019,non,1,9.0,bel appartement lumineux proche tramway,1050000.0
+91.0,4,Rabat,bon,1972,oui,1,2.0,grand salon cuisine equipee,743000.0
+73.0,3,Casablanca,a renover,1997,non,1,3.0,residence securisee avec jardin,601000.0
+31.0,1,Marrakech,neuf,2004,oui,2,0.0,studio refait a neuf centre ville,282000.0
+110.0,4,Rabat,bon,1981,oui,0,3.0,grand salon cuisine equipee,911000.0
+163.0,6,Rabat,bon,2005,oui,1,10.0,studio refait a neuf centre ville,1454000.0
+43.0,2,Casablanca,a renover,1982,oui,0,8.0,residence securisee avec jardin,308000.0
+61.0,3,Tanger,a renover,2008,oui,1,1.0,residence securisee avec jardin,300000.0
+68.0,3,Casablanca,neuf,2003,oui,1,0.0,residence securisee avec jardin,5832000.0
+73.0,3,Casablanca,neuf,1964,oui,2,2.0,studio refait a neuf centre ville,730000.0
+,3,Rabat,bon,1970,oui,1,6.0,bel appartement lumineux proche tramway,811000.0
+108.0,4,Tanger,bon,1983,non,0,8.0,grand salon cuisine equipee,774000.0
+113.0,4,Casablanca,a renover,1970,non,1,,residence securisee avec jardin,6576000.0
+95.0,3,Rabat,a renover,1975,oui,1,3.0,grand salon cuisine equipee,612000.0
+94.0,3,Marrakech,,1975,non,1,,studio refait a neuf centre ville,567000.0
+67.0,3,Casablanca,neuf,2023,oui,0,,residence securisee avec jardin,5360000.0
+52.0,3,Rabat,neuf,1987,oui,1,,residence securisee avec jardin,587000.0
+114.0,5,Fès,a renover,1973,non,2,9.0,studio refait a neuf centre ville,5104000.0
+95.0,3,Marrakech,neuf,2010,oui,2,,residence securisee avec jardin,994000.0
+115.0,4,Marrakech,a renover,2013,oui,0,3.0,studio refait a neuf centre ville,706000.0
+143.0,5,Tanger,bon,1985,non,1,0.0,residence securisee avec jardin,701000.0
+72.0,2,Tanger,bon,1963,oui,0,,residence securisee avec jardin,426000.0
+91.0,3,Tanger,a renover,1979,oui,1,4.0,studio refait a neuf centre ville,495000.0
+26.0,1,Casablanca,neuf,2009,non,0,11.0,studio refait a neuf centre ville,281000.0
+54.0,2,Rabat,a renover,1987,non,0,3.0,bel appartement lumineux proche tramway,339000.0
+139.0,5,Fès,bon,1976,oui,0,,grand salon cuisine equipee,633000.0
+88.0,4,Fès,bon,1971,non,1,8.0,residence securisee avec jardin,472000.0
+81.0,3,Rabat,a renover,1980,oui,1,0.0,bel appartement lumineux proche tramway,536000.0
+32.0,1,Casablanca,bon,2012,non,1,5.0,studio refait a neuf centre ville,330000.0
+121.0,5,Marrakech,neuf,2014,non,2,,bel appartement lumineux proche tramway,1197000.0
+86.0,3,Rabat,bon,2021,oui,0,4.0,residence securisee avec jardin,733000.0
+135.0,5,Casablanca,a renover,1979,non,1,3.0,residence securisee avec jardin,1097000.0
+112.0,4,Fès,a renover,2000,oui,0,,residence securisee avec jardin,571000.0
+127.0,5,Tanger,a renover,1965,oui,0,,bel appartement lumineux proche tramway,784000.0
+77.0,3,Tanger,a renover,1979,non,2,9.0,grand salon cuisine equipee,424000.0
+121.0,4,Tanger,,2015,non,0,10.0,residence securisee avec jardin,1233000.0
+87.0,4,Marrakech,bon,2008,non,1,10.0,studio refait a neuf centre ville,849000.0
+103.0,4,Casablanca,neuf,2008,non,0,11.0,grand salon cuisine equipee,1148000.0
+115.0,3,Fès,bon,1963,non,0,8.0,grand salon cuisine equipee,604000.0
+126.0,4,Rabat,bon,1967,oui,0,8.0,grand salon cuisine equipee,1174000.0
+72.0,2,Casablanca,bon,1965,oui,1,2.0,residence securisee avec jardin,623000.0
+136.0,5,Marrakech,neuf,2023,oui,0,3.0,grand salon cuisine equipee,1498000.0
+101.0,4,Tanger,bon,1965,oui,0,4.0,studio refait a neuf centre ville,589000.0
+128.0,5,Casablanca,bon,1967,non,1,,studio refait a neuf centre ville,1123000.0
+95.0,3,Casablanca,bon,2008,non,2,10.0,grand salon cuisine equipee,695000.0
+32.0,1,Fès,bon,1968,oui,1,10.0,bel appartement lumineux proche tramway,144000.0
+89.0,3,Rabat,neuf,1974,non,2,3.0,bel appartement lumineux proche tramway,862000.0
+86.0,3,Tanger,bon,2014,non,1,,residence securisee avec jardin,663000.0
+110.0,5,Tanger,neuf,2012,oui,0,9.0,grand salon cuisine equipee,1198000.0
+105.0,4,Rabat,bon,1982,oui,1,8.0,grand salon cuisine equipee,846000.0
+106.0,4,Casablanca,bon,1985,oui,0,,residence securisee avec jardin,837000.0
+44.0,2,Casablanca,bon,2012,non,1,10.0,grand salon cuisine equipee,472000.0
+105.0,4,Rabat,bon,1971,oui,1,8.0,bel appartement lumineux proche tramway,917000.0
+42.0,1,Casablanca,neuf,2016,non,0,2.0,grand salon cuisine equipee,443000.0
+79.0,3,Fès,neuf,2000,oui,1,9.0,grand salon cuisine equipee,521000.0
+38.0,1,Casablanca,,2023,non,0,3.0,bel appartement lumineux proche tramway,423000.0
+132.0,4,Rabat,a renover,1974,non,0,6.0,bel appartement lumineux proche tramway,927000.0
+133.0,5,Marrakech,,1998,non,1,10.0,studio refait a neuf centre ville,1024000.0
+111.0,4,Marrakech,neuf,1990,non,1,4.0,studio refait a neuf centre ville,1115000.0
+164.0,5,Casablanca,a renover,2011,oui,1,3.0,residence securisee avec jardin,1249000.0
+,4,Rabat,a renover,2017,non,0,3.0,studio refait a neuf centre ville,656000.0
+93.0,3,Marrakech,neuf,1978,non,1,,grand salon cuisine equipee,972000.0
+89.0,3,Casablanca,neuf,1994,non,1,2.0,grand salon cuisine equipee,894000.0
+128.0,4,Casablanca,bon,1972,non,1,2.0,studio refait a neuf centre ville,1151000.0
+196.0,7,Fès,bon,2009,oui,1,10.0,grand salon cuisine equipee,1144000.0
+113.0,4,Fès,a renover,1985,non,2,3.0,studio refait a neuf centre ville,490000.0
+84.0,3,Casablanca,bon,2011,oui,2,4.0,bel appartement lumineux proche tramway,803000.0
+46.0,2,Marrakech,bon,1990,non,0,,grand salon cuisine equipee,347000.0
+56.0,2,Casablanca,neuf,2013,non,1,3.0,grand salon cuisine equipee,820000.0
+28.0,1,Marrakech,a renover,1974,oui,1,4.0,studio refait a neuf centre ville,139000.0
+85.0,3,Marrakech,,2010,non,1,6.0,studio refait a neuf centre ville,595000.0
+119.0,5,Marrakech,neuf,1982,non,1,11.0,grand salon cuisine equipee,1164000.0
+94.0,4,Rabat,bon,1996,oui,2,,grand salon cuisine equipee,804000.0
+75.0,1,Casablanca,bon,1969,non,1,0.0,bel appartement lumineux proche tramway,749000.0
+103.0,4,Casablanca,a renover,2005,non,0,,bel appartement lumineux proche tramway,672000.0
+42.0,2,Casablanca,,2018,non,0,0.0,grand salon cuisine equipee,501000.0
+76.0,3,Rabat,bon,1972,oui,0,9.0,studio refait a neuf centre ville,610000.0
+124.0,4,Marrakech,neuf,1973,oui,0,4.0,studio refait a neuf centre ville,992000.0
+87.0,4,Fès,neuf,1977,oui,1,8.0,bel appartement lumineux proche tramway,626000.0
+136.0,6,Rabat,neuf,2013,oui,0,3.0,grand salon cuisine equipee,1365000.0
+98.0,4,Marrakech,bon,1992,non,0,5.0,bel appartement lumineux proche tramway,641000.0
+101.0,3,Marrakech,neuf,2005,oui,1,,bel appartement lumineux proche tramway,872000.0
+,3,Tanger,bon,1980,non,0,10.0,residence securisee avec jardin,773000.0
+85.0,3,Casablanca,neuf,2008,non,2,10.0,grand salon cuisine equipee,1255000.0
+53.0,1,Fès,bon,2022,oui,0,11.0,grand salon cuisine equipee,237000.0
+81.0,2,Rabat,bon,2000,non,1,1.0,studio refait a neuf centre ville,866000.0
+104.0,4,Fès,a renover,1964,oui,0,5.0,bel appartement lumineux proche tramway,398000.0
+44.0,3,Marrakech,bon,2012,oui,0,1.0,studio refait a neuf centre ville,315000.0
+130.0,5,Rabat,bon,1977,oui,0,9.0,studio refait a neuf centre ville,1333000.0
+36.0,1,Tanger,bon,2019,non,1,6.0,residence securisee avec jardin,224000.0
+60.0,2,Marrakech,neuf,1994,oui,1,0.0,grand salon cuisine equipee,592000.0
+154.0,6,Marrakech,bon,1962,oui,1,9.0,bel appartement lumineux proche tramway,1212000.0
+80.0,3,Casablanca,bon,2013,non,1,5.0,residence securisee avec jardin,715000.0
+72.0,1,Rabat,bon,1981,non,1,5.0,grand salon cuisine equipee,623000.0
+91.0,3,Tanger,bon,1995,non,0,,residence securisee avec jardin,562000.0
+121.0,5,Casablanca,neuf,1961,oui,0,10.0,residence securisee avec jardin,1205000.0
+161.0,5,Tanger,bon,1961,non,1,10.0,residence securisee avec jardin,944000.0
+99.0,3,Casablanca,bon,2014,non,1,11.0,residence securisee avec jardin,951000.0
+80.0,2,Rabat,bon,2014,oui,0,4.0,residence securisee avec jardin,749000.0
+58.0,2,Tanger,neuf,1963,oui,1,3.0,grand salon cuisine equipee,573000.0
+79.0,2,Casablanca,neuf,2014,non,0,6.0,bel appartement lumineux proche tramway,1004000.0
+81.0,3,Rabat,bon,1977,non,1,9.0,bel appartement lumineux proche tramway,665000.0
+79.0,2,Rabat,neuf,2012,non,1,2.0,residence securisee avec jardin,957000.0
+118.0,4,Casablanca,bon,1991,non,0,6.0,grand salon cuisine equipee,1179000.0
+173.0,7,Marrakech,bon,1988,oui,1,5.0,studio refait a neuf centre ville,1078000.0
+149.0,6,Rabat,bon,1986,oui,2,,residence securisee avec jardin,1346000.0
+44.0,1,Rabat,bon,2017,oui,0,8.0,studio refait a neuf centre ville,369000.0
+,5,Casablanca,,1969,oui,2,6.0,grand salon cuisine equipee,1002000.0
+107.0,4,Tanger,neuf,2000,non,0,5.0,studio refait a neuf centre ville,1009000.0
+156.0,6,Marrakech,bon,2022,oui,1,6.0,residence securisee avec jardin,1151000.0
+103.0,4,Casablanca,bon,2001,oui,1,4.0,studio refait a neuf centre ville,933000.0
+101.0,4,Fès,neuf,2011,oui,1,3.0,studio refait a neuf centre ville,725000.0
+,5,Marrakech,bon,1976,non,1,2.0,bel appartement lumineux proche tramway,874000.0
+195.0,7,Tanger,a renover,1970,oui,0,8.0,studio refait a neuf centre ville,8024000.0
+100.0,5,Rabat,bon,2002,oui,1,5.0,bel appartement lumineux proche tramway,700000.0
+,5,Casablanca,a renover,2023,oui,2,10.0,bel appartement lumineux proche tramway,985000.0
+119.0,4,Rabat,bon,1971,non,2,3.0,residence securisee avec jardin,1029000.0
+163.0,7,Tanger,bon,1996,oui,0,10.0,studio refait a neuf centre ville,1053000.0
+169.0,6,Tanger,a renover,1979,non,1,1.0,studio refait a neuf centre ville,818000.0
+85.0,3,Tanger,bon,2000,non,2,,bel appartement lumineux proche tramway,618000.0
+59.0,2,Marrakech,bon,1973,non,1,3.0,bel appartement lumineux proche tramway,404000.0
+116.0,4,Fès,neuf,1981,non,1,3.0,residence securisee avec jardin,840000.0
+124.0,5,Casablanca,a renover,1993,oui,0,0.0,bel appartement lumineux proche tramway,833000.0
+70.0,2,Tanger,neuf,1973,non,2,6.0,residence securisee avec jardin,637000.0
+41.0,1,Casablanca,bon,1999,non,2,4.0,grand salon cuisine equipee,369000.0
+111.0,3,Rabat,bon,2010,non,1,0.0,studio refait a neuf centre ville,1021000.0
+126.0,4,Rabat,bon,1993,oui,1,0.0,residence securisee avec jardin,1269000.0
+99.0,4,Fès,bon,2019,non,1,0.0,studio refait a neuf centre ville,546000.0
+81.0,3,Fès,neuf,2011,oui,1,8.0,residence securisee avec jardin,557000.0
+116.0,4,Fès,bon,1995,non,0,8.0,grand salon cuisine equipee,586000.0
+90.0,4,Casablanca,bon,1995,oui,1,4.0,studio refait a neuf centre ville,643000.0
+129.0,4,Casablanca,neuf,1960,oui,2,,grand salon cuisine equipee,1312000.0
+77.0,3,Tanger,bon,1982,non,1,9.0,grand salon cuisine equipee,421000.0
+103.0,4,Tanger,neuf,2011,oui,0,4.0,bel appartement lumineux proche tramway,1010000.0
+,2,Rabat,neuf,1985,oui,0,9.0,bel appartement lumineux proche tramway,479000.0
+149.0,6,Casablanca,,1975,oui,1,0.0,bel appartement lumineux proche tramway,1446000.0
+124.0,4,Rabat,,1966,oui,2,10.0,bel appartement lumineux proche tramway,787000.0
+48.0,2,Marrakech,bon,1980,oui,1,0.0,bel appartement lumineux proche tramway,346000.0
+76.0,3,Rabat,a renover,2020,non,0,7.0,residence securisee avec jardin,587000.0
+99.0,5,Casablanca,neuf,2011,oui,0,7.0,studio refait a neuf centre ville,1390000.0
+90.0,3,Casablanca,neuf,2015,non,1,0.0,studio refait a neuf centre ville,1160000.0
+47.0,2,Rabat,bon,1988,non,0,11.0,bel appartement lumineux proche tramway,422000.0
+114.0,4,Marrakech,a renover,2013,oui,1,6.0,residence securisee avec jardin,799000.0
+128.0,5,Marrakech,bon,1990,non,0,10.0,studio refait a neuf centre ville,936000.0
+94.0,4,Rabat,bon,2012,non,1,6.0,residence securisee avec jardin,836000.0
+118.0,5,Casablanca,neuf,1995,oui,0,5.0,grand salon cuisine equipee,1595000.0
+108.0,5,Marrakech,,1976,oui,1,5.0,grand salon cuisine equipee,649000.0
+145.0,5,Casablanca,a renover,2011,non,1,10.0,bel appartement lumineux proche tramway,1105000.0
+108.0,4,Rabat,bon,1974,non,0,4.0,studio refait a neuf centre ville,1029000.0
+126.0,4,Marrakech,bon,2016,oui,0,0.0,residence securisee avec jardin,1100000.0
+83.0,3,Tanger,a renover,1984,oui,1,1.0,bel appartement lumineux proche tramway,382000.0
+25.0,1,Fès,a renover,1967,non,0,10.0,studio refait a neuf centre ville,109000.0
+35.0,1,Tanger,bon,2007,oui,1,10.0,residence securisee avec jardin,244000.0
+162.0,6,Casablanca,bon,2005,non,2,,bel appartement lumineux proche tramway,1486000.0
+81.0,3,Marrakech,bon,1985,oui,1,1.0,residence securisee avec jardin,642000.0
+161.0,7,Casablanca,,1977,non,2,4.0,residence securisee avec jardin,1399000.0
+161.0,6,Fès,bon,2002,oui,2,6.0,studio refait a neuf centre ville,822000.0
+94.0,4,Casablanca,bon,2012,oui,1,10.0,grand salon cuisine equipee,810000.0
+48.0,2,Tanger,bon,1997,oui,2,3.0,residence securisee avec jardin,372000.0
+109.0,3,Fès,neuf,2012,oui,0,8.0,studio refait a neuf centre ville,853000.0
+131.0,4,Tanger,neuf,2005,non,1,2.0,grand salon cuisine equipee,1304000.0
+133.0,4,Casablanca,a renover,1973,oui,0,10.0,residence securisee avec jardin,778000.0
+110.0,3,Fès,bon,1962,oui,1,9.0,bel appartement lumineux proche tramway,592000.0
+45.0,2,Rabat,neuf,1968,oui,0,,grand salon cuisine equipee,481000.0
+54.0,2,Marrakech,a renover,1972,non,1,10.0,bel appartement lumineux proche tramway,322000.0
+58.0,2,Casablanca,a renover,2009,oui,1,,studio refait a neuf centre ville,387000.0
+63.0,3,Marrakech,bon,1987,oui,2,5.0,bel appartement lumineux proche tramway,524000.0
+102.0,3,Fès,bon,2023,non,2,2.0,studio refait a neuf centre ville,696000.0
+78.0,4,Tanger,bon,1992,non,1,11.0,bel appartement lumineux proche tramway,625000.0
+134.0,6,Casablanca,bon,2000,non,2,11.0,studio refait a neuf centre ville,1435000.0
+113.0,4,Fès,bon,2013,non,0,11.0,bel appartement lumineux proche tramway,753000.0
+148.0,5,Marrakech,bon,1963,non,1,8.0,grand salon cuisine equipee,983000.0
+117.0,4,Marrakech,a renover,2017,oui,1,3.0,studio refait a neuf centre ville,730000.0
+76.0,2,Casablanca,bon,1982,non,1,8.0,grand salon cuisine equipee,650000.0
+74.0,3,Tanger,bon,1961,non,1,3.0,grand salon cuisine equipee,387000.0
+39.0,2,Tanger,bon,1960,non,0,1.0,residence securisee avec jardin,247000.0
+,4,Marrakech,a renover,1989,oui,0,9.0,studio refait a neuf centre ville,927000.0
+147.0,5,Rabat,bon,2011,oui,1,4.0,residence securisee avec jardin,1267000.0
+140.0,4,Casablanca,a renover,1977,oui,0,5.0,studio refait a neuf centre ville,926000.0
+62.0,2,Rabat,bon,1960,oui,1,10.0,grand salon cuisine equipee,436000.0
+84.0,3,Fès,bon,2005,non,0,1.0,bel appartement lumineux proche tramway,408000.0
+131.0,4,Rabat,bon,1975,oui,1,6.0,studio refait a neuf centre ville,1036000.0
+87.0,4,Casablanca,,1978,oui,0,,bel appartement lumineux proche tramway,814000.0
+120.0,4,Casablanca,bon,1968,oui,0,4.0,residence securisee avec jardin,887000.0
+63.0,2,Rabat,neuf,1975,oui,0,1.0,grand salon cuisine equipee,588000.0
+60.0,2,Fès,neuf,2020,oui,0,4.0,residence securisee avec jardin,513000.0
+149.0,6,Tanger,a renover,2016,oui,0,10.0,bel appartement lumineux proche tramway,879000.0
+74.0,2,Casablanca,bon,1979,oui,1,5.0,residence securisee avec jardin,724000.0
+115.0,3,Rabat,bon,1984,oui,2,8.0,studio refait a neuf centre ville,1130000.0
+113.0,4,Tanger,bon,2008,non,1,1.0,bel appartement lumineux proche tramway,802000.0
+115.0,5,Marrakech,a renover,1974,oui,0,5.0,studio refait a neuf centre ville,671000.0
+136.0,5,Tanger,bon,1991,oui,1,2.0,bel appartement lumineux proche tramway,1160000.0
+114.0,4,Rabat,bon,2021,non,1,3.0,grand salon cuisine equipee,1034000.0
+112.0,3,Marrakech,neuf,2015,oui,1,4.0,bel appartement lumineux proche tramway,1157000.0
+65.0,3,Casablanca,bon,1975,non,2,9.0,residence securisee avec jardin,429000.0
+153.0,5,Casablanca,bon,1979,non,0,6.0,bel appartement lumineux proche tramway,1261000.0
+147.0,5,Marrakech,bon,1960,non,0,9.0,studio refait a neuf centre ville,1139000.0
+87.0,3,Rabat,,2019,oui,1,0.0,grand salon cuisine equipee,689000.0
+95.0,3,Marrakech,a renover,1978,oui,0,,grand salon cuisine equipee,467000.0
+113.0,3,Rabat,a renover,1981,oui,1,3.0,bel appartement lumineux proche tramway,785000.0
+107.0,4,Tanger,bon,2015,oui,0,2.0,residence securisee avec jardin,727000.0
+49.0,2,Tanger,bon,2001,non,2,9.0,grand salon cuisine equipee,402000.0
+125.0,4,Casablanca,a renover,1972,non,2,7.0,residence securisee avec jardin,800000.0
+137.0,4,Casablanca,bon,1972,oui,1,5.0,residence securisee avec jardin,1165000.0
+55.0,2,Rabat,neuf,2014,non,1,7.0,grand salon cuisine equipee,595000.0
+102.0,4,Casablanca,bon,1986,non,0,9.0,bel appartement lumineux proche tramway,939000.0
+43.0,2,Rabat,neuf,1960,oui,1,0.0,studio refait a neuf centre ville,362000.0
+131.0,4,Rabat,a renover,2014,non,0,1.0,studio refait a neuf centre ville,825000.0
+110.0,3,Rabat,bon,2012,non,0,,studio refait a neuf centre ville,1037000.0
+,4,Casablanca,neuf,2017,non,1,0.0,bel appartement lumineux proche tramway,1401000.0
+56.0,2,Tanger,bon,2021,oui,0,5.0,residence securisee avec jardin,435000.0
+105.0,4,Marrakech,neuf,1989,non,1,7.0,residence securisee avec jardin,1082000.0
+133.0,4,Marrakech,bon,2008,oui,0,4.0,residence securisee avec jardin,1293000.0
+131.0,5,Tanger,bon,2023,oui,1,10.0,grand salon cuisine equipee,812000.0
+48.0,2,Rabat,bon,1999,oui,2,10.0,grand salon cuisine equipee,433000.0
+113.0,5,Marrakech,neuf,1998,oui,0,,studio refait a neuf centre ville,1135000.0
+108.0,4,Marrakech,bon,1987,oui,1,2.0,residence securisee avec jardin,834000.0
+112.0,5,Marrakech,bon,2018,oui,1,6.0,bel appartement lumineux proche tramway,846000.0
+107.0,4,Casablanca,neuf,1966,non,0,1.0,studio refait a neuf centre ville,1173000.0
+107.0,4,Marrakech,bon,1991,non,2,5.0,residence securisee avec jardin,852000.0
+40.0,1,Tanger,bon,1999,non,1,5.0,grand salon cuisine equipee,272000.0
+126.0,5,Casablanca,a renover,2023,non,0,1.0,residence securisee avec jardin,883000.0
+72.0,2,Tanger,neuf,2016,oui,2,4.0,studio refait a neuf centre ville,768000.0
+123.0,4,Casablanca,bon,2021,oui,0,1.0,grand salon cuisine equipee,1221000.0
+71.0,3,Rabat,a renover,1978,non,2,11.0,bel appartement lumineux proche tramway,373000.0
+49.0,1,Marrakech,a renover,2019,oui,0,0.0,residence securisee avec jardin,304000.0
+84.0,3,Rabat,neuf,1965,non,1,9.0,bel appartement lumineux proche tramway,826000.0
+94.0,4,Rabat,bon,2018,oui,0,8.0,grand salon cuisine equipee,907000.0
+140.0,5,Marrakech,bon,2000,non,0,,bel appartement lumineux proche tramway,1046000.0
+87.0,3,Casablanca,bon,2022,non,0,4.0,bel appartement lumineux proche tramway,905000.0
+57.0,2,Marrakech,bon,2017,non,1,8.0,studio refait a neuf centre ville,515000.0
+178.0,6,Fès,neuf,1967,non,1,6.0,residence securisee avec jardin,1103000.0
+109.0,4,Tanger,bon,1970,oui,0,4.0,grand salon cuisine equipee,661000.0
+75.0,2,Rabat,neuf,2020,oui,0,4.0,grand salon cuisine equipee,743000.0
+25.0,1,Casablanca,a renover,1995,oui,1,1.0,residence securisee avec jardin,190000.0
+108.0,4,Casablanca,bon,2009,oui,0,4.0,residence securisee avec jardin,1009000.0
+172.0,7,Marrakech,bon,2001,oui,0,8.0,grand salon cuisine equipee,1213000.0
+124.0,5,Marrakech,bon,2000,non,1,5.0,bel appartement lumineux proche tramway,1229000.0
+83.0,3,Rabat,bon,2007,non,0,1.0,grand salon cuisine equipee,791000.0
+113.0,5,Casablanca,bon,1972,oui,0,7.0,studio refait a neuf centre ville,768000.0
+90.0,2,Casablanca,neuf,1999,oui,1,3.0,bel appartement lumineux proche tramway,1143000.0
+71.0,3,Rabat,bon,1991,non,1,7.0,residence securisee avec jardin,583000.0
+124.0,4,Tanger,neuf,1981,oui,0,,residence securisee avec jardin,984000.0
+113.0,4,Casablanca,bon,2021,oui,1,,studio refait a neuf centre ville,1213000.0
+70.0,3,Marrakech,a renover,1970,non,0,5.0,grand salon cuisine equipee,449000.0
+57.0,2,Marrakech,bon,1974,oui,0,3.0,grand salon cuisine equipee,381000.0
+122.0,4,Marrakech,a renover,1983,oui,1,6.0,studio refait a neuf centre ville,695000.0
+112.0,4,Marrakech,neuf,1980,oui,0,3.0,studio refait a neuf centre ville,1001000.0
+132.0,4,Rabat,bon,1999,oui,0,9.0,grand salon cuisine equipee,1266000.0
+152.0,5,Casablanca,neuf,1992,non,1,7.0,bel appartement lumineux proche tramway,1991000.0
+88.0,2,Casablanca,bon,2020,oui,0,3.0,studio refait a neuf centre ville,905000.0
+84.0,3,Casablanca,bon,2012,oui,2,5.0,studio refait a neuf centre ville,748000.0
+87.0,3,Casablanca,bon,2006,oui,1,,studio refait a neuf centre ville,795000.0
+75.0,2,Rabat,bon,1965,non,0,6.0,studio refait a neuf centre ville,577000.0
+77.0,3,Fès,bon,2016,oui,2,4.0,grand salon cuisine equipee,4104000.0
+104.0,4,Casablanca,a renover,1961,oui,1,,studio refait a neuf centre ville,818000.0
+91.0,4,Tanger,,1998,non,0,5.0,studio refait a neuf centre ville,580000.0
+89.0,3,Rabat,bon,1995,non,1,3.0,residence securisee avec jardin,811000.0
+56.0,2,Casablanca,neuf,2004,non,1,5.0,residence securisee avec jardin,625000.0
+67.0,2,Marrakech,bon,1970,oui,0,11.0,residence securisee avec jardin,526000.0
+115.0,5,Marrakech,neuf,1963,non,1,11.0,grand salon cuisine equipee,1076000.0
+117.0,4,Tanger,bon,1976,non,1,7.0,residence securisee avec jardin,781000.0
+52.0,2,Rabat,a renover,1981,oui,0,10.0,bel appartement lumineux proche tramway,318000.0
+103.0,4,Tanger,bon,1991,oui,2,5.0,grand salon cuisine equipee,703000.0
+102.0,3,Rabat,bon,2013,oui,0,7.0,studio refait a neuf centre ville,1023000.0
+42.0,2,Fès,bon,1979,oui,1,11.0,residence securisee avec jardin,194000.0
+143.0,5,Casablanca,a renover,2009,oui,1,1.0,studio refait a neuf centre ville,1073000.0
+107.0,5,Fès,neuf,2013,non,1,1.0,grand salon cuisine equipee,939000.0
+79.0,4,Casablanca,bon,1970,oui,0,0.0,grand salon cuisine equipee,658000.0
+35.0,1,Casablanca,bon,2016,oui,0,1.0,grand salon cuisine equipee,348000.0
+110.0,5,Casablanca,bon,1987,oui,0,10.0,studio refait a neuf centre ville,1033000.0
+86.0,3,Rabat,bon,1961,non,1,4.0,studio refait a neuf centre ville,527000.0
+154.0,5,Fès,bon,2010,non,0,4.0,grand salon cuisine equipee,853000.0
+61.0,2,Rabat,a renover,1967,oui,0,3.0,studio refait a neuf centre ville,280000.0
+145.0,5,Rabat,bon,2000,non,0,6.0,residence securisee avec jardin,937000.0
+62.0,2,Casablanca,neuf,1972,non,2,11.0,residence securisee avec jardin,774000.0
+109.0,5,Tanger,a renover,2020,oui,0,5.0,studio refait a neuf centre ville,652000.0
+54.0,2,Rabat,bon,1978,oui,0,10.0,studio refait a neuf centre ville,487000.0
+125.0,5,Marrakech,bon,2019,oui,1,9.0,residence securisee avec jardin,1023000.0
+,3,Casablanca,a renover,1983,oui,1,0.0,bel appartement lumineux proche tramway,651000.0
+27.0,1,Casablanca,bon,1963,oui,1,2.0,grand salon cuisine equipee,223000.0
+86.0,3,Fès,bon,2016,oui,2,,studio refait a neuf centre ville,497000.0
+114.0,4,Rabat,bon,1966,non,0,9.0,studio refait a neuf centre ville,1092000.0
+65.0,3,Tanger,bon,1963,oui,1,6.0,grand salon cuisine equipee,362000.0
+88.0,4,Casablanca,bon,1961,oui,1,9.0,residence securisee avec jardin,766000.0
+69.0,2,Casablanca,bon,1989,oui,0,6.0,bel appartement lumineux proche tramway,634000.0
+72.0,2,Rabat,neuf,2009,oui,2,1.0,studio refait a neuf centre ville,574000.0
+80.0,3,Tanger,neuf,2014,oui,1,,residence securisee avec jardin,694000.0
+142.0,5,Rabat,a renover,1994,non,1,8.0,bel appartement lumineux proche tramway,1068000.0
+157.0,5,Casablanca,a renover,2003,oui,0,3.0,grand salon cuisine equipee,1040000.0
+137.0,5,Tanger,a renover,2008,non,0,11.0,bel appartement lumineux proche tramway,665000.0
+106.0,3,Fès,neuf,2017,non,0,8.0,residence securisee avec jardin,886000.0
+119.0,4,Rabat,a renover,1982,non,0,3.0,grand salon cuisine equipee,686000.0
+61.0,4,Marrakech,bon,1986,non,1,9.0,grand salon cuisine equipee,450000.0
+89.0,2,Rabat,bon,1965,non,1,7.0,residence securisee avec jardin,873000.0
+109.0,3,Tanger,neuf,1968,non,2,10.0,studio refait a neuf centre ville,951000.0
+102.0,3,Casablanca,neuf,1974,non,1,6.0,grand salon cuisine equipee,1205000.0
+94.0,4,Fès,neuf,2004,non,0,10.0,studio refait a neuf centre ville,633000.0
+48.0,2,Casablanca,neuf,2015,oui,1,10.0,grand salon cuisine equipee,534000.0
+119.0,5,Marrakech,bon,2016,non,0,3.0,residence securisee avec jardin,832000.0
+150.0,5,Rabat,neuf,2001,oui,1,1.0,grand salon cuisine equipee,1910000.0
+25.0,2,Rabat,bon,1971,oui,1,8.0,residence securisee avec jardin,229000.0
+107.0,4,Casablanca,a renover,1999,non,1,,bel appartement lumineux proche tramway,888000.0
+103.0,3,Fès,neuf,1997,oui,1,0.0,studio refait a neuf centre ville,710000.0
+61.0,4,Casablanca,bon,1977,oui,1,5.0,studio refait a neuf centre ville,615000.0
+92.0,3,Marrakech,a renover,2002,oui,1,4.0,grand salon cuisine equipee,657000.0
+,3,Fès,a renover,2014,oui,0,4.0,residence securisee avec jardin,391000.0
+67.0,3,Marrakech,bon,1968,oui,0,,bel appartement lumineux proche tramway,480000.0
+64.0,2,Tanger,bon,1969,oui,1,1.0,bel appartement lumineux proche tramway,378000.0
+58.0,2,Rabat,a renover,1988,oui,0,5.0,grand salon cuisine equipee,405000.0
+113.0,4,Casablanca,bon,1975,oui,1,6.0,bel appartement lumineux proche tramway,913000.0
+79.0,2,Marrakech,bon,2020,non,1,6.0,bel appartement lumineux proche tramway,717000.0
+127.0,6,Marrakech,a renover,1980,non,2,1.0,residence securisee avec jardin,774000.0
+87.0,3,Rabat,a renover,1968,non,0,,bel appartement lumineux proche tramway,484000.0
+79.0,2,Casablanca,bon,2020,non,0,8.0,studio refait a neuf centre ville,880000.0
+,3,Marrakech,bon,1961,non,0,5.0,studio refait a neuf centre ville,806000.0
+91.0,4,Marrakech,a renover,1994,oui,1,,bel appartement lumineux proche tramway,630000.0
+99.0,4,Rabat,neuf,1966,non,1,4.0,residence securisee avec jardin,1001000.0
+134.0,6,Tanger,bon,1983,non,0,0.0,residence securisee avec jardin,1074000.0
+91.0,3,Marrakech,bon,1993,non,1,10.0,grand salon cuisine equipee,826000.0
+,5,Tanger,neuf,2012,oui,0,3.0,studio refait a neuf centre ville,1222000.0
+94.0,4,Rabat,bon,1984,oui,0,0.0,residence securisee avec jardin,852000.0
+127.0,5,Tanger,neuf,1982,oui,1,2.0,bel appartement lumineux proche tramway,1109000.0
+63.0,1,Marrakech,bon,1963,non,1,9.0,grand salon cuisine equipee,447000.0
+127.0,5,Rabat,a renover,2017,oui,1,6.0,bel appartement lumineux proche tramway,1209000.0
+69.0,3,Tanger,bon,2019,oui,0,4.0,studio refait a neuf centre ville,484000.0
+129.0,5,Tanger,bon,1997,non,0,10.0,grand salon cuisine equipee,770000.0
+49.0,2,Casablanca,neuf,1980,oui,0,6.0,studio refait a neuf centre ville,503000.0
+26.0,1,Casablanca,neuf,2022,oui,1,4.0,grand salon cuisine equipee,288000.0
+146.0,4,Marrakech,bon,1978,non,0,,studio refait a neuf centre ville,1403000.0
+71.0,2,Casablanca,a renover,1995,non,0,8.0,studio refait a neuf centre ville,557000.0
+79.0,3,Tanger,bon,1974,oui,1,3.0,residence securisee avec jardin,532000.0
+149.0,5,Marrakech,neuf,1981,oui,0,,studio refait a neuf centre ville,1593000.0
+167.0,5,Fès,neuf,2014,non,1,3.0,grand salon cuisine equipee,1114000.0
+76.0,2,Rabat,bon,2020,non,1,4.0,studio refait a neuf centre ville,705000.0
+187.0,7,Casablanca,neuf,1993,non,0,2.0,residence securisee avec jardin,2057000.0
+110.0,4,Rabat,bon,1976,non,1,8.0,studio refait a neuf centre ville,767000.0
+81.0,3,Casablanca,a renover,1996,non,2,4.0,bel appartement lumineux proche tramway,563000.0
+74.0,3,Rabat,bon,2015,oui,1,0.0,grand salon cuisine equipee,769000.0
+36.0,2,Rabat,neuf,1960,non,0,,bel appartement lumineux proche tramway,317000.0
+125.0,5,Rabat,,1988,non,0,6.0,studio refait a neuf centre ville,1551000.0
+121.0,5,Casablanca,bon,2015,non,1,1.0,grand salon cuisine equipee,1267000.0
+74.0,2,Casablanca,bon,2014,oui,0,10.0,grand salon cuisine equipee,755000.0
+88.0,3,Tanger,a renover,2002,non,0,2.0,residence securisee avec jardin,509000.0
+158.0,5,Casablanca,bon,2012,non,0,10.0,studio refait a neuf centre ville,1654000.0
+62.0,2,Tanger,neuf,1978,non,0,8.0,residence securisee avec jardin,455000.0
+61.0,1,Tanger,bon,1996,oui,1,6.0,grand salon cuisine equipee,391000.0
+131.0,6,Fès,a renover,1975,oui,0,7.0,studio refait a neuf centre ville,506000.0
+99.0,4,Casablanca,neuf,2018,oui,0,11.0,bel appartement lumineux proche tramway,1029000.0
+,5,Casablanca,neuf,1984,non,0,1.0,studio refait a neuf centre ville,1764000.0
+78.0,2,Marrakech,neuf,1964,oui,2,8.0,studio refait a neuf centre ville,702000.0
+74.0,2,Tanger,a renover,1998,non,0,4.0,bel appartement lumineux proche tramway,356000.0
+25.0,1,Casablanca,bon,1972,oui,2,10.0,grand salon cuisine equipee,214000.0
+50.0,2,Casablanca,neuf,1989,oui,1,5.0,bel appartement lumineux proche tramway,438000.0
+148.0,5,Marrakech,bon,1962,oui,0,6.0,studio refait a neuf centre ville,1096000.0
+112.0,3,Casablanca,a renover,2021,non,1,9.0,studio refait a neuf centre ville,844000.0
+138.0,5,Marrakech,bon,1977,non,1,1.0,bel appartement lumineux proche tramway,804000.0
+123.0,5,Tanger,a renover,1984,oui,0,6.0,grand salon cuisine equipee,4120000.0
+25.0,1,Tanger,bon,1978,oui,2,7.0,bel appartement lumineux proche tramway,184000.0
+77.0,3,Rabat,neuf,2014,non,0,9.0,studio refait a neuf centre ville,1010000.0
+137.0,4,Fès,neuf,1987,oui,1,8.0,studio refait a neuf centre ville,798000.0
+94.0,2,Rabat,bon,1967,oui,0,9.0,grand salon cuisine equipee,899000.0
+125.0,4,Marrakech,neuf,1994,non,1,1.0,studio refait a neuf centre ville,1277000.0
+125.0,3,Tanger,neuf,1967,oui,0,1.0,bel appartement lumineux proche tramway,955000.0
+,4,Fès,bon,2014,oui,0,5.0,residence securisee avec jardin,602000.0
+77.0,4,Casablanca,bon,1979,oui,0,10.0,studio refait a neuf centre ville,689000.0
+144.0,5,Rabat,bon,1977,non,0,7.0,bel appartement lumineux proche tramway,1166000.0
+76.0,3,Marrakech,neuf,2009,non,1,3.0,grand salon cuisine equipee,890000.0
+146.0,6,Rabat,neuf,1974,non,1,10.0,studio refait a neuf centre ville,1151000.0
+54.0,2,Fès,bon,2021,non,2,1.0,residence securisee avec jardin,325000.0
+70.0,2,Casablanca,neuf,2006,non,2,9.0,studio refait a neuf centre ville,6024000.0
+95.0,4,Casablanca,bon,1982,oui,1,6.0,grand salon cuisine equipee,916000.0
+97.0,3,Rabat,bon,1976,oui,0,,residence securisee avec jardin,739000.0
+87.0,4,Casablanca,a renover,1967,oui,2,,bel appartement lumineux proche tramway,443000.0
+166.0,6,Casablanca,neuf,2013,non,0,,residence securisee avec jardin,2257000.0
+147.0,4,Fès,neuf,2020,oui,1,8.0,studio refait a neuf centre ville,1085000.0
+,4,Tanger,a renover,1978,oui,2,8.0,bel appartement lumineux proche tramway,497000.0
+135.0,4,Tanger,,1998,non,1,6.0,residence securisee avec jardin,793000.0
+42.0,1,Fès,neuf,2006,non,1,5.0,residence securisee avec jardin,327000.0
+174.0,7,Marrakech,bon,1987,non,0,9.0,grand salon cuisine equipee,1121000.0
+115.0,4,Casablanca,neuf,2013,non,1,8.0,residence securisee avec jardin,1156000.0
+89.0,4,Casablanca,a renover,1970,oui,0,1.0,bel appartement lumineux proche tramway,570000.0
+96.0,3,Casablanca,bon,2022,oui,0,,studio refait a neuf centre ville,1026000.0
+134.0,5,Rabat,neuf,2010,oui,0,5.0,grand salon cuisine equipee,1293000.0
+32.0,1,Rabat,bon,1968,oui,0,2.0,grand salon cuisine equipee,242000.0
+117.0,4,Casablanca,bon,2012,oui,1,7.0,studio refait a neuf centre ville,1197000.0
+29.0,2,Marrakech,neuf,1976,oui,1,6.0,bel appartement lumineux proche tramway,258000.0
+145.0,5,Marrakech,bon,2021,oui,1,3.0,studio refait a neuf centre ville,1060000.0
+96.0,3,Rabat,bon,1972,non,0,8.0,bel appartement lumineux proche tramway,824000.0
+67.0,3,Marrakech,a renover,1976,non,1,10.0,residence securisee avec jardin,396000.0
+66.0,1,Fès,bon,2012,non,1,8.0,studio refait a neuf centre ville,379000.0
+,3,Marrakech,bon,1980,oui,0,1.0,residence securisee avec jardin,680000.0
+176.0,6,Rabat,bon,2019,non,0,0.0,studio refait a neuf centre ville,1653000.0
+111.0,4,Rabat,,1981,non,0,8.0,grand salon cuisine equipee,7624000.0
+89.0,2,Fès,neuf,1995,non,0,2.0,grand salon cuisine equipee,678000.0
+67.0,2,Casablanca,bon,2004,oui,0,9.0,bel appartement lumineux proche tramway,509000.0
+114.0,4,Casablanca,bon,2017,non,0,9.0,bel appartement lumineux proche tramway,1163000.0
+86.0,3,Marrakech,a renover,2020,oui,1,8.0,residence securisee avec jardin,523000.0
+50.0,1,Tanger,neuf,1998,oui,0,,studio refait a neuf centre ville,425000.0
+114.0,4,Rabat,neuf,1996,non,1,3.0,grand salon cuisine equipee,1294000.0
+116.0,4,Casablanca,bon,1967,oui,1,7.0,grand salon cuisine equipee,880000.0
+150.0,5,Marrakech,a renover,1970,oui,0,4.0,studio refait a neuf centre ville,799000.0
+108.0,3,Fès,neuf,1981,oui,1,5.0,grand salon cuisine equipee,650000.0
+129.0,6,Tanger,bon,2002,non,1,8.0,residence securisee avec jardin,1031000.0
+59.0,2,Casablanca,neuf,1992,non,0,4.0,grand salon cuisine equipee,647000.0
+126.0,5,Marrakech,bon,1996,non,1,8.0,residence securisee avec jardin,940000.0
+152.0,6,Tanger,a renover,1994,oui,1,8.0,grand salon cuisine equipee,805000.0
+149.0,4,Rabat,bon,2012,non,1,8.0,grand salon cuisine equipee,1290000.0
+55.0,1,Marrakech,a renover,1972,oui,2,7.0,residence securisee avec jardin,366000.0
+77.0,3,Casablanca,bon,2010,oui,0,10.0,studio refait a neuf centre ville,644000.0
+115.0,4,Tanger,bon,1962,oui,1,3.0,bel appartement lumineux proche tramway,786000.0
+86.0,3,Marrakech,bon,2015,oui,0,0.0,studio refait a neuf centre ville,627000.0
+,4,Casablanca,bon,2015,non,0,10.0,residence securisee avec jardin,1217000.0
+78.0,3,Casablanca,bon,2006,non,1,6.0,studio refait a neuf centre ville,743000.0
+110.0,4,Rabat,bon,1990,oui,0,2.0,residence securisee avec jardin,1260000.0
+192.0,7,Casablanca,bon,1968,non,0,0.0,residence securisee avec jardin,1750000.0
+70.0,3,Casablanca,neuf,1973,oui,0,0.0,bel appartement lumineux proche tramway,662000.0
+49.0,2,Casablanca,neuf,1991,oui,2,3.0,studio refait a neuf centre ville,655000.0
+89.0,4,Casablanca,a renover,2007,oui,0,7.0,grand salon cuisine equipee,695000.0
+82.0,3,Marrakech,neuf,1966,oui,1,0.0,grand salon cuisine equipee,817000.0
+85.0,2,Rabat,bon,2012,oui,2,10.0,studio refait a neuf centre ville,738000.0
+106.0,4,Rabat,bon,1988,non,0,11.0,bel appartement lumineux proche tramway,764000.0
+38.0,2,Casablanca,neuf,1995,non,1,6.0,residence securisee avec jardin,426000.0
+131.0,5,Tanger,bon,1961,oui,2,11.0,grand salon cuisine equipee,688000.0
+54.0,2,Rabat,neuf,1968,non,1,,studio refait a neuf centre ville,540000.0
+142.0,5,Tanger,bon,1961,oui,1,2.0,grand salon cuisine equipee,796000.0
+105.0,4,Tanger,neuf,2005,oui,2,2.0,bel appartement lumineux proche tramway,874000.0
+36.0,1,Casablanca,bon,1987,oui,1,9.0,residence securisee avec jardin,294000.0
+100.0,3,Marrakech,bon,1971,non,2,6.0,bel appartement lumineux proche tramway,934000.0
+80.0,4,Rabat,neuf,2006,oui,0,6.0,studio refait a neuf centre ville,654000.0
+63.0,3,Marrakech,bon,2014,oui,1,2.0,bel appartement lumineux proche tramway,526000.0
+107.0,4,Rabat,neuf,2019,oui,1,9.0,bel appartement lumineux proche tramway,1271000.0
+62.0,3,Rabat,a renover,2005,non,0,10.0,residence securisee avec jardin,399000.0
+103.0,4,Rabat,bon,1990,non,1,8.0,bel appartement lumineux proche tramway,816000.0
+103.0,3,Rabat,bon,2008,oui,0,6.0,studio refait a neuf centre ville,929000.0
+96.0,3,Tanger,bon,2020,oui,2,0.0,residence securisee avec jardin,763000.0
+75.0,3,Rabat,neuf,1980,oui,2,9.0,studio refait a neuf centre ville,782000.0
+84.0,2,Rabat,neuf,2008,non,1,5.0,studio refait a neuf centre ville,995000.0
+54.0,2,Rabat,bon,2015,non,1,3.0,bel appartement lumineux proche tramway,453000.0
+38.0,2,Marrakech,neuf,1980,non,1,2.0,residence securisee avec jardin,360000.0
+105.0,3,Rabat,bon,1960,non,0,7.0,studio refait a neuf centre ville,872000.0
+93.0,3,Rabat,a renover,2009,oui,1,8.0,residence securisee avec jardin,705000.0
+42.0,3,Marrakech,bon,2009,non,0,11.0,grand salon cuisine equipee,336000.0
+103.0,4,Rabat,a renover,1996,oui,0,1.0,residence securisee avec jardin,722000.0
+66.0,2,Tanger,bon,2009,non,2,5.0,bel appartement lumineux proche tramway,504000.0
+46.0,2,Casablanca,bon,2021,non,1,8.0,grand salon cuisine equipee,485000.0
+131.0,4,Casablanca,a renover,1991,non,1,11.0,studio refait a neuf centre ville,862000.0
+98.0,4,Marrakech,bon,1966,non,0,11.0,residence securisee avec jardin,860000.0
+110.0,3,Casablanca,bon,2020,non,0,7.0,bel appartement lumineux proche tramway,963000.0
+82.0,3,Fès,bon,1974,non,0,7.0,grand salon cuisine equipee,426000.0
+64.0,2,Marrakech,,1996,non,1,9.0,studio refait a neuf centre ville,548000.0
+81.0,3,Marrakech,bon,2022,non,0,9.0,bel appartement lumineux proche tramway,695000.0
+82.0,3,Rabat,bon,1963,non,1,5.0,grand salon cuisine equipee,614000.0
+104.0,5,Tanger,bon,2006,non,1,10.0,residence securisee avec jardin,703000.0
+88.0,3,Tanger,a renover,1992,non,0,9.0,residence securisee avec jardin,589000.0
+78.0,3,Marrakech,a renover,2014,non,0,10.0,residence securisee avec jardin,537000.0
+130.0,4,Fès,bon,2007,oui,1,,studio refait a neuf centre ville,868000.0
+68.0,1,Rabat,neuf,1973,non,0,,bel appartement lumineux proche tramway,839000.0
+95.0,2,Casablanca,bon,2015,non,1,8.0,bel appartement lumineux proche tramway,887000.0
+81.0,3,Rabat,bon,1997,non,0,8.0,residence securisee avec jardin,736000.0
+40.0,1,Rabat,bon,1983,oui,1,0.0,grand salon cuisine equipee,299000.0
+62.0,3,Casablanca,neuf,1996,non,0,3.0,residence securisee avec jardin,703000.0
+131.0,5,Fès,neuf,1976,non,1,11.0,bel appartement lumineux proche tramway,784000.0
+99.0,4,Tanger,bon,1980,oui,0,,bel appartement lumineux proche tramway,750000.0
+33.0,2,Casablanca,a renover,2004,non,0,3.0,studio refait a neuf centre ville,265000.0
+61.0,3,Marrakech,bon,1971,non,0,1.0,grand salon cuisine equipee,509000.0
+121.0,4,Fès,bon,1980,non,0,3.0,bel appartement lumineux proche tramway,587000.0
+122.0,4,Casablanca,bon,1990,oui,1,0.0,grand salon cuisine equipee,1073000.0
+125.0,5,Marrakech,neuf,2005,oui,0,8.0,bel appartement lumineux proche tramway,1257000.0
+43.0,1,Marrakech,bon,1973,oui,2,11.0,residence securisee avec jardin,339000.0
+101.0,4,Fès,neuf,2015,oui,1,2.0,studio refait a neuf centre ville,801000.0
+61.0,3,Rabat,bon,1992,non,2,5.0,bel appartement lumineux proche tramway,426000.0
+85.0,3,Rabat,bon,1971,non,0,10.0,grand salon cuisine equipee,708000.0
+63.0,3,Casablanca,neuf,1969,oui,1,1.0,bel appartement lumineux proche tramway,776000.0
+,3,Casablanca,a renover,2020,non,1,11.0,studio refait a neuf centre ville,869000.0
+110.0,3,Fès,bon,1997,non,0,0.0,bel appartement lumineux proche tramway,659000.0
+94.0,4,Marrakech,bon,1973,non,1,10.0,residence securisee avec jardin,838000.0
+88.0,4,Marrakech,bon,1992,oui,0,6.0,residence securisee avec jardin,707000.0
+39.0,2,Rabat,a renover,1980,non,1,3.0,bel appartement lumineux proche tramway,262000.0
+146.0,6,Rabat,a renover,1978,non,1,,bel appartement lumineux proche tramway,1074000.0
+,3,Marrakech,bon,2022,non,1,10.0,bel appartement lumineux proche tramway,750000.0
+103.0,3,Tanger,neuf,2021,oui,1,5.0,grand salon cuisine equipee,939000.0
+71.0,3,Casablanca,bon,1962,non,1,6.0,residence securisee avec jardin,610000.0
+113.0,4,Casablanca,a renover,1991,oui,0,5.0,grand salon cuisine equipee,991000.0
+69.0,3,Casablanca,neuf,2010,oui,1,8.0,studio refait a neuf centre ville,911000.0
+75.0,3,Casablanca,neuf,1997,oui,1,9.0,residence securisee avec jardin,769000.0
+83.0,3,Marrakech,bon,2005,oui,0,11.0,bel appartement lumineux proche tramway,761000.0
+94.0,4,Fès,neuf,2006,non,0,3.0,grand salon cuisine equipee,672000.0
+159.0,5,Tanger,neuf,1973,oui,1,0.0,residence securisee avec jardin,1217000.0
+46.0,2,Rabat,bon,2015,oui,1,5.0,grand salon cuisine equipee,440000.0
+125.0,4,Casablanca,bon,1973,oui,0,2.0,grand salon cuisine equipee,1022000.0
+57.0,1,Marrakech,neuf,1982,oui,0,6.0,residence securisee avec jardin,596000.0
+25.0,2,Rabat,neuf,1985,oui,1,4.0,grand salon cuisine equipee,259000.0
+86.0,3,Casablanca,,1963,non,0,10.0,grand salon cuisine equipee,690000.0
+134.0,5,Tanger,neuf,1984,oui,0,0.0,studio refait a neuf centre ville,1219000.0
+42.0,1,Rabat,neuf,2015,non,0,,grand salon cuisine equipee,493000.0
+110.0,4,Rabat,neuf,1987,non,1,8.0,bel appartement lumineux proche tramway,1080000.0
+157.0,6,Rabat,bon,2010,non,1,0.0,grand salon cuisine equipee,1127000.0
+33.0,2,Fès,bon,1989,non,2,,grand salon cuisine equipee,176000.0
+85.0,3,Tanger,a renover,2007,non,0,,grand salon cuisine equipee,589000.0
+96.0,2,Rabat,neuf,2020,non,0,1.0,bel appartement lumineux proche tramway,972000.0
+118.0,3,Fès,a renover,2014,non,0,8.0,residence securisee avec jardin,630000.0
+107.0,3,Fès,bon,2000,non,0,8.0,grand salon cuisine equipee,498000.0
+68.0,3,Marrakech,neuf,2011,non,0,9.0,residence securisee avec jardin,590000.0
+41.0,1,Fès,bon,2010,oui,0,9.0,residence securisee avec jardin,225000.0
+43.0,1,Casablanca,bon,1991,oui,0,2.0,bel appartement lumineux proche tramway,410000.0
+146.0,5,Marrakech,a renover,1984,oui,2,11.0,grand salon cuisine equipee,868000.0
+99.0,4,Casablanca,a renover,1993,non,1,2.0,studio refait a neuf centre ville,766000.0
+86.0,3,Casablanca,neuf,1963,non,1,0.0,bel appartement lumineux proche tramway,819000.0
+91.0,3,Casablanca,bon,1972,non,1,3.0,studio refait a neuf centre ville,814000.0
+57.0,2,Rabat,bon,2022,oui,2,5.0,residence securisee avec jardin,509000.0
+92.0,3,Fès,a renover,1968,non,0,8.0,grand salon cuisine equipee,370000.0
+78.0,4,Marrakech,bon,1984,oui,1,5.0,bel appartement lumineux proche tramway,736000.0
+93.0,4,Fès,bon,1985,oui,0,10.0,bel appartement lumineux proche tramway,421000.0
+119.0,5,Casablanca,bon,1988,oui,1,4.0,bel appartement lumineux proche tramway,1218000.0
+,5,Casablanca,a renover,2021,non,1,10.0,bel appartement lumineux proche tramway,900000.0
+39.0,1,Marrakech,bon,1987,oui,1,10.0,studio refait a neuf centre ville,269000.0
+75.0,2,Casablanca,bon,2022,non,1,9.0,bel appartement lumineux proche tramway,910000.0
+125.0,3,Rabat,bon,1996,oui,0,2.0,grand salon cuisine equipee,1070000.0
+110.0,3,Marrakech,bon,1980,oui,0,,grand salon cuisine equipee,937000.0
+75.0,4,Tanger,bon,2004,oui,0,0.0,residence securisee avec jardin,594000.0
+47.0,2,Rabat,neuf,1990,oui,0,3.0,grand salon cuisine equipee,463000.0
+,2,Casablanca,neuf,1992,non,1,9.0,grand salon cuisine equipee,512000.0
+97.0,3,Tanger,bon,1995,oui,0,10.0,residence securisee avec jardin,642000.0
+,3,Marrakech,bon,2005,non,2,11.0,studio refait a neuf centre ville,637000.0
+25.0,1,Casablanca,a renover,1987,oui,0,8.0,studio refait a neuf centre ville,207000.0
+147.0,5,Tanger,neuf,1963,non,1,0.0,residence securisee avec jardin,1343000.0
+85.0,3,Rabat,bon,2023,oui,0,,grand salon cuisine equipee,831000.0
+103.0,4,Marrakech,a renover,2004,oui,0,7.0,bel appartement lumineux proche tramway,682000.0
+161.0,6,Tanger,bon,1982,oui,0,10.0,bel appartement lumineux proche tramway,1135000.0
+105.0,4,Casablanca,neuf,2018,oui,0,,bel appartement lumineux proche tramway,1311000.0
+37.0,1,Fès,a renover,1961,oui,0,4.0,bel appartement lumineux proche tramway,137000.0
+98.0,3,Marrakech,bon,1999,non,1,9.0,grand salon cuisine equipee,732000.0
+148.0,5,Fès,a renover,2001,oui,1,5.0,bel appartement lumineux proche tramway,510000.0
+87.0,3,Casablanca,bon,2013,non,2,0.0,bel appartement lumineux proche tramway,6352000.0
+132.0,5,Rabat,a renover,2018,non,0,8.0,bel appartement lumineux proche tramway,938000.0
+105.0,4,Rabat,a renover,1979,oui,1,11.0,studio refait a neuf centre ville,665000.0
+97.0,4,Tanger,bon,2019,non,0,10.0,studio refait a neuf centre ville,660000.0
+119.0,5,Casablanca,bon,1970,non,0,5.0,residence securisee avec jardin,929000.0
+132.0,4,Casablanca,a renover,1992,oui,0,10.0,bel appartement lumineux proche tramway,989000.0
+62.0,2,Rabat,bon,1990,non,1,7.0,bel appartement lumineux proche tramway,536000.0
+100.0,3,Rabat,bon,2016,oui,1,7.0,bel appartement lumineux proche tramway,889000.0
+108.0,3,Tanger,bon,1974,oui,0,9.0,grand salon cuisine equipee,801000.0
+100.0,3,Casablanca,bon,2020,non,1,7.0,grand salon cuisine equipee,1145000.0
+70.0,2,Casablanca,bon,2012,oui,1,5.0,studio refait a neuf centre ville,580000.0
+78.0,3,Fès,bon,2022,non,0,2.0,studio refait a neuf centre ville,477000.0
+36.0,1,Marrakech,a renover,1968,oui,1,7.0,studio refait a neuf centre ville,222000.0
+105.0,4,Fès,bon,2012,oui,0,,studio refait a neuf centre ville,4016000.0
+106.0,4,Marrakech,bon,1998,oui,2,4.0,grand salon cuisine equipee,848000.0
+128.0,5,Marrakech,bon,2006,oui,0,5.0,residence securisee avec jardin,1149000.0
+44.0,2,Tanger,a renover,2003,oui,0,5.0,studio refait a neuf centre ville,218000.0
+25.0,1,Casablanca,bon,1974,oui,1,8.0,residence securisee avec jardin,237000.0
+118.0,4,Marrakech,bon,2014,non,1,1.0,studio refait a neuf centre ville,915000.0
+107.0,3,Rabat,neuf,2000,non,0,,residence securisee avec jardin,1246000.0
+85.0,3,Casablanca,bon,2003,oui,2,4.0,grand salon cuisine equipee,764000.0
+111.0,2,Rabat,a renover,2015,oui,2,11.0,grand salon cuisine equipee,765000.0
+84.0,4,Rabat,neuf,2023,oui,1,9.0,bel appartement lumineux proche tramway,1074000.0
+60.0,2,Marrakech,neuf,1965,non,2,,studio refait a neuf centre ville,589000.0
+112.0,3,Marrakech,bon,1979,non,1,2.0,studio refait a neuf centre ville,837000.0
+25.0,1,Casablanca,bon,1987,oui,1,,bel appartement lumineux proche tramway,196000.0
+100.0,4,Rabat,bon,2011,non,2,8.0,studio refait a neuf centre ville,824000.0
+,2,Rabat,a renover,1970,non,1,2.0,grand salon cuisine equipee,265000.0
+93.0,3,Rabat,neuf,1978,non,2,11.0,residence securisee avec jardin,898000.0
+145.0,6,Casablanca,bon,2008,oui,1,,residence securisee avec jardin,1605000.0
+50.0,3,Casablanca,bon,1979,oui,1,9.0,grand salon cuisine equipee,411000.0
+93.0,3,Casablanca,neuf,1962,non,2,2.0,studio refait a neuf centre ville,809000.0
+25.0,1,Tanger,neuf,1985,non,0,1.0,studio refait a neuf centre ville,228000.0
+85.0,3,Rabat,bon,1977,oui,2,10.0,grand salon cuisine equipee,654000.0
+55.0,1,Casablanca,bon,2006,non,0,10.0,grand salon cuisine equipee,596000.0
+60.0,2,Rabat,bon,1975,non,0,8.0,studio refait a neuf centre ville,415000.0
+116.0,4,Casablanca,neuf,1968,oui,0,7.0,bel appartement lumineux proche tramway,1083000.0
+142.0,5,Marrakech,bon,2015,non,1,7.0,bel appartement lumineux proche tramway,1048000.0
+87.0,3,Rabat,a renover,2021,oui,1,2.0,residence securisee avec jardin,746000.0
+41.0,2,Rabat,neuf,1974,oui,1,3.0,residence securisee avec jardin,381000.0
+99.0,4,Fès,bon,1984,oui,0,0.0,grand salon cuisine equipee,673000.0
+126.0,5,Rabat,bon,2008,oui,0,,residence securisee avec jardin,1020000.0
+111.0,4,Casablanca,bon,1982,non,2,7.0,bel appartement lumineux proche tramway,952000.0
+43.0,1,Marrakech,bon,1979,oui,0,,grand salon cuisine equipee,414000.0
+97.0,3,Marrakech,bon,2000,oui,0,6.0,bel appartement lumineux proche tramway,749000.0
+92.0,3,Rabat,bon,1979,non,0,7.0,residence securisee avec jardin,757000.0
+71.0,3,Rabat,bon,1969,oui,2,1.0,residence securisee avec jardin,556000.0
+68.0,2,Casablanca,a renover,1986,oui,0,8.0,bel appartement lumineux proche tramway,610000.0
+110.0,4,Casablanca,a renover,1965,oui,1,6.0,residence securisee avec jardin,885000.0
+122.0,4,Casablanca,a renover,2001,non,2,7.0,bel appartement lumineux proche tramway,748000.0
+120.0,5,Tanger,a renover,1996,oui,1,,grand salon cuisine equipee,768000.0
+54.0,2,Rabat,bon,1992,oui,0,1.0,bel appartement lumineux proche tramway,380000.0
+103.0,3,Casablanca,neuf,1964,oui,1,4.0,grand salon cuisine equipee,1063000.0
+117.0,4,Casablanca,bon,1973,non,0,,grand salon cuisine equipee,805000.0
+106.0,4,Marrakech,bon,2017,non,1,2.0,grand salon cuisine equipee,683000.0
+107.0,4,Rabat,bon,1974,non,0,9.0,residence securisee avec jardin,812000.0
+48.0,2,Fès,bon,1977,oui,1,,bel appartement lumineux proche tramway,242000.0
+83.0,3,Rabat,neuf,1967,oui,0,0.0,bel appartement lumineux proche tramway,997000.0
+95.0,4,Tanger,neuf,2017,oui,1,0.0,residence securisee avec jardin,7072000.0
+75.0,3,Tanger,bon,1965,non,0,8.0,residence securisee avec jardin,509000.0
+25.0,1,Tanger,bon,1968,non,2,,grand salon cuisine equipee,163000.0
+147.0,5,Rabat,a renover,2022,oui,2,2.0,grand salon cuisine equipee,1031000.0
+103.0,4,Rabat,neuf,2009,oui,2,,studio refait a neuf centre ville,1362000.0
+,3,Rabat,bon,1966,non,1,7.0,residence securisee avec jardin,936000.0
+77.0,2,Casablanca,bon,1965,oui,1,4.0,grand salon cuisine equipee,601000.0
+25.0,1,Casablanca,a renover,1982,non,0,5.0,residence securisee avec jardin,145000.0
+132.0,5,Casablanca,neuf,1996,non,0,3.0,residence securisee avec jardin,2016000.0
+74.0,3,Casablanca,bon,2008,oui,0,1.0,bel appartement lumineux proche tramway,600000.0
+87.0,4,Marrakech,neuf,2014,non,0,7.0,residence securisee avec jardin,852000.0
+92.0,3,Rabat,bon,2011,oui,0,4.0,bel appartement lumineux proche tramway,853000.0
+113.0,5,Marrakech,bon,2006,non,2,4.0,residence securisee avec jardin,954000.0
+116.0,4,Marrakech,bon,1978,oui,1,,studio refait a neuf centre ville,821000.0
+180.0,6,Marrakech,bon,1982,oui,1,1.0,bel appartement lumineux proche tramway,11776000.0
+190.0,6,Fès,neuf,2002,non,1,9.0,grand salon cuisine equipee,1447000.0
+,4,Marrakech,bon,1993,non,1,3.0,residence securisee avec jardin,539000.0
+181.0,6,Casablanca,neuf,2020,oui,2,0.0,residence securisee avec jardin,2348000.0
+127.0,5,Marrakech,neuf,1960,non,1,9.0,grand salon cuisine equipee,1153000.0
+68.0,2,Marrakech,neuf,1995,oui,1,3.0,bel appartement lumineux proche tramway,575000.0
+60.0,2,Marrakech,neuf,1970,oui,0,8.0,studio refait a neuf centre ville,577000.0
+139.0,5,Tanger,neuf,2014,oui,2,11.0,bel appartement lumineux proche tramway,1390000.0
+162.0,6,Tanger,,1966,oui,0,4.0,studio refait a neuf centre ville,1180000.0
+83.0,4,Tanger,a renover,2020,non,0,5.0,studio refait a neuf centre ville,461000.0
+107.0,4,Marrakech,bon,2001,non,1,11.0,residence securisee avec jardin,811000.0
+61.0,2,Casablanca,bon,1966,non,0,4.0,studio refait a neuf centre ville,421000.0
+92.0,3,Tanger,,1973,non,2,0.0,studio refait a neuf centre ville,424000.0
+110.0,5,Marrakech,neuf,1978,oui,1,4.0,bel appartement lumineux proche tramway,1157000.0
+118.0,5,Tanger,bon,1970,non,1,8.0,residence securisee avec jardin,877000.0
+131.0,4,Fès,a renover,1970,oui,0,2.0,studio refait a neuf centre ville,471000.0
+107.0,5,Rabat,bon,1974,oui,2,7.0,studio refait a neuf centre ville,1176000.0
+164.0,6,Tanger,a renover,2009,oui,0,2.0,studio refait a neuf centre ville,948000.0
+54.0,3,Tanger,neuf,2014,non,1,,studio refait a neuf centre ville,469000.0
+139.0,6,Fès,bon,1964,non,1,6.0,bel appartement lumineux proche tramway,565000.0
+,5,Rabat,bon,1994,oui,2,5.0,residence securisee avec jardin,804000.0
+96.0,4,Casablanca,bon,2019,oui,0,1.0,residence securisee avec jardin,908000.0
+99.0,3,Rabat,bon,1991,oui,0,7.0,bel appartement lumineux proche tramway,834000.0
+144.0,5,Tanger,bon,2009,oui,0,,bel appartement lumineux proche tramway,903000.0
+107.0,4,Marrakech,bon,1992,oui,0,7.0,studio refait a neuf centre ville,952000.0
+111.0,4,Rabat,bon,1992,oui,1,0.0,studio refait a neuf centre ville,1021000.0
+100.0,4,Casablanca,neuf,2000,oui,1,11.0,grand salon cuisine equipee,1070000.0
+,4,Fès,bon,1992,oui,1,3.0,grand salon cuisine equipee,598000.0
+114.0,3,Casablanca,a renover,1987,oui,1,5.0,grand salon cuisine equipee,856000.0
+,4,Casablanca,,1976,oui,2,10.0,studio refait a neuf centre ville,1038000.0
+140.0,5,Fès,neuf,1995,non,0,11.0,residence securisee avec jardin,1161000.0
+112.0,4,Marrakech,a renover,2002,non,2,8.0,grand salon cuisine equipee,808000.0
+71.0,2,Casablanca,bon,1983,oui,0,10.0,residence securisee avec jardin,567000.0
+48.0,1,Marrakech,bon,2023,oui,0,8.0,grand salon cuisine equipee,516000.0
+97.0,4,Casablanca,neuf,1967,oui,2,4.0,residence securisee avec jardin,1166000.0
+42.0,1,Fès,bon,2019,oui,2,,studio refait a neuf centre ville,220000.0
+130.0,6,Tanger,neuf,1976,oui,2,,grand salon cuisine equipee,918000.0
+83.0,2,Rabat,neuf,2004,non,1,3.0,bel appartement lumineux proche tramway,846000.0
+108.0,4,Rabat,neuf,2011,non,2,2.0,bel appartement lumineux proche tramway,1030000.0
+114.0,4,Marrakech,neuf,1981,non,0,10.0,studio refait a neuf centre ville,1035000.0
+80.0,2,Marrakech,,2013,oui,1,8.0,residence securisee avec jardin,606000.0
+118.0,4,Casablanca,bon,1970,non,1,1.0,bel appartement lumineux proche tramway,883000.0
+35.0,2,Marrakech,bon,2011,non,0,1.0,studio refait a neuf centre ville,283000.0
+161.0,5,Rabat,a renover,1990,oui,0,4.0,residence securisee avec jardin,1184000.0
+74.0,2,Fès,neuf,2007,non,0,11.0,bel appartement lumineux proche tramway,530000.0
+86.0,3,Fès,bon,1969,oui,1,1.0,studio refait a neuf centre ville,361000.0
+134.0,5,Marrakech,,2022,non,0,3.0,grand salon cuisine equipee,753000.0
+145.0,4,Rabat,neuf,1969,non,0,8.0,studio refait a neuf centre ville,1437000.0
+126.0,6,Casablanca,bon,1975,oui,0,6.0,grand salon cuisine equipee,989000.0
+25.0,1,Tanger,a renover,1965,non,2,0.0,studio refait a neuf centre ville,123000.0
+126.0,5,Rabat,bon,2005,non,0,,residence securisee avec jardin,1250000.0
+112.0,3,Tanger,bon,1992,non,0,3.0,bel appartement lumineux proche tramway,596000.0
+119.0,5,Marrakech,bon,2006,non,0,10.0,studio refait a neuf centre ville,1157000.0
+152.0,4,Fès,neuf,1988,oui,1,11.0,residence securisee avec jardin,980000.0
+94.0,4,Marrakech,a renover,2008,non,1,0.0,bel appartement lumineux proche tramway,595000.0
+36.0,2,Tanger,bon,1982,oui,0,1.0,studio refait a neuf centre ville,242000.0
+68.0,3,Fès,bon,2020,non,1,3.0,grand salon cuisine equipee,411000.0
+130.0,4,Casablanca,neuf,1991,oui,0,,residence securisee avec jardin,1447000.0
+128.0,5,Marrakech,bon,1988,oui,0,10.0,residence securisee avec jardin,858000.0
+105.0,4,Fès,bon,2008,oui,0,11.0,grand salon cuisine equipee,475000.0
+90.0,3,Rabat,neuf,1996,oui,1,0.0,bel appartement lumineux proche tramway,975000.0
+44.0,1,Tanger,bon,2019,oui,2,1.0,studio refait a neuf centre ville,309000.0
+105.0,4,Casablanca,a renover,1975,non,0,2.0,bel appartement lumineux proche tramway,637000.0
+75.0,3,Fès,bon,1996,non,1,1.0,studio refait a neuf centre ville,385000.0
+103.0,4,Tanger,neuf,2014,oui,0,1.0,grand salon cuisine equipee,1257000.0
+115.0,4,Tanger,neuf,1961,non,0,4.0,bel appartement lumineux proche tramway,956000.0
+146.0,6,Marrakech,neuf,1961,oui,1,5.0,studio refait a neuf centre ville,1063000.0
+68.0,3,Rabat,bon,1970,non,1,9.0,studio refait a neuf centre ville,500000.0
+103.0,3,Rabat,bon,2019,non,2,1.0,studio refait a neuf centre ville,884000.0
+71.0,4,Casablanca,bon,1970,non,1,0.0,bel appartement lumineux proche tramway,578000.0
+105.0,5,Casablanca,neuf,1981,oui,2,11.0,bel appartement lumineux proche tramway,926000.0
+123.0,5,Rabat,a renover,1997,oui,1,11.0,residence securisee avec jardin,952000.0
+149.0,6,Casablanca,bon,1978,oui,0,6.0,bel appartement lumineux proche tramway,1394000.0
+,4,Rabat,a renover,2006,non,1,11.0,grand salon cuisine equipee,835000.0
+139.0,5,Fès,bon,2013,non,0,7.0,residence securisee avec jardin,644000.0
+128.0,5,Marrakech,bon,1995,non,0,4.0,studio refait a neuf centre ville,1163000.0
+72.0,2,Casablanca,a renover,1965,oui,0,1.0,studio refait a neuf centre ville,396000.0
+56.0,2,Tanger,bon,2007,non,0,7.0,grand salon cuisine equipee,332000.0
+127.0,4,Marrakech,bon,1982,non,0,2.0,bel appartement lumineux proche tramway,1075000.0
+126.0,5,Rabat,a renover,2010,oui,0,4.0,studio refait a neuf centre ville,849000.0
+72.0,2,Rabat,bon,1994,oui,1,8.0,bel appartement lumineux proche tramway,692000.0
+148.0,5,Fès,a renover,2002,non,1,7.0,residence securisee avec jardin,605000.0
+98.0,5,Fès,bon,1965,oui,2,,bel appartement lumineux proche tramway,380000.0
+83.0,3,Rabat,neuf,1995,oui,2,5.0,bel appartement lumineux proche tramway,955000.0
+74.0,3,Casablanca,bon,1977,oui,1,0.0,studio refait a neuf centre ville,779000.0
+113.0,4,Casablanca,bon,2006,oui,1,5.0,studio refait a neuf centre ville,1062000.0
+142.0,4,Rabat,a renover,2022,non,0,10.0,grand salon cuisine equipee,977000.0
+89.0,3,Marrakech,bon,2021,oui,1,1.0,residence securisee avec jardin,679000.0
+121.0,4,Rabat,neuf,2004,oui,0,6.0,residence securisee avec jardin,1500000.0
+45.0,2,Casablanca,,1969,non,0,2.0,grand salon cuisine equipee,397000.0
+86.0,4,Casablanca,bon,1962,non,1,0.0,bel appartement lumineux proche tramway,510000.0
+105.0,3,Marrakech,a renover,1971,oui,2,0.0,studio refait a neuf centre ville,687000.0
+183.0,7,Rabat,bon,1979,oui,0,,bel appartement lumineux proche tramway,2102000.0
+86.0,3,Marrakech,neuf,1973,oui,2,9.0,bel appartement lumineux proche tramway,799000.0
+89.0,3,Marrakech,bon,2006,non,1,0.0,grand salon cuisine equipee,638000.0
+75.0,3,Casablanca,bon,2000,oui,2,10.0,grand salon cuisine equipee,615000.0
+,4,Marrakech,bon,1990,non,0,2.0,residence securisee avec jardin,1055000.0
+25.0,1,Fès,a renover,2010,non,0,9.0,bel appartement lumineux proche tramway,122000.0
+77.0,3,Rabat,neuf,1991,oui,0,0.0,bel appartement lumineux proche tramway,792000.0
+45.0,2,Fès,neuf,2007,non,1,0.0,bel appartement lumineux proche tramway,251000.0
+61.0,2,Marrakech,a renover,2011,oui,0,1.0,residence securisee avec jardin,406000.0
+151.0,5,Tanger,a renover,1979,non,0,5.0,residence securisee avec jardin,839000.0
+60.0,3,Tanger,bon,1994,non,1,6.0,studio refait a neuf centre ville,449000.0
+78.0,2,Casablanca,bon,1965,oui,0,,bel appartement lumineux proche tramway,773000.0
+118.0,5,Rabat,bon,2014,non,1,11.0,bel appartement lumineux proche tramway,1136000.0
+99.0,4,Marrakech,neuf,2012,non,1,,studio refait a neuf centre ville,927000.0
+94.0,3,Fès,bon,1979,oui,0,2.0,residence securisee avec jardin,578000.0
+61.0,3,Casablanca,neuf,1994,oui,2,,studio refait a neuf centre ville,771000.0
+90.0,3,Marrakech,neuf,1967,non,0,7.0,studio refait a neuf centre ville,871000.0
+92.0,4,Casablanca,bon,1967,non,1,,studio refait a neuf centre ville,773000.0
+104.0,4,Fès,bon,2018,non,1,4.0,grand salon cuisine equipee,503000.0
+91.0,3,Fès,neuf,1986,oui,1,5.0,residence securisee avec jardin,626000.0
+51.0,2,Casablanca,a renover,2014,non,0,7.0,residence securisee avec jardin,436000.0
+,4,Rabat,bon,2015,non,2,5.0,bel appartement lumineux proche tramway,936000.0
+95.0,3,Rabat,a renover,1960,non,1,1.0,studio refait a neuf centre ville,513000.0
+121.0,4,Fès,bon,1960,oui,1,1.0,residence securisee avec jardin,550000.0
+84.0,3,Rabat,neuf,1998,oui,1,5.0,bel appartement lumineux proche tramway,1036000.0
+113.0,3,Marrakech,,2020,non,1,,grand salon cuisine equipee,854000.0
+,3,Casablanca,bon,1960,oui,0,11.0,residence securisee avec jardin,823000.0
+,3,Casablanca,neuf,2019,non,1,9.0,grand salon cuisine equipee,834000.0
+109.0,3,Rabat,neuf,1987,oui,0,1.0,grand salon cuisine equipee,1300000.0
+,3,Fès,bon,2001,oui,1,,studio refait a neuf centre ville,498000.0
+70.0,2,Rabat,neuf,2004,oui,0,2.0,studio refait a neuf centre ville,765000.0
+110.0,4,Rabat,neuf,2000,oui,0,2.0,grand salon cuisine equipee,1321000.0
+91.0,3,Casablanca,bon,1982,oui,1,,bel appartement lumineux proche tramway,1011000.0
+116.0,4,Fès,bon,2009,oui,1,10.0,residence securisee avec jardin,569000.0
+123.0,4,Marrakech,bon,1984,oui,2,11.0,grand salon cuisine equipee,1003000.0
+110.0,5,Casablanca,bon,1985,non,0,8.0,residence securisee avec jardin,933000.0
+85.0,3,Marrakech,neuf,1987,oui,0,3.0,residence securisee avec jardin,712000.0
+138.0,5,Rabat,bon,1985,oui,2,10.0,studio refait a neuf centre ville,1023000.0
+71.0,3,Marrakech,bon,2011,non,0,8.0,residence securisee avec jardin,478000.0
+,2,Marrakech,neuf,1983,oui,0,2.0,studio refait a neuf centre ville,475000.0
+84.0,3,Casablanca,bon,1969,non,1,7.0,studio refait a neuf centre ville,872000.0
+,5,Rabat,neuf,1998,non,2,,bel appartement lumineux proche tramway,1446000.0
+150.0,5,Casablanca,a renover,1963,oui,0,0.0,residence securisee avec jardin,1041000.0
+124.0,4,Casablanca,bon,1961,oui,0,6.0,bel appartement lumineux proche tramway,1000000.0
+74.0,2,Casablanca,bon,1981,oui,0,3.0,studio refait a neuf centre ville,606000.0
+90.0,3,Casablanca,bon,1980,oui,1,5.0,residence securisee avec jardin,742000.0
+,4,Casablanca,bon,2000,oui,0,1.0,grand salon cuisine equipee,1062000.0
+122.0,6,Casablanca,a renover,1969,non,1,3.0,studio refait a neuf centre ville,844000.0
+121.0,4,Casablanca,bon,2019,non,0,0.0,grand salon cuisine equipee,1395000.0
+155.0,5,Casablanca,bon,1994,non,1,7.0,bel appartement lumineux proche tramway,1671000.0
+96.0,4,Fès,neuf,1985,non,1,,grand salon cuisine equipee,635000.0
+117.0,5,Fès,a renover,2022,oui,0,3.0,grand salon cuisine equipee,534000.0
+52.0,3,Rabat,bon,1995,non,0,3.0,grand salon cuisine equipee,431000.0
+,2,Rabat,a renover,1987,non,0,7.0,grand salon cuisine equipee,399000.0
+79.0,4,Marrakech,bon,2018,non,0,4.0,grand salon cuisine equipee,586000.0
+52.0,2,Rabat,bon,2008,oui,1,,bel appartement lumineux proche tramway,564000.0
+90.0,3,Casablanca,bon,1979,non,1,,residence securisee avec jardin,1105000.0
+61.0,3,Casablanca,a renover,1993,non,2,0.0,residence securisee avec jardin,417000.0
+107.0,3,Fès,neuf,1985,non,2,4.0,bel appartement lumineux proche tramway,619000.0
+103.0,4,Marrakech,bon,1968,oui,1,1.0,residence securisee avec jardin,714000.0
+83.0,3,Fès,a renover,2001,oui,1,3.0,grand salon cuisine equipee,340000.0
+49.0,2,Rabat,bon,1977,oui,2,4.0,studio refait a neuf centre ville,424000.0
+97.0,4,Rabat,bon,1996,oui,0,10.0,residence securisee avec jardin,961000.0
+79.0,2,Marrakech,neuf,1990,non,2,5.0,bel appartement lumineux proche tramway,741000.0
+85.0,3,Marrakech,a renover,2014,oui,0,4.0,grand salon cuisine equipee,543000.0
+75.0,2,Marrakech,neuf,2004,oui,0,,grand salon cuisine equipee,611000.0
+136.0,5,Marrakech,bon,1974,oui,1,10.0,grand salon cuisine equipee,915000.0
+146.0,5,Tanger,bon,1981,non,1,11.0,residence securisee avec jardin,872000.0
+101.0,3,Casablanca,neuf,1961,non,0,10.0,residence securisee avec jardin,1117000.0
+114.0,4,Fès,bon,1994,oui,0,7.0,residence securisee avec jardin,637000.0
+76.0,3,Tanger,neuf,2023,non,1,9.0,studio refait a neuf centre ville,625000.0
+36.0,1,Tanger,bon,2000,oui,0,9.0,bel appartement lumineux proche tramway,240000.0
+105.0,4,Rabat,bon,1961,oui,0,3.0,studio refait a neuf centre ville,782000.0
+,2,Fès,neuf,1967,non,2,,residence securisee avec jardin,275000.0
+105.0,3,Marrakech,bon,2022,non,1,5.0,residence securisee avec jardin,848000.0
+107.0,3,Fès,neuf,1969,non,2,4.0,residence securisee avec jardin,731000.0
+122.0,5,Casablanca,neuf,1976,non,1,0.0,bel appartement lumineux proche tramway,1316000.0
+84.0,3,Tanger,a renover,1963,oui,1,0.0,grand salon cuisine equipee,420000.0
+54.0,3,Casablanca,bon,2002,non,1,,bel appartement lumineux proche tramway,434000.0
+59.0,3,Casablanca,neuf,2014,oui,0,,studio refait a neuf centre ville,837000.0
+53.0,2,Marrakech,bon,1971,non,2,3.0,studio refait a neuf centre ville,317000.0
+114.0,4,Tanger,bon,1963,oui,1,7.0,studio refait a neuf centre ville,812000.0
+86.0,2,Marrakech,,1993,non,2,0.0,bel appartement lumineux proche tramway,713000.0
+91.0,3,Marrakech,bon,2000,non,1,9.0,grand salon cuisine equipee,827000.0
+153.0,6,Tanger,a renover,2017,oui,1,6.0,residence securisee avec jardin,729000.0
+91.0,3,Casablanca,a renover,1977,oui,0,11.0,bel appartement lumineux proche tramway,593000.0
+84.0,4,Rabat,a renover,2007,non,1,11.0,residence securisee avec jardin,556000.0
+77.0,2,Rabat,bon,2012,non,0,0.0,residence securisee avec jardin,637000.0
+,4,Rabat,bon,1996,oui,1,3.0,studio refait a neuf centre ville,792000.0
+90.0,3,Casablanca,bon,2023,non,1,,residence securisee avec jardin,834000.0
+75.0,3,Marrakech,a renover,2017,non,1,0.0,studio refait a neuf centre ville,455000.0
+137.0,5,Marrakech,neuf,2000,oui,1,3.0,grand salon cuisine equipee,1239000.0
+,3,Casablanca,bon,2016,non,1,9.0,bel appartement lumineux proche tramway,838000.0
+75.0,2,Casablanca,bon,1999,non,1,5.0,grand salon cuisine equipee,662000.0
+131.0,5,Rabat,bon,1997,non,0,10.0,residence securisee avec jardin,890000.0
+136.0,5,Tanger,bon,1975,non,1,8.0,studio refait a neuf centre ville,985000.0
+35.0,1,Casablanca,bon,2001,non,2,9.0,studio refait a neuf centre ville,302000.0
+121.0,5,Marrakech,neuf,2009,non,0,6.0,bel appartement lumineux proche tramway,1208000.0
+96.0,2,Fès,bon,1962,non,1,1.0,bel appartement lumineux proche tramway,472000.0
+97.0,3,Casablanca,a renover,1974,non,0,,residence securisee avec jardin,683000.0
+125.0,4,Casablanca,bon,1962,non,0,10.0,grand salon cuisine equipee,1370000.0
+125.0,3,Tanger,a renover,1995,non,1,5.0,grand salon cuisine equipee,860000.0
+57.0,2,Rabat,,1988,non,1,4.0,studio refait a neuf centre ville,359000.0
+68.0,4,Tanger,,1962,oui,1,6.0,grand salon cuisine equipee,522000.0
+107.0,5,Marrakech,bon,1973,non,0,9.0,grand salon cuisine equipee,738000.0
+93.0,3,Rabat,neuf,2015,non,1,1.0,grand salon cuisine equipee,1083000.0
+77.0,4,Fès,neuf,2006,non,0,2.0,studio refait a neuf centre ville,612000.0
+107.0,3,Casablanca,a renover,1997,oui,0,3.0,grand salon cuisine equipee,815000.0
+105.0,4,Marrakech,neuf,1987,oui,0,,grand salon cuisine equipee,1094000.0
+61.0,3,Tanger,neuf,2015,non,0,5.0,residence securisee avec jardin,485000.0
+148.0,5,Rabat,bon,1990,oui,1,10.0,studio refait a neuf centre ville,1304000.0
+112.0,5,Fès,a renover,1993,oui,0,,bel appartement lumineux proche tramway,472000.0
+152.0,6,Rabat,a renover,1965,non,1,6.0,residence securisee avec jardin,968000.0
+144.0,5,Casablanca,neuf,1965,non,0,,studio refait a neuf centre ville,1525000.0
+37.0,1,Marrakech,neuf,2001,non,2,3.0,bel appartement lumineux proche tramway,351000.0
+81.0,3,Rabat,a renover,2010,oui,1,6.0,studio refait a neuf centre ville,567000.0
+77.0,3,Tanger,neuf,1998,oui,1,2.0,residence securisee avec jardin,816000.0
+57.0,2,Fès,bon,2017,non,2,9.0,studio refait a neuf centre ville,358000.0
+87.0,2,Casablanca,bon,1990,oui,2,11.0,residence securisee avec jardin,931000.0
+48.0,3,Marrakech,bon,2013,non,0,6.0,grand salon cuisine equipee,353000.0
+121.0,4,Casablanca,bon,2021,oui,0,11.0,residence securisee avec jardin,996000.0
+186.0,7,Rabat,a renover,1967,non,0,0.0,grand salon cuisine equipee,1134000.0
+114.0,4,Rabat,neuf,1964,non,1,1.0,studio refait a neuf centre ville,1259000.0
+34.0,2,Casablanca,neuf,1988,oui,1,6.0,grand salon cuisine equipee,304000.0
+112.0,3,Casablanca,bon,2015,non,2,5.0,bel appartement lumineux proche tramway,1112000.0
+139.0,5,Marrakech,bon,1960,non,2,1.0,studio refait a neuf centre ville,1094000.0
+182.0,7,Fès,bon,1968,non,1,4.0,residence securisee avec jardin,777000.0
+69.0,2,Tanger,neuf,1965,non,2,0.0,residence securisee avec jardin,540000.0
+74.0,3,Casablanca,bon,2009,non,2,6.0,studio refait a neuf centre ville,5896000.0
+60.0,1,Casablanca,neuf,1962,non,2,11.0,studio refait a neuf centre ville,754000.0
+122.0,5,Tanger,neuf,2013,oui,0,8.0,grand salon cuisine equipee,1059000.0
+68.0,2,Tanger,bon,2020,oui,2,5.0,studio refait a neuf centre ville,430000.0
+147.0,5,Rabat,a renover,1978,oui,0,11.0,grand salon cuisine equipee,1212000.0
+70.0,2,Fès,bon,1998,non,0,7.0,grand salon cuisine equipee,376000.0
+114.0,5,Marrakech,bon,1980,oui,1,,grand salon cuisine equipee,816000.0
+185.0,6,Rabat,a renover,1989,oui,1,4.0,bel appartement lumineux proche tramway,1147000.0
+74.0,3,Casablanca,neuf,1977,oui,0,,bel appartement lumineux proche tramway,534000.0
+147.0,6,Casablanca,bon,1981,non,2,6.0,residence securisee avec jardin,1321000.0
+63.0,2,Marrakech,neuf,1969,oui,1,5.0,grand salon cuisine equipee,578000.0
+128.0,4,Fès,bon,1990,non,0,0.0,studio refait a neuf centre ville,552000.0
+112.0,4,Rabat,a renover,1972,oui,1,3.0,bel appartement lumineux proche tramway,627000.0
+64.0,2,Rabat,a renover,1966,non,0,9.0,studio refait a neuf centre ville,360000.0
+46.0,1,Rabat,a renover,1976,oui,2,1.0,grand salon cuisine equipee,392000.0
+127.0,5,Marrakech,bon,1981,non,1,9.0,studio refait a neuf centre ville,817000.0
+58.0,3,Tanger,bon,2004,non,1,11.0,bel appartement lumineux proche tramway,351000.0
+92.0,4,Fès,bon,1983,oui,0,3.0,grand salon cuisine equipee,524000.0
+116.0,4,Fès,a renover,2019,non,2,1.0,residence securisee avec jardin,555000.0
+28.0,1,Fès,bon,1970,oui,1,3.0,bel appartement lumineux proche tramway,159000.0
+75.0,3,Tanger,a renover,2011,non,1,11.0,studio refait a neuf centre ville,370000.0
+88.0,3,Marrakech,a renover,2005,non,1,8.0,residence securisee avec jardin,456000.0
+71.0,3,Tanger,bon,1983,oui,2,11.0,grand salon cuisine equipee,395000.0
+148.0,6,Fès,bon,1993,non,0,7.0,residence securisee avec jardin,841000.0
+75.0,2,Tanger,bon,1962,oui,1,0.0,bel appartement lumineux proche tramway,431000.0
+129.0,4,Casablanca,neuf,2014,non,1,10.0,studio refait a neuf centre ville,1427000.0
+137.0,6,Casablanca,neuf,2011,oui,0,2.0,studio refait a neuf centre ville,1456000.0
+106.0,4,Casablanca,bon,1991,non,2,10.0,grand salon cuisine equipee,840000.0
+86.0,3,Casablanca,neuf,1990,non,1,7.0,studio refait a neuf centre ville,930000.0
+101.0,4,Casablanca,a renover,1971,non,1,2.0,grand salon cuisine equipee,629000.0
+61.0,3,Rabat,a renover,1987,non,0,0.0,residence securisee avec jardin,412000.0
+,4,Rabat,neuf,2004,non,1,7.0,studio refait a neuf centre ville,1365000.0
+67.0,3,Rabat,bon,1987,non,2,10.0,residence securisee avec jardin,552000.0
+100.0,4,Rabat,bon,1971,oui,1,10.0,studio refait a neuf centre ville,958000.0
+122.0,3,Rabat,a renover,1973,oui,0,4.0,bel appartement lumineux proche tramway,791000.0
+39.0,2,Marrakech,neuf,1981,oui,0,5.0,grand salon cuisine equipee,405000.0
+147.0,6,Tanger,a renover,2021,non,0,7.0,grand salon cuisine equipee,983000.0
+84.0,2,Casablanca,bon,2018,non,1,5.0,grand salon cuisine equipee,836000.0
+77.0,3,Casablanca,bon,2001,non,1,3.0,grand salon cuisine equipee,819000.0
+142.0,5,Rabat,bon,1964,oui,0,2.0,studio refait a neuf centre ville,1242000.0
+111.0,4,Casablanca,bon,1980,non,0,9.0,grand salon cuisine equipee,967000.0
+89.0,3,Marrakech,a renover,1983,non,1,8.0,grand salon cuisine equipee,606000.0
+70.0,2,Tanger,a renover,1982,oui,1,6.0,grand salon cuisine equipee,331000.0
+85.0,3,Marrakech,neuf,2006,oui,1,7.0,bel appartement lumineux proche tramway,808000.0
+125.0,5,Casablanca,a renover,2011,oui,0,,residence securisee avec jardin,1004000.0
+111.0,4,Rabat,neuf,2012,non,0,10.0,bel appartement lumineux proche tramway,1172000.0
+107.0,3,Casablanca,neuf,1980,oui,1,10.0,studio refait a neuf centre ville,1159000.0
+,3,Casablanca,bon,1989,oui,0,,bel appartement lumineux proche tramway,779000.0
+96.0,3,Casablanca,neuf,2018,oui,0,7.0,studio refait a neuf centre ville,1274000.0
+140.0,4,Casablanca,neuf,1990,oui,0,8.0,residence securisee avec jardin,1721000.0
+65.0,3,Rabat,bon,1976,non,1,0.0,residence securisee avec jardin,454000.0
+121.0,4,Casablanca,bon,2023,oui,1,,grand salon cuisine equipee,1255000.0
+116.0,4,Marrakech,bon,1963,non,0,9.0,residence securisee avec jardin,803000.0
+79.0,3,Marrakech,bon,1998,non,1,4.0,studio refait a neuf centre ville,705000.0
+39.0,1,Tanger,a renover,1962,oui,0,0.0,bel appartement lumineux proche tramway,215000.0
+117.0,3,Casablanca,bon,1999,oui,0,1.0,residence securisee avec jardin,1168000.0
+125.0,5,Casablanca,bon,2017,non,1,3.0,bel appartement lumineux proche tramway,8280000.0
+146.0,6,Tanger,bon,1965,oui,0,8.0,studio refait a neuf centre ville,774000.0
+47.0,1,Fès,,1983,non,0,7.0,residence securisee avec jardin,278000.0
+93.0,3,Tanger,bon,2007,non,2,8.0,studio refait a neuf centre ville,663000.0
+116.0,4,Rabat,a renover,2016,non,1,11.0,studio refait a neuf centre ville,687000.0
+75.0,2,Marrakech,bon,2016,oui,2,4.0,bel appartement lumineux proche tramway,571000.0
+67.0,1,Tanger,bon,2008,oui,0,6.0,grand salon cuisine equipee,498000.0
+146.0,4,Marrakech,neuf,2013,non,2,10.0,studio refait a neuf centre ville,1699000.0
+173.0,6,Marrakech,neuf,1982,oui,1,6.0,residence securisee avec jardin,1835000.0
+91.0,2,Casablanca,neuf,1977,oui,0,0.0,studio refait a neuf centre ville,987000.0
+94.0,3,Tanger,a renover,2002,non,1,4.0,studio refait a neuf centre ville,463000.0
+168.0,6,Casablanca,a renover,1972,non,1,9.0,residence securisee avec jardin,1298000.0
+120.0,4,Casablanca,bon,2021,non,1,1.0,grand salon cuisine equipee,1252000.0
+114.0,5,Rabat,bon,2009,oui,1,6.0,studio refait a neuf centre ville,1092000.0
+115.0,4,Casablanca,bon,2016,non,2,4.0,studio refait a neuf centre ville,1243000.0
+108.0,4,Rabat,neuf,2014,non,1,5.0,residence securisee avec jardin,1244000.0
+52.0,2,Rabat,a renover,1986,non,1,4.0,studio refait a neuf centre ville,303000.0
+65.0,3,Marrakech,a renover,1996,oui,1,3.0,bel appartement lumineux proche tramway,469000.0
+155.0,6,Casablanca,bon,1962,oui,0,5.0,bel appartement lumineux proche tramway,1213000.0
+127.0,5,Casablanca,,1982,non,0,1.0,studio refait a neuf centre ville,1363000.0
+110.0,4,Casablanca,a renover,1996,non,2,4.0,bel appartement lumineux proche tramway,881000.0
+71.0,2,Rabat,bon,1960,non,0,2.0,studio refait a neuf centre ville,636000.0
+73.0,2,Marrakech,neuf,2000,non,0,6.0,studio refait a neuf centre ville,735000.0
+161.0,6,Fès,bon,2018,non,1,10.0,grand salon cuisine equipee,1054000.0
+85.0,3,Marrakech,bon,1965,non,1,1.0,bel appartement lumineux proche tramway,528000.0
+106.0,4,Rabat,a renover,1989,oui,0,7.0,grand salon cuisine equipee,659000.0
+70.0,2,Tanger,bon,1973,oui,1,,bel appartement lumineux proche tramway,447000.0
+139.0,5,Rabat,neuf,1976,oui,1,1.0,residence securisee avec jardin,1534000.0
+163.0,5,Casablanca,bon,2021,oui,1,5.0,grand salon cuisine equipee,1739000.0
+156.0,6,Marrakech,bon,2013,oui,1,,residence securisee avec jardin,1288000.0
+103.0,3,Rabat,neuf,1968,non,0,11.0,studio refait a neuf centre ville,1066000.0
+112.0,4,Casablanca,neuf,1979,oui,2,5.0,residence securisee avec jardin,1182000.0
+143.0,6,Casablanca,neuf,2011,non,0,5.0,studio refait a neuf centre ville,1593000.0
+86.0,3,Casablanca,bon,1967,oui,1,6.0,bel appartement lumineux proche tramway,633000.0
+116.0,4,Rabat,neuf,1993,oui,0,2.0,grand salon cuisine equipee,1388000.0
+129.0,5,Casablanca,neuf,2016,non,2,9.0,grand salon cuisine equipee,1705000.0
+111.0,3,Marrakech,neuf,1961,non,1,7.0,studio refait a neuf centre ville,1108000.0
+68.0,2,Casablanca,neuf,1969,non,0,,studio refait a neuf centre ville,717000.0
+36.0,1,Casablanca,a renover,1984,oui,0,2.0,studio refait a neuf centre ville,322000.0
+155.0,5,Tanger,bon,2021,oui,1,5.0,residence securisee avec jardin,1043000.0
+130.0,4,Tanger,bon,1982,non,0,,grand salon cuisine equipee,838000.0
+71.0,3,Rabat,bon,1965,oui,0,6.0,residence securisee avec jardin,688000.0
+71.0,3,Rabat,bon,1969,oui,0,11.0,grand salon cuisine equipee,556000.0
+67.0,2,Tanger,a renover,2016,non,0,6.0,residence securisee avec jardin,342000.0
+45.0,2,Casablanca,a renover,1984,oui,1,6.0,residence securisee avec jardin,307000.0
+37.0,1,Rabat,bon,2002,oui,2,6.0,studio refait a neuf centre ville,275000.0
+122.0,4,Rabat,a renover,1987,oui,1,10.0,residence securisee avec jardin,814000.0
+154.0,8,Rabat,neuf,1966,oui,1,6.0,residence securisee avec jardin,1710000.0
+64.0,2,Fès,neuf,2013,non,0,11.0,studio refait a neuf centre ville,474000.0
+63.0,3,Marrakech,a renover,1967,non,1,3.0,bel appartement lumineux proche tramway,390000.0
+113.0,4,Rabat,bon,1966,non,0,,studio refait a neuf centre ville,967000.0
+,5,Rabat,neuf,1974,non,0,,grand salon cuisine equipee,1529000.0
+133.0,5,Rabat,a renover,1970,oui,0,0.0,bel appartement lumineux proche tramway,821000.0
+112.0,4,Marrakech,bon,1982,oui,1,2.0,residence securisee avec jardin,782000.0
+40.0,2,Casablanca,bon,1963,oui,1,,grand salon cuisine equipee,429000.0
+87.0,2,Casablanca,bon,2020,non,1,8.0,studio refait a neuf centre ville,920000.0
+,5,Casablanca,a renover,1968,non,0,4.0,bel appartement lumineux proche tramway,1026000.0
+87.0,3,Marrakech,bon,1970,non,2,0.0,studio refait a neuf centre ville,573000.0
+66.0,2,Casablanca,bon,2021,oui,1,7.0,residence securisee avec jardin,544000.0
+70.0,3,Casablanca,bon,2015,non,1,,bel appartement lumineux proche tramway,604000.0
+76.0,3,Rabat,bon,2017,oui,1,10.0,bel appartement lumineux proche tramway,658000.0
+121.0,5,Marrakech,bon,2021,oui,0,1.0,bel appartement lumineux proche tramway,1001000.0
+83.0,3,Rabat,neuf,2015,oui,1,7.0,studio refait a neuf centre ville,840000.0
+55.0,3,Casablanca,bon,2020,non,1,8.0,residence securisee avec jardin,552000.0
+136.0,5,Tanger,bon,1960,oui,1,4.0,residence securisee avec jardin,1023000.0
+117.0,5,Marrakech,neuf,1997,oui,1,1.0,studio refait a neuf centre ville,1029000.0
+55.0,3,Fès,a renover,2002,oui,1,0.0,grand salon cuisine equipee,271000.0
+62.0,2,Tanger,a renover,1965,non,0,11.0,bel appartement lumineux proche tramway,291000.0
+82.0,2,Rabat,bon,1995,oui,1,7.0,bel appartement lumineux proche tramway,638000.0
+142.0,6,Marrakech,bon,2005,oui,0,,studio refait a neuf centre ville,1104000.0
+148.0,5,Fès,a renover,1981,non,0,5.0,residence securisee avec jardin,642000.0
+172.0,6,Marrakech,bon,2018,oui,1,6.0,residence securisee avec jardin,1492000.0
+100.0,4,Fès,a renover,1984,oui,2,11.0,grand salon cuisine equipee,341000.0
+47.0,1,Casablanca,a renover,2016,oui,1,1.0,bel appartement lumineux proche tramway,350000.0
+137.0,4,Rabat,a renover,1986,oui,1,8.0,bel appartement lumineux proche tramway,985000.0
+158.0,5,Tanger,a renover,1970,oui,1,0.0,studio refait a neuf centre ville,794000.0
+25.0,1,Fès,a renover,1971,oui,0,,bel appartement lumineux proche tramway,97000.0
+72.0,2,Tanger,bon,2009,oui,2,1.0,grand salon cuisine equipee,595000.0
+137.0,6,Marrakech,a renover,1962,non,2,4.0,residence securisee avec jardin,1085000.0
+144.0,6,Tanger,neuf,2002,non,0,,residence securisee avec jardin,1455000.0
+77.0,3,Marrakech,neuf,1980,non,1,6.0,residence securisee avec jardin,635000.0
+118.0,4,Casablanca,bon,1993,oui,0,5.0,grand salon cuisine equipee,1229000.0
+,4,Casablanca,neuf,2023,oui,0,4.0,bel appartement lumineux proche tramway,1302000.0
+109.0,5,Marrakech,neuf,1984,non,1,10.0,bel appartement lumineux proche tramway,1235000.0
+60.0,3,Rabat,bon,1970,oui,0,5.0,residence securisee avec jardin,602000.0
+72.0,3,Tanger,bon,1963,non,0,0.0,grand salon cuisine equipee,498000.0
+115.0,5,Casablanca,neuf,1987,non,1,9.0,bel appartement lumineux proche tramway,1359000.0
+101.0,4,Marrakech,bon,1986,oui,0,6.0,bel appartement lumineux proche tramway,770000.0
+32.0,2,Casablanca,neuf,1983,oui,1,1.0,bel appartement lumineux proche tramway,428000.0
+87.0,2,Tanger,bon,1962,oui,1,4.0,grand salon cuisine equipee,592000.0
+111.0,5,Rabat,bon,1971,oui,0,9.0,studio refait a neuf centre ville,821000.0
+160.0,6,Tanger,neuf,1967,oui,1,5.0,studio refait a neuf centre ville,1413000.0
+,4,Rabat,a renover,2013,oui,0,2.0,residence securisee avec jardin,750000.0
+94.0,3,Tanger,bon,2017,non,0,9.0,bel appartement lumineux proche tramway,980000.0
+40.0,2,Casablanca,a renover,1978,non,1,2.0,grand salon cuisine equipee,311000.0
+49.0,1,Marrakech,bon,1964,non,1,8.0,bel appartement lumineux proche tramway,333000.0
+97.0,4,Casablanca,neuf,1971,oui,1,7.0,studio refait a neuf centre ville,964000.0
+60.0,2,Marrakech,,2020,non,1,1.0,bel appartement lumineux proche tramway,502000.0
+56.0,2,Marrakech,bon,1989,non,0,8.0,studio refait a neuf centre ville,474000.0
+107.0,3,Casablanca,,1997,oui,2,7.0,residence securisee avec jardin,1157000.0
+71.0,2,Tanger,bon,1991,oui,1,10.0,grand salon cuisine equipee,433000.0
+116.0,4,Tanger,bon,2019,oui,1,1.0,studio refait a neuf centre ville,740000.0
+52.0,1,Marrakech,a renover,1984,oui,1,,grand salon cuisine equipee,300000.0
+134.0,5,Casablanca,neuf,2002,oui,1,,studio refait a neuf centre ville,1630000.0
+95.0,3,Marrakech,neuf,2023,non,0,2.0,grand salon cuisine equipee,1121000.0
+164.0,5,Rabat,bon,1997,oui,0,10.0,bel appartement lumineux proche tramway,1447000.0
+134.0,6,Fès,bon,1974,oui,2,6.0,grand salon cuisine equipee,662000.0
+141.0,5,Casablanca,neuf,1996,oui,1,7.0,grand salon cuisine equipee,1591000.0
+140.0,4,Casablanca,a renover,2009,non,1,11.0,bel appartement lumineux proche tramway,1048000.0
+37.0,1,Casablanca,bon,1994,oui,2,8.0,studio refait a neuf centre ville,363000.0
+116.0,5,Rabat,bon,1981,oui,2,5.0,residence securisee avec jardin,1150000.0
+138.0,5,Fès,neuf,2006,non,2,5.0,studio refait a neuf centre ville,1009000.0
+25.0,1,Rabat,bon,2000,oui,0,1.0,residence securisee avec jardin,195000.0
+98.0,4,Marrakech,bon,1968,oui,1,1.0,studio refait a neuf centre ville,836000.0
+58.0,2,Marrakech,bon,1967,non,1,0.0,bel appartement lumineux proche tramway,530000.0
+96.0,4,Tanger,bon,1996,non,1,6.0,residence securisee avec jardin,655000.0
+122.0,4,Marrakech,a renover,1986,oui,2,11.0,bel appartement lumineux proche tramway,637000.0
+72.0,1,Rabat,bon,1977,non,1,10.0,studio refait a neuf centre ville,572000.0
+62.0,3,Casablanca,a renover,1995,oui,1,4.0,bel appartement lumineux proche tramway,510000.0
+25.0,1,Fès,bon,1992,non,0,1.0,studio refait a neuf centre ville,114000.0
+106.0,3,Marrakech,bon,2002,non,1,9.0,grand salon cuisine equipee,826000.0
+25.0,1,Marrakech,bon,2005,non,0,11.0,bel appartement lumineux proche tramway,198000.0
+108.0,4,Rabat,neuf,1997,oui,1,5.0,studio refait a neuf centre ville,1019000.0
+157.0,6,Casablanca,bon,2006,oui,0,3.0,bel appartement lumineux proche tramway,1518000.0
+117.0,3,Rabat,bon,2015,non,1,9.0,bel appartement lumineux proche tramway,1131000.0
+58.0,1,Tanger,a renover,2004,oui,0,11.0,grand salon cuisine equipee,323000.0
+60.0,3,Casablanca,neuf,2017,oui,0,1.0,grand salon cuisine equipee,812000.0
+152.0,5,Rabat,bon,2000,oui,0,4.0,residence securisee avec jardin,1231000.0
+58.0,2,Casablanca,,1997,oui,1,7.0,studio refait a neuf centre ville,455000.0
+93.0,4,Tanger,neuf,2011,oui,1,9.0,bel appartement lumineux proche tramway,851000.0
+106.0,4,Rabat,neuf,1980,oui,0,7.0,grand salon cuisine equipee,1316000.0
+70.0,3,Marrakech,a renover,2022,oui,0,10.0,residence securisee avec jardin,430000.0
+102.0,3,Casablanca,,2003,oui,0,5.0,grand salon cuisine equipee,965000.0
+128.0,5,Fès,neuf,1972,oui,0,8.0,residence securisee avec jardin,805000.0
+100.0,4,Rabat,bon,1967,non,1,9.0,bel appartement lumineux proche tramway,798000.0
+104.0,4,Marrakech,bon,1999,oui,0,,grand salon cuisine equipee,806000.0
+124.0,4,Casablanca,a renover,1997,non,0,9.0,bel appartement lumineux proche tramway,894000.0
+74.0,2,Rabat,bon,1988,oui,0,,studio refait a neuf centre ville,637000.0
+29.0,2,Marrakech,bon,2002,oui,2,1.0,residence securisee avec jardin,262000.0
+62.0,2,Casablanca,bon,1999,non,1,1.0,grand salon cuisine equipee,719000.0
+73.0,2,Casablanca,a renover,1968,non,0,0.0,grand salon cuisine equipee,453000.0
+74.0,4,Tanger,bon,1985,non,1,5.0,grand salon cuisine equipee,404000.0
+77.0,3,Rabat,bon,2003,non,0,6.0,studio refait a neuf centre ville,637000.0
+102.0,3,Casablanca,neuf,1961,oui,1,,residence securisee avec jardin,990000.0
+36.0,1,Casablanca,bon,1965,non,0,2.0,bel appartement lumineux proche tramway,285000.0
+122.0,5,Marrakech,bon,2018,oui,1,,bel appartement lumineux proche tramway,972000.0
+80.0,4,Casablanca,a renover,2000,oui,1,9.0,bel appartement lumineux proche tramway,633000.0
+69.0,3,Rabat,bon,1980,oui,1,1.0,bel appartement lumineux proche tramway,527000.0
+73.0,2,Tanger,a renover,1967,oui,0,3.0,residence securisee avec jardin,378000.0
+94.0,4,Rabat,bon,1977,oui,0,0.0,studio refait a neuf centre ville,726000.0
+,2,Casablanca,bon,1962,non,2,8.0,grand salon cuisine equipee,626000.0
+131.0,3,Tanger,bon,1993,oui,2,0.0,grand salon cuisine equipee,880000.0
+55.0,2,Marrakech,neuf,2003,oui,2,0.0,bel appartement lumineux proche tramway,525000.0
+101.0,3,Rabat,neuf,1992,oui,2,0.0,bel appartement lumineux proche tramway,1061000.0
+105.0,5,Tanger,bon,2018,non,0,11.0,residence securisee avec jardin,886000.0
+103.0,4,Casablanca,a renover,1990,oui,2,8.0,residence securisee avec jardin,803000.0
+37.0,1,Marrakech,neuf,1976,oui,0,9.0,residence securisee avec jardin,303000.0
+114.0,4,Casablanca,bon,1998,non,0,3.0,grand salon cuisine equipee,1056000.0
+75.0,3,Casablanca,a renover,2011,non,1,1.0,studio refait a neuf centre ville,618000.0
+79.0,2,Rabat,bon,2020,non,0,,grand salon cuisine equipee,584000.0
+107.0,4,Rabat,neuf,2005,non,0,2.0,residence securisee avec jardin,1172000.0
+103.0,4,Tanger,bon,2021,oui,1,5.0,residence securisee avec jardin,641000.0
+77.0,3,Rabat,bon,2004,non,2,1.0,bel appartement lumineux proche tramway,740000.0
+59.0,2,Marrakech,,2018,oui,0,2.0,studio refait a neuf centre ville,491000.0
+123.0,5,Marrakech,bon,2021,non,0,10.0,grand salon cuisine equipee,1109000.0
+124.0,4,Fès,neuf,2004,oui,0,,grand salon cuisine equipee,935000.0
+66.0,2,Casablanca,bon,1960,oui,1,10.0,studio refait a neuf centre ville,523000.0
+117.0,4,Fès,bon,1967,non,2,8.0,residence securisee avec jardin,628000.0
+121.0,3,Tanger,bon,2003,non,0,0.0,bel appartement lumineux proche tramway,841000.0
+114.0,4,Tanger,bon,1961,oui,1,0.0,studio refait a neuf centre ville,794000.0
+138.0,5,Rabat,neuf,1986,non,1,5.0,bel appartement lumineux proche tramway,1665000.0
+117.0,5,Rabat,neuf,1975,non,1,9.0,studio refait a neuf centre ville,1260000.0
+79.0,3,Rabat,neuf,1987,non,0,6.0,studio refait a neuf centre ville,909000.0
+174.0,7,Marrakech,bon,2000,oui,1,6.0,bel appartement lumineux proche tramway,1221000.0
+92.0,4,Casablanca,bon,2001,oui,1,9.0,studio refait a neuf centre ville,887000.0
+66.0,3,Casablanca,neuf,1980,oui,0,10.0,studio refait a neuf centre ville,902000.0
+97.0,3,Rabat,bon,1993,oui,1,,bel appartement lumineux proche tramway,941000.0
+128.0,5,Rabat,neuf,2014,oui,1,,studio refait a neuf centre ville,1746000.0
+108.0,4,Marrakech,neuf,1973,non,0,4.0,residence securisee avec jardin,938000.0
+54.0,3,Fès,a renover,1960,non,2,8.0,grand salon cuisine equipee,207000.0
+87.0,1,Casablanca,bon,1971,non,0,5.0,bel appartement lumineux proche tramway,762000.0
+77.0,3,Marrakech,bon,1979,non,1,6.0,bel appartement lumineux proche tramway,617000.0
+,2,Casablanca,neuf,1960,oui,1,3.0,residence securisee avec jardin,572000.0
+141.0,5,Rabat,,1985,oui,0,8.0,residence securisee avec jardin,1393000.0
+180.0,7,Casablanca,neuf,1976,oui,1,8.0,residence securisee avec jardin,1123000.0
+38.0,1,Marrakech,bon,2016,oui,0,5.0,residence securisee avec jardin,299000.0
+178.0,6,Rabat,bon,1990,non,0,2.0,bel appartement lumineux proche tramway,1249000.0
+112.0,3,Casablanca,neuf,1980,oui,1,10.0,bel appartement lumineux proche tramway,1390000.0
+157.0,6,Fès,a renover,1994,non,0,8.0,bel appartement lumineux proche tramway,722000.0
+101.0,3,Tanger,bon,2017,oui,1,0.0,bel appartement lumineux proche tramway,1038000.0
+60.0,3,Casablanca,bon,1992,non,2,2.0,grand salon cuisine equipee,582000.0
+108.0,4,Marrakech,a renover,1975,non,0,2.0,grand salon cuisine equipee,513000.0
+129.0,6,Marrakech,a renover,2000,oui,1,11.0,bel appartement lumineux proche tramway,707000.0
+132.0,4,Marrakech,a renover,1998,non,1,8.0,bel appartement lumineux proche tramway,920000.0
+78.0,3,Fès,a renover,1987,non,2,,grand salon cuisine equipee,406000.0
+145.0,6,Rabat,bon,1983,oui,1,5.0,grand salon cuisine equipee,1180000.0
+74.0,2,Marrakech,a renover,1974,non,0,6.0,residence securisee avec jardin,344000.0
+78.0,3,Casablanca,a renover,1985,non,0,10.0,bel appartement lumineux proche tramway,533000.0
+117.0,4,Rabat,bon,1961,oui,0,8.0,grand salon cuisine equipee,815000.0
+,5,Casablanca,a renover,1985,non,0,7.0,grand salon cuisine equipee,1253000.0
+133.0,4,Rabat,bon,1986,oui,1,9.0,residence securisee avec jardin,944000.0
+79.0,3,Fès,a renover,1973,oui,0,1.0,studio refait a neuf centre ville,311000.0
+125.0,4,Marrakech,bon,2001,non,1,7.0,studio refait a neuf centre ville,950000.0
+100.0,5,Marrakech,neuf,1969,oui,1,,studio refait a neuf centre ville,894000.0
+87.0,3,Rabat,bon,1977,oui,1,4.0,grand salon cuisine equipee,771000.0
+25.0,1,Casablanca,bon,2010,oui,1,10.0,studio refait a neuf centre ville,218000.0
+90.0,4,Casablanca,,1989,non,2,4.0,residence securisee avec jardin,731000.0
+92.0,4,Rabat,neuf,1980,non,1,4.0,residence securisee avec jardin,998000.0
+119.0,4,Rabat,bon,2003,oui,0,,bel appartement lumineux proche tramway,1019000.0
+86.0,3,Marrakech,bon,2006,oui,2,4.0,studio refait a neuf centre ville,643000.0
+112.0,5,Rabat,a renover,1986,non,2,8.0,residence securisee avec jardin,771000.0
+,5,Fès,a renover,2020,non,0,6.0,residence securisee avec jardin,665000.0
+106.0,4,Marrakech,bon,1979,non,1,7.0,residence securisee avec jardin,792000.0
+72.0,3,Casablanca,a renover,1975,non,0,,grand salon cuisine equipee,492000.0
+160.0,5,Casablanca,a renover,2017,non,2,11.0,bel appartement lumineux proche tramway,1184000.0
+103.0,3,Casablanca,neuf,1998,oui,1,9.0,bel appartement lumineux proche tramway,1050000.0
+104.0,4,Casablanca,bon,1969,oui,0,4.0,residence securisee avec jardin,949000.0
+52.0,2,Casablanca,a renover,2009,oui,1,3.0,residence securisee avec jardin,425000.0
+44.0,1,Casablanca,bon,1986,oui,1,0.0,grand salon cuisine equipee,427000.0
+68.0,3,Casablanca,a renover,2013,oui,1,0.0,grand salon cuisine equipee,513000.0
+67.0,2,Rabat,neuf,1983,non,1,2.0,bel appartement lumineux proche tramway,741000.0
+36.0,1,Marrakech,neuf,2002,non,0,7.0,bel appartement lumineux proche tramway,361000.0
+166.0,6,Casablanca,bon,1961,non,1,4.0,residence securisee avec jardin,1537000.0
+154.0,5,Rabat,bon,2015,oui,1,11.0,bel appartement lumineux proche tramway,1165000.0
+69.0,3,Casablanca,bon,2009,non,0,5.0,residence securisee avec jardin,667000.0
+72.0,3,Marrakech,neuf,1976,non,0,6.0,grand salon cuisine equipee,749000.0
+47.0,1,Tanger,neuf,2012,oui,1,10.0,residence securisee avec jardin,400000.0
+100.0,4,Marrakech,bon,2017,oui,1,,grand salon cuisine equipee,651000.0
+71.0,2,Marrakech,neuf,2017,oui,2,5.0,studio refait a neuf centre ville,933000.0
+121.0,5,Rabat,bon,1963,non,1,2.0,residence securisee avec jardin,1134000.0
+133.0,5,Marrakech,a renover,1999,non,1,10.0,grand salon cuisine equipee,933000.0
+71.0,2,Marrakech,bon,1993,non,1,3.0,studio refait a neuf centre ville,528000.0
+117.0,3,Casablanca,bon,1992,oui,1,1.0,studio refait a neuf centre ville,1349000.0
+120.0,4,Fès,neuf,1993,non,0,6.0,bel appartement lumineux proche tramway,870000.0
+103.0,3,Casablanca,bon,1984,oui,0,5.0,grand salon cuisine equipee,772000.0
+82.0,3,Tanger,bon,1973,non,0,5.0,studio refait a neuf centre ville,525000.0
+123.0,5,Rabat,,1969,oui,1,0.0,studio refait a neuf centre ville,814000.0
+140.0,4,Rabat,,2000,oui,1,9.0,studio refait a neuf centre ville,1397000.0
+97.0,3,Casablanca,bon,1972,non,1,8.0,studio refait a neuf centre ville,1104000.0
+65.0,2,Casablanca,bon,2001,oui,0,8.0,grand salon cuisine equipee,615000.0
+45.0,2,Casablanca,bon,2016,oui,2,10.0,studio refait a neuf centre ville,488000.0
+112.0,3,Casablanca,a renover,1977,non,1,1.0,residence securisee avec jardin,847000.0
+159.0,5,Tanger,bon,2021,non,2,5.0,grand salon cuisine equipee,1090000.0
+,4,Tanger,bon,1963,oui,0,2.0,studio refait a neuf centre ville,701000.0
+63.0,3,Casablanca,bon,1964,non,2,3.0,bel appartement lumineux proche tramway,365000.0
+105.0,3,Rabat,neuf,1962,oui,2,5.0,studio refait a neuf centre ville,1096000.0
+92.0,3,Rabat,bon,1968,oui,0,4.0,residence securisee avec jardin,763000.0
+122.0,4,Rabat,bon,2022,non,2,3.0,grand salon cuisine equipee,1144000.0
+,4,Casablanca,a renover,1960,non,1,5.0,studio refait a neuf centre ville,729000.0
+115.0,3,Casablanca,neuf,1972,non,0,0.0,grand salon cuisine equipee,1442000.0
+40.0,2,Fès,bon,1973,oui,1,5.0,studio refait a neuf centre ville,221000.0
+38.0,1,Marrakech,neuf,2011,non,0,1.0,studio refait a neuf centre ville,397000.0
+48.0,2,Casablanca,neuf,2001,non,1,10.0,bel appartement lumineux proche tramway,534000.0
+68.0,3,Rabat,a renover,1989,non,1,,grand salon cuisine equipee,462000.0
+67.0,3,Casablanca,a renover,2016,non,1,4.0,residence securisee avec jardin,457000.0
+102.0,3,Rabat,neuf,1981,non,1,8.0,residence securisee avec jardin,1250000.0
+98.0,3,Casablanca,neuf,1983,oui,1,10.0,bel appartement lumineux proche tramway,1086000.0
+121.0,4,Rabat,bon,1990,non,0,6.0,residence securisee avec jardin,1181000.0
+59.0,3,Tanger,bon,1971,oui,1,7.0,grand salon cuisine equipee,487000.0
+180.0,7,Casablanca,neuf,1963,non,0,11.0,residence securisee avec jardin,1986000.0
+83.0,3,Casablanca,bon,1978,non,1,0.0,residence securisee avec jardin,579000.0
+122.0,3,Marrakech,bon,1976,oui,1,5.0,studio refait a neuf centre ville,1013000.0
+67.0,2,Casablanca,a renover,1968,oui,0,0.0,residence securisee avec jardin,433000.0
+83.0,3,Casablanca,a renover,1963,non,0,5.0,residence securisee avec jardin,545000.0
+73.0,1,Fès,a renover,2009,oui,1,0.0,residence securisee avec jardin,385000.0
+28.0,1,Marrakech,bon,2023,non,0,,residence securisee avec jardin,219000.0
+,4,Marrakech,bon,2008,non,0,,residence securisee avec jardin,795000.0
+149.0,7,Marrakech,neuf,2008,non,1,1.0,studio refait a neuf centre ville,1635000.0
+130.0,4,Casablanca,bon,2023,oui,1,7.0,studio refait a neuf centre ville,1450000.0
+42.0,1,Marrakech,bon,1968,non,1,2.0,studio refait a neuf centre ville,262000.0
+171.0,5,Marrakech,bon,1975,non,0,0.0,bel appartement lumineux proche tramway,1492000.0
+125.0,5,Marrakech,a renover,1970,oui,1,11.0,bel appartement lumineux proche tramway,712000.0
+120.0,4,Rabat,a renover,1960,oui,1,7.0,studio refait a neuf centre ville,762000.0
+63.0,3,Rabat,a renover,2000,non,2,4.0,residence securisee avec jardin,433000.0
+149.0,5,Tanger,bon,1968,non,1,9.0,bel appartement lumineux proche tramway,1003000.0
+97.0,4,Casablanca,bon,1973,oui,2,,grand salon cuisine equipee,979000.0
+160.0,5,Tanger,bon,2011,oui,0,2.0,bel appartement lumineux proche tramway,1225000.0
+100.0,3,Casablanca,a renover,2018,non,0,11.0,grand salon cuisine equipee,768000.0
+141.0,5,Rabat,neuf,1962,non,1,1.0,residence securisee avec jardin,1400000.0
+116.0,4,Marrakech,bon,1983,non,1,7.0,studio refait a neuf centre ville,826000.0
+112.0,3,Casablanca,a renover,2023,oui,1,4.0,residence securisee avec jardin,875000.0
+98.0,3,Fès,bon,1991,non,2,11.0,studio refait a neuf centre ville,505000.0
+132.0,4,Fès,bon,2016,oui,2,9.0,grand salon cuisine equipee,644000.0
+64.0,2,Rabat,bon,1963,oui,0,1.0,residence securisee avec jardin,652000.0
+79.0,3,Tanger,bon,1998,non,1,5.0,studio refait a neuf centre ville,453000.0
+89.0,2,Casablanca,bon,1968,non,0,2.0,studio refait a neuf centre ville,776000.0
+193.0,7,Rabat,neuf,2022,oui,1,8.0,residence securisee avec jardin,2310000.0
+,3,Casablanca,bon,1968,non,1,10.0,studio refait a neuf centre ville,794000.0
+52.0,1,Rabat,a renover,2018,non,0,10.0,residence securisee avec jardin,385000.0
+119.0,4,Rabat,neuf,2004,oui,1,9.0,residence securisee avec jardin,1158000.0
+152.0,5,Casablanca,neuf,1994,oui,1,,residence securisee avec jardin,1634000.0
+127.0,4,Marrakech,bon,2009,oui,2,0.0,grand salon cuisine equipee,1079000.0
+100.0,3,Tanger,bon,2014,non,0,8.0,grand salon cuisine equipee,882000.0
+82.0,2,Casablanca,bon,1993,oui,1,7.0,bel appartement lumineux proche tramway,687000.0
+132.0,4,Rabat,bon,1977,non,0,6.0,bel appartement lumineux proche tramway,1091000.0
+119.0,4,Casablanca,bon,2007,non,1,9.0,bel appartement lumineux proche tramway,957000.0
+101.0,3,Casablanca,bon,1967,oui,1,9.0,studio refait a neuf centre ville,771000.0
+127.0,4,Tanger,bon,1961,oui,0,7.0,grand salon cuisine equipee,966000.0
+91.0,4,Rabat,a renover,1965,non,0,9.0,grand salon cuisine equipee,607000.0
+25.0,1,Casablanca,neuf,1988,non,1,3.0,residence securisee avec jardin,294000.0
+168.0,8,Rabat,neuf,1962,oui,1,5.0,grand salon cuisine equipee,1695000.0
+85.0,3,Rabat,bon,1963,non,1,1.0,studio refait a neuf centre ville,559000.0
+120.0,5,Casablanca,bon,2006,oui,0,9.0,grand salon cuisine equipee,1127000.0
+116.0,4,Fès,,1962,oui,2,5.0,bel appartement lumineux proche tramway,685000.0
+69.0,3,Fès,bon,1988,non,0,9.0,bel appartement lumineux proche tramway,322000.0
+141.0,4,Marrakech,bon,1962,non,2,,studio refait a neuf centre ville,1099000.0
+146.0,5,Marrakech,bon,1985,oui,1,1.0,residence securisee avec jardin,1235000.0
+56.0,2,Marrakech,a renover,2005,oui,0,9.0,bel appartement lumineux proche tramway,311000.0
+91.0,3,Marrakech,neuf,2012,oui,1,0.0,residence securisee avec jardin,929000.0
+91.0,3,Fès,neuf,1961,non,0,10.0,studio refait a neuf centre ville,720000.0
+142.0,6,Rabat,bon,1999,oui,1,2.0,studio refait a neuf centre ville,1213000.0
+126.0,5,Fès,neuf,2023,oui,1,,bel appartement lumineux proche tramway,880000.0
+,5,Rabat,,1983,oui,2,11.0,residence securisee avec jardin,9696000.0
+114.0,4,Casablanca,bon,2002,oui,1,6.0,studio refait a neuf centre ville,1020000.0
+109.0,5,Rabat,bon,1961,oui,2,2.0,residence securisee avec jardin,687000.0
+65.0,2,Rabat,neuf,1988,oui,0,5.0,residence securisee avec jardin,826000.0
+,6,Casablanca,a renover,1993,non,2,0.0,residence securisee avec jardin,1135000.0
+103.0,3,Casablanca,bon,2011,non,0,3.0,residence securisee avec jardin,996000.0
+70.0,2,Casablanca,a renover,1997,oui,0,8.0,grand salon cuisine equipee,567000.0
+90.0,3,Rabat,a renover,1997,non,0,10.0,studio refait a neuf centre ville,666000.0
+136.0,5,Rabat,a renover,1965,oui,1,2.0,studio refait a neuf centre ville,788000.0
+137.0,5,Casablanca,bon,1986,oui,0,7.0,studio refait a neuf centre ville,1359000.0
+131.0,4,Casablanca,bon,1980,oui,2,3.0,bel appartement lumineux proche tramway,1262000.0
+,3,Fès,bon,1972,oui,1,,residence securisee avec jardin,343000.0
+118.0,4,Tanger,,1968,non,0,0.0,bel appartement lumineux proche tramway,9704000.0
+73.0,2,Tanger,a renover,2009,oui,1,4.0,bel appartement lumineux proche tramway,362000.0
+93.0,3,Rabat,bon,2005,oui,1,,studio refait a neuf centre ville,872000.0
+162.0,5,Marrakech,bon,1960,non,2,1.0,grand salon cuisine equipee,1112000.0
+92.0,5,Rabat,,1998,non,0,8.0,bel appartement lumineux proche tramway,861000.0
+119.0,4,Tanger,,1987,oui,1,3.0,studio refait a neuf centre ville,984000.0
+100.0,4,Casablanca,a renover,1962,non,0,6.0,bel appartement lumineux proche tramway,719000.0
+171.0,7,Rabat,bon,1981,oui,0,,residence securisee avec jardin,1189000.0
+93.0,4,Casablanca,bon,1966,non,1,10.0,bel appartement lumineux proche tramway,748000.0
+56.0,2,Rabat,bon,1961,non,0,0.0,residence securisee avec jardin,418000.0
+114.0,4,Marrakech,neuf,1985,non,1,0.0,residence securisee avec jardin,878000.0
+44.0,2,Casablanca,a renover,1968,oui,0,1.0,residence securisee avec jardin,334000.0
+94.0,3,Casablanca,bon,1992,non,1,3.0,grand salon cuisine equipee,738000.0
+50.0,3,Marrakech,bon,1984,oui,0,1.0,studio refait a neuf centre ville,327000.0
+72.0,2,Fès,neuf,2012,oui,2,10.0,studio refait a neuf centre ville,468000.0
+66.0,3,Rabat,bon,2004,non,1,7.0,residence securisee avec jardin,577000.0
+104.0,5,Rabat,neuf,1964,oui,1,8.0,residence securisee avec jardin,1079000.0
+32.0,1,Casablanca,a renover,1983,non,0,,bel appartement lumineux proche tramway,238000.0
+107.0,4,Marrakech,neuf,1971,oui,0,3.0,bel appartement lumineux proche tramway,981000.0
+106.0,4,Casablanca,neuf,1996,oui,1,11.0,residence securisee avec jardin,1214000.0
+82.0,3,Rabat,a renover,2013,non,2,2.0,bel appartement lumineux proche tramway,486000.0
+120.0,4,Tanger,bon,2019,oui,0,9.0,residence securisee avec jardin,953000.0
+32.0,1,Marrakech,neuf,1991,oui,1,,studio refait a neuf centre ville,317000.0
+134.0,4,Tanger,bon,1982,oui,1,7.0,bel appartement lumineux proche tramway,862000.0
+94.0,4,Tanger,bon,2007,oui,0,,residence securisee avec jardin,688000.0
+81.0,4,Casablanca,bon,1961,non,1,8.0,grand salon cuisine equipee,725000.0
+79.0,3,Marrakech,a renover,1981,oui,0,1.0,studio refait a neuf centre ville,420000.0
+114.0,4,Fès,neuf,1982,non,1,6.0,bel appartement lumineux proche tramway,738000.0
+65.0,2,Rabat,a renover,1962,non,0,9.0,grand salon cuisine equipee,357000.0
+97.0,3,Casablanca,a renover,2000,non,1,10.0,bel appartement lumineux proche tramway,667000.0
+89.0,2,Fès,bon,2016,oui,2,1.0,grand salon cuisine equipee,604000.0
+86.0,3,Tanger,bon,2016,non,1,6.0,grand salon cuisine equipee,640000.0
+73.0,3,Tanger,bon,1988,oui,1,1.0,bel appartement lumineux proche tramway,473000.0
+124.0,4,Marrakech,bon,1990,oui,2,,studio refait a neuf centre ville,925000.0
+,3,Rabat,bon,2007,oui,0,5.0,bel appartement lumineux proche tramway,662000.0
+,3,Casablanca,bon,2012,non,1,10.0,residence securisee avec jardin,455000.0
+43.0,2,Rabat,bon,1980,non,0,5.0,bel appartement lumineux proche tramway,421000.0
+53.0,2,Casablanca,bon,1976,oui,2,8.0,studio refait a neuf centre ville,443000.0
+94.0,3,Marrakech,bon,2011,non,0,1.0,residence securisee avec jardin,731000.0
+109.0,3,Rabat,bon,2017,oui,2,0.0,grand salon cuisine equipee,1211000.0
+65.0,2,Marrakech,bon,1989,oui,0,2.0,residence securisee avec jardin,557000.0
+76.0,3,Fès,bon,1975,non,0,2.0,residence securisee avec jardin,345000.0
+75.0,1,Casablanca,bon,1968,non,0,4.0,studio refait a neuf centre ville,648000.0
+,4,Rabat,bon,1965,non,1,7.0,studio refait a neuf centre ville,981000.0
+81.0,4,Casablanca,a renover,1977,oui,1,7.0,grand salon cuisine equipee,574000.0
+118.0,5,Fès,bon,1969,oui,1,7.0,residence securisee avec jardin,579000.0
+95.0,3,Fès,a renover,2002,non,0,4.0,grand salon cuisine equipee,431000.0
+112.0,4,Rabat,neuf,2023,non,1,10.0,grand salon cuisine equipee,1010000.0
+76.0,2,Tanger,bon,2008,oui,0,8.0,bel appartement lumineux proche tramway,466000.0
+99.0,3,Casablanca,bon,1978,oui,0,8.0,studio refait a neuf centre ville,805000.0
+,2,Tanger,bon,2008,oui,1,8.0,grand salon cuisine equipee,663000.0
+77.0,3,Casablanca,bon,2000,oui,1,0.0,grand salon cuisine equipee,792000.0
+73.0,2,Casablanca,bon,2000,non,1,2.0,studio refait a neuf centre ville,746000.0
+85.0,3,Marrakech,bon,1986,non,1,1.0,residence securisee avec jardin,656000.0
+135.0,5,Casablanca,bon,1966,non,0,6.0,grand salon cuisine equipee,1454000.0
+58.0,2,Casablanca,bon,1978,oui,0,7.0,residence securisee avec jardin,462000.0
+91.0,4,Marrakech,neuf,1984,oui,1,0.0,bel appartement lumineux proche tramway,719000.0
+121.0,4,Marrakech,neuf,1977,non,1,3.0,residence securisee avec jardin,931000.0
+161.0,5,Fès,neuf,2003,oui,1,,bel appartement lumineux proche tramway,959000.0
+58.0,3,Casablanca,bon,1976,non,0,3.0,studio refait a neuf centre ville,444000.0
+27.0,1,Rabat,neuf,1972,non,1,3.0,grand salon cuisine equipee,303000.0
+98.0,4,Rabat,neuf,2022,non,2,10.0,residence securisee avec jardin,1096000.0
+106.0,4,Rabat,bon,2010,oui,1,6.0,studio refait a neuf centre ville,814000.0
+126.0,5,Casablanca,bon,1968,non,1,6.0,bel appartement lumineux proche tramway,1028000.0
+65.0,3,Rabat,bon,1966,non,2,,grand salon cuisine equipee,658000.0
+87.0,3,Tanger,bon,1997,non,0,2.0,grand salon cuisine equipee,773000.0
+79.0,2,Tanger,neuf,1982,non,0,,grand salon cuisine equipee,644000.0
+83.0,2,Casablanca,a renover,1968,oui,1,10.0,studio refait a neuf centre ville,497000.0
+136.0,5,Rabat,neuf,2023,non,0,3.0,studio refait a neuf centre ville,1456000.0
+111.0,4,Casablanca,a renover,2009,non,0,8.0,studio refait a neuf centre ville,945000.0
+37.0,1,Tanger,neuf,1980,non,1,9.0,bel appartement lumineux proche tramway,335000.0
+67.0,2,Casablanca,bon,2006,oui,1,9.0,grand salon cuisine equipee,660000.0
+71.0,3,Marrakech,bon,1962,non,0,0.0,grand salon cuisine equipee,404000.0
+114.0,4,Marrakech,neuf,1967,oui,0,9.0,grand salon cuisine equipee,869000.0
+143.0,4,Tanger,bon,1991,oui,0,9.0,grand salon cuisine equipee,957000.0
+76.0,2,Casablanca,bon,1977,oui,2,8.0,bel appartement lumineux proche tramway,631000.0
+72.0,3,Tanger,bon,1980,non,0,8.0,bel appartement lumineux proche tramway,431000.0
+109.0,4,Tanger,bon,2015,oui,0,1.0,studio refait a neuf centre ville,881000.0
+184.0,7,Marrakech,neuf,1995,non,0,1.0,studio refait a neuf centre ville,1610000.0
+82.0,3,Marrakech,bon,1970,oui,1,1.0,grand salon cuisine equipee,629000.0
+201.0,8,Fès,neuf,2011,non,1,,bel appartement lumineux proche tramway,1339000.0
+114.0,4,Casablanca,bon,1967,oui,0,7.0,studio refait a neuf centre ville,907000.0
+168.0,6,Rabat,a renover,1999,oui,0,2.0,grand salon cuisine equipee,1375000.0
+139.0,5,Casablanca,a renover,1996,oui,1,9.0,bel appartement lumineux proche tramway,849000.0
+95.0,4,Tanger,neuf,1966,non,1,2.0,studio refait a neuf centre ville,752000.0
+148.0,5,Marrakech,bon,1991,oui,2,2.0,residence securisee avec jardin,1327000.0
+112.0,3,Rabat,,1978,non,2,11.0,studio refait a neuf centre ville,941000.0
+153.0,6,Rabat,bon,1982,non,0,5.0,bel appartement lumineux proche tramway,1178000.0
+86.0,3,Casablanca,neuf,1985,oui,0,,bel appartement lumineux proche tramway,855000.0
+25.0,1,Marrakech,bon,1964,non,2,10.0,bel appartement lumineux proche tramway,171000.0
+92.0,4,Tanger,bon,1982,non,0,5.0,studio refait a neuf centre ville,568000.0
+193.0,7,Tanger,a renover,2001,oui,1,0.0,studio refait a neuf centre ville,1131000.0
+29.0,1,Tanger,neuf,1960,oui,0,6.0,grand salon cuisine equipee,242000.0
+117.0,4,Rabat,neuf,2004,oui,0,,grand salon cuisine equipee,9568000.0
+80.0,2,Marrakech,neuf,1990,non,1,,studio refait a neuf centre ville,687000.0
+157.0,6,Casablanca,bon,1989,oui,0,6.0,studio refait a neuf centre ville,1243000.0
+45.0,2,Rabat,bon,1979,oui,1,0.0,residence securisee avec jardin,441000.0
+131.0,5,Fès,bon,1978,oui,1,2.0,bel appartement lumineux proche tramway,741000.0
+137.0,6,Tanger,bon,1966,oui,1,1.0,bel appartement lumineux proche tramway,790000.0
+162.0,6,Fès,bon,2002,non,0,3.0,studio refait a neuf centre ville,7504000.0
+75.0,4,Marrakech,neuf,1964,oui,1,1.0,grand salon cuisine equipee,629000.0
+168.0,6,Casablanca,a renover,1967,oui,1,2.0,grand salon cuisine equipee,1087000.0
+105.0,3,Marrakech,bon,1985,oui,1,0.0,grand salon cuisine equipee,894000.0
+63.0,2,Rabat,,1993,non,0,10.0,residence securisee avec jardin,497000.0
+76.0,2,Casablanca,a renover,1995,non,2,7.0,bel appartement lumineux proche tramway,586000.0
+121.0,5,Fès,bon,2017,oui,1,6.0,residence securisee avec jardin,597000.0
+73.0,3,Marrakech,bon,1963,oui,0,10.0,residence securisee avec jardin,606000.0
+25.0,1,Casablanca,bon,1962,non,1,3.0,grand salon cuisine equipee,208000.0
+25.0,1,Rabat,,1985,non,0,3.0,residence securisee avec jardin,219000.0
+85.0,4,Casablanca,neuf,1977,oui,2,2.0,residence securisee avec jardin,840000.0
+66.0,3,Marrakech,neuf,1975,non,1,2.0,bel appartement lumineux proche tramway,584000.0
+62.0,3,Fès,neuf,1962,non,1,7.0,studio refait a neuf centre ville,474000.0
+,2,Casablanca,bon,1972,non,1,4.0,grand salon cuisine equipee,573000.0
+83.0,3,Casablanca,,1960,oui,2,6.0,studio refait a neuf centre ville,734000.0
+104.0,3,Casablanca,a renover,1982,non,1,6.0,grand salon cuisine equipee,731000.0
+90.0,2,Tanger,bon,1965,oui,1,,grand salon cuisine equipee,658000.0
+69.0,3,Casablanca,bon,1963,oui,0,8.0,residence securisee avec jardin,589000.0
+95.0,4,Casablanca,bon,1999,non,1,8.0,bel appartement lumineux proche tramway,782000.0
+135.0,6,Tanger,neuf,1999,non,2,11.0,bel appartement lumineux proche tramway,1169000.0
+168.0,6,Marrakech,neuf,1963,oui,0,7.0,bel appartement lumineux proche tramway,1521000.0
+83.0,3,Rabat,a renover,1986,non,1,,residence securisee avec jardin,592000.0
+86.0,3,Marrakech,bon,1977,non,1,9.0,studio refait a neuf centre ville,683000.0
+99.0,4,Tanger,bon,1975,oui,1,1.0,grand salon cuisine equipee,707000.0
+118.0,4,Tanger,bon,1985,non,1,6.0,bel appartement lumineux proche tramway,875000.0
+75.0,3,Rabat,neuf,2007,non,1,11.0,residence securisee avec jardin,651000.0
+113.0,4,Marrakech,neuf,1990,non,0,3.0,studio refait a neuf centre ville,828000.0
+103.0,4,Casablanca,neuf,2009,non,2,1.0,bel appartement lumineux proche tramway,1347000.0
+76.0,3,Rabat,bon,1970,oui,0,4.0,studio refait a neuf centre ville,666000.0
+129.0,4,Rabat,neuf,1978,non,0,4.0,grand salon cuisine equipee,1249000.0
+148.0,5,Rabat,neuf,1961,oui,1,4.0,residence securisee avec jardin,1425000.0
+84.0,3,Casablanca,neuf,2004,non,1,11.0,residence securisee avec jardin,820000.0
+44.0,3,Tanger,a renover,2021,oui,2,0.0,residence securisee avec jardin,253000.0
+71.0,2,Casablanca,bon,2012,non,0,4.0,bel appartement lumineux proche tramway,690000.0
+89.0,3,Tanger,a renover,1992,non,0,10.0,bel appartement lumineux proche tramway,495000.0
+102.0,4,Marrakech,bon,1985,oui,1,,studio refait a neuf centre ville,760000.0
+128.0,4,Tanger,bon,1977,non,1,11.0,studio refait a neuf centre ville,661000.0
+156.0,6,Marrakech,neuf,2014,oui,1,6.0,grand salon cuisine equipee,1643000.0
+115.0,3,Casablanca,neuf,1990,oui,0,1.0,studio refait a neuf centre ville,10072000.0
+73.0,2,Rabat,bon,1986,non,1,2.0,residence securisee avec jardin,596000.0
+97.0,4,Tanger,a renover,2003,oui,2,10.0,bel appartement lumineux proche tramway,600000.0
+97.0,3,Rabat,neuf,2010,non,0,2.0,studio refait a neuf centre ville,1174000.0
+119.0,3,Casablanca,neuf,2021,non,1,7.0,residence securisee avec jardin,1619000.0
+42.0,2,Tanger,bon,1997,oui,0,8.0,bel appartement lumineux proche tramway,282000.0
+56.0,2,Casablanca,,1973,non,1,9.0,bel appartement lumineux proche tramway,600000.0
+81.0,3,Rabat,a renover,1968,oui,0,9.0,grand salon cuisine equipee,558000.0
+49.0,2,Casablanca,neuf,1976,oui,0,2.0,bel appartement lumineux proche tramway,504000.0
+102.0,4,Casablanca,bon,1971,non,1,8.0,residence securisee avec jardin,998000.0
+,3,Casablanca,bon,2018,oui,0,8.0,grand salon cuisine equipee,785000.0
+131.0,5,Casablanca,neuf,2002,non,1,11.0,grand salon cuisine equipee,1453000.0
+60.0,2,Casablanca,neuf,2012,oui,1,2.0,grand salon cuisine equipee,625000.0
+84.0,3,Casablanca,bon,1984,oui,2,10.0,residence securisee avec jardin,680000.0
+,2,Rabat,bon,1980,oui,0,9.0,studio refait a neuf centre ville,369000.0
+72.0,3,Casablanca,a renover,2023,oui,0,,grand salon cuisine equipee,591000.0
+121.0,4,Rabat,neuf,1989,non,1,5.0,residence securisee avec jardin,1176000.0
+93.0,5,Casablanca,a renover,2007,oui,0,4.0,grand salon cuisine equipee,703000.0
+114.0,4,Fès,neuf,1997,oui,2,8.0,bel appartement lumineux proche tramway,767000.0

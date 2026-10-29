@@ -7,4 +7,3 @@ dist/
 resultats/
 *.joblib
 .venv/
-data/

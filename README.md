@@ -23,6 +23,7 @@ que pour le graphique du benchmark.
 | `signal_check.py` | Vérifie si un dataset contient du signal et si AutoPreprocessor aide (AUC, PR-AUC, cible mélangée) |
 | `benchmark_multi.py` | Benchmark sur plusieurs datasets (naïf, sklearn standard, AutoPreprocessor) |
 | `credit_g_check.py` | Analyse des variantes d'options sur le dataset credit_g |
+| `ablation_credit_g.py` | Ablation option par option sur credit_g, tests statistiques appariés (étape 3) |
 | `build_exe.bat` | Construit `dist\AutoPreprocessor.exe` (PyInstaller, Windows) |
 | `data/` | Datasets de démonstration (synthétiques, voir plus bas) |
 | `requirements.txt` | Dépendances |
@@ -555,4 +556,4 @@ Dans l'application, j'ai laissé « Type de tâche » sur « regression » aprè
 
 ### Remarque
 
-Les corrections plus anciennes (détection de fuite par colonne avec règle d'écart, target encoding out-of-fold, désactivation de l'encodage des entiers discrets et de `"none"` comme faux manquant suite au cas credit_g) ont été faites en dialogue à partir des résultats réels ; elles sont déjà intégrées dans le code livré. `ablation_credit_g.py` est produit par le prompt de l'étape 3 et n'est pas inclus dans ce dépôt.
+Les corrections plus anciennes (détection de fuite par colonne avec règle d'écart, target encoding out-of-fold, désactivation de l'encodage des entiers discrets et de `"none"` comme faux manquant suite au cas credit_g) ont été faites en dialogue à partir des résultats réels ; elles sont déjà intégrées dans le code livré. `ablation_credit_g.py` est produit par le prompt de l'étape 3.

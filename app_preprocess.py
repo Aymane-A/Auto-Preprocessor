@@ -1008,7 +1008,7 @@ class App:
         self.cb_analysis_target = ttk.Combobox(bar, textvariable=self.v_target, state="readonly", width=24,
                                                values=[NO_TARGET_LABEL])
         self.cb_analysis_target.pack(side="left")
-        ttk.Label(bar, text="Tache :").pack(side="left", padx=(8, 2))
+        ttk.Label(bar, text="Tâche :").pack(side="left", padx=(8, 2))
         self.cb_analysis_task = ttk.Combobox(bar, textvariable=self.v_task, state="readonly", width=14,
                                              values=["auto", "classification", "regression"])
         self.cb_analysis_task.pack(side="left")
@@ -1511,7 +1511,7 @@ class App:
         self.cb_target = ttk.Combobox(box, textvariable=self.v_target, state="readonly", width=32,
                                       values=[NO_TARGET_LABEL])
         self.cb_target.grid(row=0, column=1, sticky="w", padx=6, pady=3)
-        ttk.Label(box, text="Type de tache :").grid(row=1, column=0, sticky="w")
+        ttk.Label(box, text="Type de tâche :").grid(row=1, column=0, sticky="w")
         ttk.Combobox(box, textvariable=self.v_task, state="readonly", width=16,
                      values=["auto", "classification", "regression"]).grid(row=1, column=1, sticky="w", padx=6, pady=3)
         ttk.Label(box, text="Part du test (%), 0 = aucun :").grid(row=2, column=0, sticky="w")

@@ -1901,11 +1901,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
 
     def _resolve_task(self, y: Union[pd.Series, np.ndarray]) -> str:
-        """Déduit automatiquement si la tache est une classification ou régression."""
+        """Déduit automatiquement si la tâche est une classification ou régression."""
         if self.task == "regression":
             y_num = pd.to_numeric(pd.Series(y).dropna(), errors="coerce")
             if y_num.isna().any():
-                msg = ("La tache « regression » est demandée mais la cible contient du texte "
+                msg = ("La tâche « regression » est demandée mais la cible contient du texte "
                        "(ex. 'Oui'/'Non') : passage automatique en classification.")
                 self.warnings_.append(msg)
                 logger.warning(msg)
@@ -2207,7 +2207,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "Le parsing convertit les dates reconnues pour permettre la création de variables calendaires; garder le texte évite une interprétation incertaine.", ["AUTO", "PARSE", "KEEP", "DROP_COLUMN"])
             step_recs["clean_impossible"] = rec(
                 "NAN" if impossible_count else "IGNORE", f"cas impossibles : {impossible_count}",
-                "age [0,120], pourcentage [0,100], montants/surfaces ≥ 0, dates ≤ aujourd'hui",
+                "âge [0,120], pourcentage [0,100], montants/surfaces ≥ 0, dates ≤ aujourd'hui",
                 "Les valeurs hors bornes explicitement configurées sont traitées comme incohérentes; sans bornes configurées, elles restent inchangées.", ["AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"])
             step_recs["duplicates"] = rec(
                 "DROP" if duplicate_rows else "KEEP", f"lignes dupliquées : {duplicate_rows}", "égalité exacte de toutes les cellules",
@@ -3483,7 +3483,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         lines.append("=" * 80)
         lines.append("               RAPPORT D'EXÉCUTION AUTOPREPROCESSOR")
         lines.append("=" * 80)
-        lines.append(f"Tache ML                : {rep['tache_detectee'].upper()}")
+        lines.append(f"Tâche ML                : {rep['tache_detectee'].upper()}")
         lines.append(f"Dimensions initiales    : {rep['nb_features_initiales']} colonnes")
         lines.append(f"Dimensions finales      : {rep['nb_features_finales']} features numériques")
         

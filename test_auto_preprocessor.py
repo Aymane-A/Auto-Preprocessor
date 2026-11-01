@@ -264,7 +264,7 @@ def test_target_leakage_detection():
 
 
 def test_regression_and_inverse_transform():
-    """Vérifie la détection de tache régression et la transformation inverse de la cible."""
+    """Vérifie la détection de tâche régression et la transformation inverse de la cible."""
     np.random.seed(42)
     n = 150
     X = pd.DataFrame({"x1": np.random.randn(n), "x2": np.random.uniform(0, 10, n)})

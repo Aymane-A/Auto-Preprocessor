@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Suite de tests unitaires et d'intégration pour AutoPreprocessor.
 Vérifie la robustesse, l'absence de fuite de données, la persistance et les cas limites.
@@ -262,7 +263,7 @@ def test_target_leakage_detection():
 
 
 def test_regression_and_inverse_transform():
-    """Vérifie la détection de tâche régression et la transformation inverse de la cible."""
+    """Vérifie la détection de tache régression et la transformation inverse de la cible."""
     np.random.seed(42)
     n = 150
     X = pd.DataFrame({"x1": np.random.randn(n), "x2": np.random.uniform(0, 10, n)})
@@ -819,7 +820,8 @@ def test_churn_target_relations_are_populated_for_every_feature():
     assert target_row["est_cible"]
     assert target_row["type"] == "TARGET"
     assert target_row["steps"] == {}
-    assert features["relation_cible"].notna().all()
+    assert features.loc[~features["alerte_identifiant"], "relation_cible"].notna().all()
+    assert features.loc[features["alerte_identifiant"], "relation_cible"].isna().all()
     display = build_analysis_table(result).set_index("colonne")
     assert display.loc["churn", "état_choix"] == "cible"
     assert display.loc["churn", "choix_final"] == "cible"
@@ -897,6 +899,99 @@ def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
     assert exported.loc[exported["colonne"] == "amount", "explication_distribution"].notna().all()
 
 
+def test_dropped_column_detail_shows_only_keep_or_drop_stage():
+    from app_preprocess import build_analysis_detail, read_table
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    detail = build_analysis_detail(result, "transaction_id", show_all=True)
+    assert len(detail["rows"]) == 1
+    assert detail["rows"][0]["etape_label"] == "Garder / Supprimer"
+    assert detail["rows"][0]["choix_labels"] == ["Garder (type automatique)", "Supprimer"]
+
+
+def test_empty_cleanup_steps_are_hidden_and_counted():
+    from app_preprocess import build_analysis_detail
+
+    frame = pd.DataFrame({"measure": np.arange(100, dtype=float)})
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    compact = build_analysis_detail(result, "measure")
+    expanded = build_analysis_detail(result, "measure", show_all=True)
+    hidden_cleaning = {"clean_missing_tokens", "clean_variants", "clean_numeric_text",
+                       "clean_dates", "clean_impossible", "duplicates"}
+    assert compact["masked_count"] > 0
+    assert hidden_cleaning.isdisjoint({row["etape"] for row in compact["rows"]})
+    assert hidden_cleaning.issubset({row["etape"] for row in expanded["rows"]})
+
+
+def test_visible_analysis_labels_do_not_expose_internal_identifiers():
+    from app_preprocess import build_analysis_detail, format_analysis_value, read_table
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    texts = [format_analysis_value("type", "DROP_ID"), format_analysis_value("choix_final", "type=DROP; clean_missing_tokens=TO_NAN")]
+    for row in result.columns:
+        detail = build_analysis_detail(result, row["colonne"], show_all=True)
+        texts.append(detail["header"])
+        for item in detail["rows"]:
+            texts.extend([item["etape_label"], item["recommandation_label"], item["preuve"],
+                          item["explication_affichee"], item["choix_label"], *item["choix_labels"], item["aide_choix"]])
+    visible = " ".join(texts)
+    for forbidden in ("TO_NAN", "DEFAULT_NA_VALUES", "clean_missing_tokens", "{}"):
+        assert forbidden not in visible
+    assert "aucune" in visible.lower()
+
+
+def test_display_explanation_does_not_repeat_proof_measure():
+    from app_preprocess import build_analysis_detail, read_table
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
+        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    for row in result.columns:
+        detail = build_analysis_detail(result, row["colonne"], show_all=True)
+        for item in detail["rows"]:
+            assert "Preuve :" not in item["explication_affichee"]
+            assert item["preuve"]
+            assert item["explication_affichee"]
+
+
+def test_target_suggestion_for_demo_datasets():
+    from app_preprocess import read_table, suggest_target_column
+
+    assert suggest_target_column(read_table("data/churn_telecom_demo.csv")) == "churn"
+    assert suggest_target_column(read_table("data/fraud_signal_demo.csv")) == "is_fraud"
+    assert suggest_target_column(read_table("data/immobilier_demo.csv")) == "prix_dh"
+
+
+def test_tk_smoke_load_analyze_and_treeview_count():
+    import time
+    import tkinter
+    from app_preprocess import App, read_table
+
+    try:
+        app = App()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tkinter indisponible dans cette session : {exc}")
+    try:
+        app.root.withdraw()
+        path = os.path.abspath("data/churn_telecom_demo.csv")
+        frame = read_table(path)
+        app._load_path(path)
+        assert app.v_target.get() == "churn"
+        app._start_analysis()
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not app.tree_analysis.get_children(""):
+            app.root.update()
+            time.sleep(.03)
+        assert len(app.tree_analysis.get_children("")) == len(frame.columns)
+        assert app.analysis is not None
+    finally:
+        try:
+            app.root.destroy()
+        except tkinter.TclError:
+            pass
+
+
 def test_target_provided_populates_relation_cible_for_all_features():
     """Test (a) : cible fournie -> relation_cible rempli pour toutes les features."""
     from app_preprocess import build_analysis_table, read_table
@@ -911,8 +1006,9 @@ def test_target_provided_populates_relation_cible_for_all_features():
     assert target_row["est_cible"]
     assert target_row["type"] == "TARGET"
     assert pd.isna(target_row["relation_cible"])
-    assert features["relation_cible"].notna().all()
-    assert (features["relation_cible"] >= 0).all()
+    assert features.loc[~features["alerte_identifiant"], "relation_cible"].notna().all()
+    assert features.loc[features["alerte_identifiant"], "relation_cible"].isna().all()
+    assert (features.loc[~features["alerte_identifiant"], "relation_cible"] >= 0).all()
 
     # Vérification que Cramér's V, Spearman ou MI est présent pour chaque feature
     has_stat = (
@@ -920,7 +1016,7 @@ def test_target_provided_populates_relation_cible_for_all_features():
         | features["spearman_cible"].notna()
         | features["information_mutuelle_cible"].notna()
     )
-    assert has_stat.all()
+    assert has_stat.loc[~features["alerte_identifiant"]].all()
 
     display = build_analysis_table(result).set_index("colonne")
     assert display.loc["churn", "état_choix"] == "cible"
@@ -1032,3 +1128,130 @@ def test_every_recommendation_step_has_nonempty_explanation_with_measure():
                         f"Mesure '{meas}' non trouvée dans explication '{exp}' ({row['colonne']} -> {step})"
                     )
 
+
+
+def test_drop_evidence_uses_the_actual_configured_thresholds():
+    from app_preprocess import analysis_recommendation_summary
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    config = PreprocessConfig(verbose=0, identifier_unique_threshold=.75,
+                              missing_threshold=.75, constant_threshold=.95,
+                              leakage_threshold=.80, leakage_min_gap=.20)
+    frame = pd.DataFrame({
+        "customer_id": [f"C{i}" for i in range(40)],
+        "constant": ["x"] * 40,
+        "mostly_missing": [None] * 32 + list(range(8)),
+        "base": np.arange(40),
+        "duplicate": np.arange(40),
+    })
+    result = AutoPreprocessor(config).analyze(frame)
+    rows = {row["colonne"]: row for row in result.columns}
+    id_proof = analysis_recommendation_summary(rows["customer_id"])["preuve"]
+    missing_proof = analysis_recommendation_summary(rows["mostly_missing"])["preuve"]
+    constant_proof = analysis_recommendation_summary(rows["constant"])["preuve"]
+    duplicate_proof = analysis_recommendation_summary(rows["duplicate"])["preuve"]
+    assert "40 / 40 lignes (100.0%)" in id_proof
+    assert "75.0%" in id_proof
+    assert "75.0%" in missing_proof
+    assert "1 valeur unique" in constant_proof
+    assert "identique" in duplicate_proof.lower()
+
+    leakage = {"action": "DROP", "type": "DROP_LEAKAGE", "raison": "fuite",
+               "drop_preuve": "score fuite CV = 0.910",
+               "drop_seuil": ">= 0.800 et ecart >= 0.200",
+               "steps": {"type": {"measure": "score fuite CV = 0.910",
+                                    "threshold": ">= 0.800 et ecart >= 0.200"}}}
+    assert "0.800" in analysis_recommendation_summary(leakage)["preuve"]
+    assert "0.200" in analysis_recommendation_summary(leakage)["preuve"]
+
+
+def test_identifier_target_relations_are_hidden_and_other_methods_are_named():
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    rows = {row["colonne"]: row for row in result.columns}
+    for name in ("transaction_id", "client_id"):
+        assert pd.isna(rows[name]["relation_cible"])
+        assert rows[name]["relation_cible_non_fiable_identifiant"]
+        assert rows[name]["relation_cible_methode"] == "non fiable (identifiant)"
+    ordinary = [row for row in result.columns if not row.get("est_cible")
+                and not row.get("relation_cible_non_fiable_identifiant")]
+    assert ordinary
+    assert all(pd.notna(row["relation_cible"]) for row in ordinary)
+    assert all(row["relation_cible_methode"] for row in ordinary)
+
+
+def test_analysis_main_table_order_and_parameter_field_visibility():
+    from app_preprocess import analysis_table_column_order, step_parameter_visible
+
+    columns = analysis_table_column_order({"colonne", "type", "choix_final", "raison", "confiance",
+                                           "manquants_pct", "skew", "relation_cible"})
+    assert columns[:6] == ["cocher", "colonne", "type", "choix_final", "raison", "confiance"]
+    assert columns.index("choix_final") < columns.index("manquants_pct")
+    assert columns.index("raison") < columns.index("skew")
+    assert not step_parameter_visible("type", "DROP")
+    assert not step_parameter_visible("type", "AUTO")
+    assert step_parameter_visible("outliers", "WINSORIZE")
+
+
+def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos():
+    from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
+                                read_table, recommendation_step)
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        frame = read_table(path)
+        config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
+        result = AutoPreprocessor(config).analyze(frame)
+        for row in result.columns:
+            if row.get("est_cible"):
+                continue
+            summary = analysis_recommendation_summary(row)
+            step = recommendation_step(row)
+            detail = build_analysis_detail(result, row["colonne"], show_all=True)
+            panel_row = next(item for item in detail["rows"] if item["etape"] == step)
+            assert panel_row["preuve"] == summary["preuve"], (path, row["colonne"])
+            assert row["steps"][step]["reason"] == summary["raison"]
+            assert "=" not in summary["raison"]
+            assert "Garder / Supprimer=" not in summary["raison"]
+            assert not any(token in summary["raison"] for token in
+                           ("encoding=", "distribution=", "type=", "dates="))
+
+
+def test_identifier_panel_proof_uses_unique_ratio_and_config_threshold():
+    from app_preprocess import analysis_recommendation_summary, build_analysis_detail
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
+    result = AutoPreprocessor(config).analyze(frame)
+    row = next(item for item in result.columns if item["colonne"] == "client_id")
+    summary = analysis_recommendation_summary(row)
+    detail = build_analysis_detail(result, "client_id")
+    assert summary["preuve"] == detail["rows"][0]["preuve"]
+    assert "94.7%" in summary["preuve"]
+    assert "90.0%" in summary["preuve"]
+    assert "cardinalite" not in summary["preuve"].lower()
+
+
+def test_analysis_reasons_use_selected_stage_measure_and_date_details():
+    from app_preprocess import analysis_recommendation_summary, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(path))
+        for row in result.columns:
+            if row.get("est_cible"):
+                continue
+            reason = analysis_recommendation_summary(row)["raison"]
+            assert "=" not in reason
+            assert "Garder / Supprimer" not in reason
+            assert "DROP_ID" not in reason and "NUMERIC_CONTINUOUS" not in reason
+            if row.get("action") == "DATE_FEATURES":
+                assert "plage" in reason.lower()
+                assert "parsables" in reason.lower()
+                assert "granularite" in reason.lower() or "granularité" in reason.lower()

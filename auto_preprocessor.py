@@ -2060,7 +2060,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             step_recs["nettoyage"] = rec("CLEAN_DEFAULT", f"{missing:.1%} de valeurs manquantes", "règles de nettoyage du module",
                 "Nettoyage des sous-étapes sélectionnées.", ["AUTO"])
             false_tokens = text_values.str.strip().str.casefold().isin(DEFAULT_NA_VALUES)
-            found_false = text_values[false_tokens].value_counts().to_dict()
+            found_false_counts = text_values[false_tokens].value_counts().to_dict()
+            found_false = ", ".join(
+                f"{token} ({count})" for token, count in found_false_counts.items()
+            ) or "aucun"
             raw_nonnull = raw_s.dropna()
             numeric_converted = (raw_nonnull.map(self._clean_numeric_str_value)
                                  if (pd.api.types.is_object_dtype(raw_s) or pd.api.types.is_string_dtype(raw_s))
@@ -2082,7 +2085,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             duplicate_rows = int(raw.duplicated().sum())
             step_recs["clean_missing_tokens"] = rec(
                 "TO_NAN", f"{int(false_tokens.sum())} cellules; marqueurs trouvés : {found_false}", "marqueurs de valeurs manquantes reconnus",
-                f"{int(false_tokens.sum())} faux manquants détectés: {found_false}.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
+                f"{int(false_tokens.sum())} faux manquants détectés : {found_false}.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
             step_recs["clean_variants"] = rec(
                 "MERGE", f"{variant_count} variantes fusionnables", "même texte après trim/casse/accents",
                 f"{variant_count} représentation(s) redondante(s) après normalisation des espaces, casse et accents.", ["MERGE", "KEEP"])
@@ -2179,13 +2182,19 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                             _action_supported(action_steps[candidate.value][0], groups,
                                               action_steps[candidate.value][1])]
             score = leakage.get(clean_name, np.nan)
-            if clean_name in prep.suspected_leakage_cols_:
+            if clean_name in prep.suspected_leakage_cols_ and self.config.drop_leaky_columns:
                 action, confidence = Action.DROP, "haute"
                 reason = f"Fuite de cible suspectée (score {score:.3f}); suppression recommandée."
                 step_recs["type"]["action"] = "DROP"
                 step_recs["type"]["measure"] = f"score fuite CV : {score:.3f}"
                 step_recs["type"]["threshold"] = f"score ≥ {self.config.leakage_threshold:.3f} et écart ≥ {self.config.leakage_min_gap:.3f}"
                 step_recs["type"]["explanation"] = reason
+            elif clean_name in prep.suspected_leakage_cols_:
+                # Le défaut historique est un avertissement, pas une suppression.
+                # La recommandation doit refléter cette configuration pour que
+                # « Tout accepter » reproduise fit_transform sans override.
+                reason = (f"Fuite de cible possible (score {score:.3f}); la suppression automatique "
+                          "est désactivée dans la configuration, la colonne est conservée.")
             elif confidence != "haute":
                 confidence = "moyenne" if nunique > 1 else "faible"
             target_relation = np.nan
@@ -2493,14 +2502,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 type_recommendation.update(
                     action="DROP", measure=row["drop_preuve"], threshold=row["drop_seuil"],
                     rule=f"{row['type']} déclenché selon la configuration du préprocesseur",
-                    explanation=(f"La suppression est recommandée : {row['drop_preuve']}; "
-                                 f"seuil appliqué : {row['drop_seuil']}."))
+                    explanation="La suppression est recommandée par la règle de détection correspondante.")
             for recommendation in row.get("steps", {}).values():
                 recommendation["evidence"] = format_step_evidence(
                     recommendation.get("measure", ""), recommendation.get("threshold", ""))
-                evidence_text = f"Preuve : {recommendation.get('measure', '')}; seuil : {recommendation.get('threshold', '')}."
-                if recommendation.get("measure") and recommendation["measure"] not in recommendation.get("explanation", ""):
-                    recommendation["explanation"] = f"{recommendation.get('explanation', '').strip()} {evidence_text}".strip()
             primary_step = recommendation_step_name(row.get("action", "AUTO"))
             primary_recommendation = row.get("steps", {}).get(primary_step, {})
             if primary_recommendation:
@@ -3279,6 +3284,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "Statut": status,
                 "Nb features créées": len(created_features),
                 "Choix utilisateur": self.user_override_notes_.get(col, "recommandation suivie"),
+                "Action appliquée": self._reported_action(col, meta),
                 "Détails nettoyage": self.cleaning_decisions_.get(col, {}),
             })
 
@@ -3314,6 +3320,34 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             "avertissements": self.warnings_,
         }
         return summary
+
+    def _reported_action(self, col: str, meta: Dict[str, Any]) -> str:
+        """Retourne l'action principale effectivement appliquée à une colonne."""
+        if col in self.columns_to_drop_ or col in self.dropped_variance_cols_ or col in self.dropped_collinear_cols_:
+            return "DROP"
+        preferred_steps = ("type", "distribution", "outliers", "scaling", "encoding", "dates", "text")
+        for step in preferred_steps:
+            action, _ = self._override_value(col, step)
+            if action != "AUTO":
+                return action
+        kind = meta["type"].value if isinstance(meta["type"], FeatureType) else str(meta["type"])
+        if kind == "DATETIME":
+            return "DATE_FEATURES"
+        if kind == "TEXT":
+            return "TFIDF_SVD"
+        if kind == "BINARY":
+            return "BINARY_MAP"
+        if kind in {"CATEGORICAL_LOW", "CATEGORICAL_LOW_CARD"}:
+            return "ONEHOT"
+        if kind in {"CATEGORICAL_HIGH", "CATEGORICAL_HIGH_CARD"}:
+            if self.target_stats_ and self.target_stats_.get("present"):
+                return "TARGET_ENCODE"
+            return "FREQUENCY_ENCODE"
+        if col in self.column_distributions_:
+            return self.column_distributions_[col]
+        if col in self.num_skewed_cols_:
+            return "YEO_JOHNSON"
+        return "KEEP_NUMERIC"
 
     def summary(self) -> str:
         """Affichage synthétique et formaté du rapport dans la console."""

@@ -471,8 +471,8 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
         detail_rows.append({"etape": "type", "etape_label": "Garder / Supprimer",
                             "recommandation": recommended, "recommandation_label": _display_action_for_step("type", recommended, True),
                             "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
-                            "explication": localize_display_text(pedagogical_explanation(
-                                "type", recommended, measure, threshold, row.get("type", ""))),
+                            "explication": _explanation_without_proof(
+                                "type", recommended, measure, threshold, row.get("type", "")),
                             "explication_affichee": _explanation_without_proof("type", recommended, measure, threshold, row.get("type", "")),
                             "choix": action, "choix_label": _display_action_for_step("type", action, True),
                             "choix_labels": [_display_action_for_step("type", item, True) for item in choices_for_step],
@@ -505,8 +505,8 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
                             "recommandation": recommended,
                             "recommandation_label": _display_action_for_step(step, recommended),
                             "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
-                            "explication": localize_display_text(pedagogical_explanation(
-                                step, recommended, measure, threshold, row.get("type", ""))),
+                            "explication": _explanation_without_proof(
+                                step, recommended, measure, threshold, row.get("type", "")),
                             "explication_affichee": _explanation_without_proof(step, recommended, measure, threshold, row.get("type", "")),
                             "choix": action, "modifie": action != recommended,
                             "choix_label": _display_action_for_step(step, action),

@@ -5,6 +5,7 @@ Vérifie la robustesse, l'absence de fuite de données, la persistance et les ca
 """
 
 import os
+import re
 import tempfile
 # pyrefly: ignore[missing-import]
 import numpy as np
@@ -622,7 +623,8 @@ def test_identifier_name_is_dropped_and_explained():
     frame = read_table("data/fraud_signal_demo.csv")
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame).to_dataframe().set_index("colonne")
     assert result.loc["client_id", "action"] == "DROP"
-    assert "ratio uniques/lignes" in result.loc["client_id", "raison"]
+    assert "94.7%" in result.loc["client_id", "raison"]
+    assert "90.0%" in result.loc["client_id", "raison"]
 
 
 def test_all_step_recommendations_are_accepted_by_fit():
@@ -803,7 +805,7 @@ def test_analysis_cleaning_counts_and_prelaunch_summary():
     frame = pd.DataFrame({"value": ["N/A", "?", "null", "a", "b", "c", "d", "e", "f", "g"]})
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
     row = result.to_dataframe().iloc[0]
-    assert row["steps"]["clean_missing_tokens"]["measure"].startswith("cellules=3")
+    assert row["steps"]["clean_missing_tokens"]["measure"].startswith("3 cellules")
     summary = build_preprocess_summary(result, {"value": {"type": "DROP"}})
     assert summary["dropped_columns"] == ["value"]
     assert summary["user_columns"] == ["value"]
@@ -867,8 +869,9 @@ def test_detail_panel_logic_is_pure_and_contains_step_evidence():
     assert "price | type=" in detail["header"]
     assert any(row["etape"] == "distribution" and row["modifie"] and
                row["recommandation"] == "YEO_JOHNSON" for row in detail["rows"])
-    assert all(row["explication"] and row["preuve"].split(" ; seuil : ")[0] in row["explication"]
-               for row in detail["rows"])
+    assert all(row["explication"] and row["preuve"] and " ; seuil : " in row["preuve"]
+               and row["preuve"].split(" ; seuil : ")[0] in row["preuve"]
+               and row["preuve"] not in row["explication"] for row in detail["rows"])
 
 
 def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
@@ -882,13 +885,17 @@ def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
     for row in result.columns:
         details = build_analysis_detail(result, row["colonne"])["rows"]
         assert details
-        assert all(item["explication"].strip() and item["preuve"].split(" ; seuil : ")[0] in item["explication"]
-                   for item in details)
+        assert all(item["explication"].strip() and item["preuve"]
+                   and " ; seuil : " in item["preuve"]
+                   and item["preuve"].split(" ; seuil : ")[0] in item["preuve"]
+                   and item["preuve"] not in item["explication"] for item in details)
         for step, recommendation in row["steps"].items():
             if len(recommendation.get("choices", [])) > 1:
                 assert recommendation["explanation"].strip()
                 assert recommendation["measure"].strip()
-                assert recommendation["measure"] in recommendation["explanation"]
+                assert recommendation["evidence"].startswith(recommendation["measure"])
+                assert " ; seuil : " in recommendation["evidence"]
+                assert recommendation["evidence"] not in recommendation["explanation"]
     table = build_analysis_table(result)
     assert table["raison"].str.len().gt(0).all()
     assert table["preuve"].str.len().gt(0).all()
@@ -1107,8 +1114,8 @@ def test_three_confidence_levels_statistical_rules():
     assert analysis_small.columns[0]["confiance"] == "faible"
 
 
-def test_every_recommendation_step_has_nonempty_explanation_with_measure():
-    """Test (e) : chaque recommandation (colonne x étape) a une explication non vide avec la mesure."""
+def test_every_recommendation_step_separates_explanation_and_evidence():
+    """Chaque recommandation expose séparément son explication et sa preuve."""
     from app_preprocess import read_table
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
@@ -1124,9 +1131,10 @@ def test_every_recommendation_step_has_nonempty_explanation_with_measure():
                     meas = detail.get("measure", "").strip()
                     assert len(exp) > 0, f"Explication vide pour {row['colonne']} -> {step}"
                     assert len(meas) > 0, f"Mesure vide pour {row['colonne']} -> {step}"
-                    assert meas in exp or meas.split(";")[0] in exp, (
-                        f"Mesure '{meas}' non trouvée dans explication '{exp}' ({row['colonne']} -> {step})"
-                    )
+                    evidence = detail.get("evidence", "")
+                    assert evidence.startswith(meas)
+                    assert " ; seuil : " in evidence
+                    assert evidence not in exp
 
 
 
@@ -1214,7 +1222,7 @@ def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos(
             panel_row = next(item for item in detail["rows"] if item["etape"] == step)
             assert panel_row["preuve"] == summary["preuve"], (path, row["colonne"])
             assert row["steps"][step]["reason"] == summary["raison"]
-            assert "=" not in summary["raison"]
+            assert not re.search(r"\w+=\S", summary["raison"])
             assert "Garder / Supprimer=" not in summary["raison"]
             assert not any(token in summary["raison"] for token in
                            ("encoding=", "distribution=", "type=", "dates="))
@@ -1248,10 +1256,165 @@ def test_analysis_reasons_use_selected_stage_measure_and_date_details():
             if row.get("est_cible"):
                 continue
             reason = analysis_recommendation_summary(row)["raison"]
-            assert "=" not in reason
+            assert not re.search(r"\w+=\S", reason)
             assert "Garder / Supprimer" not in reason
             assert "DROP_ID" not in reason and "NUMERIC_CONTINUOUS" not in reason
             if row.get("action") == "DATE_FEATURES":
-                assert "plage" in reason.lower()
+                assert "heures" in reason.lower() or "plage" in reason.lower()
                 assert "parsables" in reason.lower()
                 assert "granularite" in reason.lower() or "granularité" in reason.lower()
+
+
+def test_phase1_source_encoding_and_demo_recommendation_text():
+    from pathlib import Path
+    from app_preprocess import analysis_recommendation_summary, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    mojibake = (chr(0xC3), chr(0xE2))
+    for filename in ("auto_preprocessor.py", "app_preprocess.py"):
+        source = Path(filename).read_text(encoding="utf-8-sig")
+        assert all(marker not in source for marker in mojibake)
+        assert "# -*- coding: utf-8 -*-" in source.splitlines()[:2]
+
+    technical = re.compile(r"\b(?:skew|cardinality|normality_p|p_cible|IQR|MAD)=\S", re.I)
+    for filename in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                     "data/fraud_signal_demo.csv"):
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(filename))
+        for row in result.columns:
+            summary = analysis_recommendation_summary(row)
+            for text in (summary["raison"], summary["preuve"], summary["explication"]):
+                assert all(marker not in text for marker in mojibake)
+                assert "p 0" not in text.lower()
+                assert "plus de" not in text.lower()
+                assert not technical.search(text), (filename, row["colonne"], text)
+
+
+def test_phase1_montant_proof_and_csv_export_keep_unicode_and_p_value(tmp_path):
+    from app_preprocess import analysis_recommendation_summary, export_analysis_csv, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
+        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    row = next(item for item in result.columns if item["colonne"] == "montant")
+    proof = analysis_recommendation_summary(row)["preuve"]
+    assert "|skew| > 1" in proof
+    assert "p < 0.001" in proof
+    output = tmp_path / "analyse_colonnes.csv"
+    export_analysis_csv(result, str(output))
+    data = output.read_text(encoding="utf-8-sig")
+    assert "asym" + chr(0xE9) + "trie" in data
+    assert "p < 0.001" in data
+
+
+def test_phase1_read_table_decodes_utf8_and_cp1252_accents(tmp_path):
+    from app_preprocess import read_table
+
+    expected = "Caf" + chr(0xE9)
+    for encoding in ("utf-8", "cp1252"):
+        path = tmp_path / (encoding + ".csv")
+        path.write_bytes(("ville\n" + expected + "\n").encode(encoding))
+        assert read_table(str(path)).iloc[0, 0] == expected
+
+
+def test_phase1_time_only_features_do_not_depend_on_current_date(monkeypatch):
+    import auto_preprocessor as module
+    from app_preprocess import analysis_recommendation_summary
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = pd.DataFrame({"heure": ["00:00:12", "08:15:00", "16:30:05", "23:59:41"] * 20})
+    analysis = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    row = analysis.columns[0]
+    reason = analysis_recommendation_summary(row)["raison"]
+    assert row["action"] == "DATE_FEATURES"
+    assert "heures 00:00:12" in reason and "23:59:41" in reason
+    assert "colonne horaire sans date" in reason
+
+    monkeypatch.setattr(module, "_current_timestamp", lambda tz=None: pd.Timestamp("2001-01-01"))
+    first = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    monkeypatch.setattr(module, "_current_timestamp", lambda tz=None: pd.Timestamp("2099-12-31"))
+    second = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_phase2_recommendation_matches_report_action_on_demo_datasets():
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        frame = read_table(path)
+        prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+        analysis = prep.analyze(frame)
+        prep.fit_transform(frame)
+        report = prep.report()["colonnes_detaillees"].set_index("Colonne")
+        for row in analysis.columns:
+            if row.get("est_cible"):
+                continue
+            assert report.loc[row["colonne"], "Action appliquée"] == row["action"]
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("include_target", [False, True])
+def test_phase2_accept_all_recommendations_matches_baseline(task, include_target):
+    from auto_preprocessor import AutoPreprocessor, ColumnOverride, PreprocessConfig
+
+    n = 120
+    frame = pd.DataFrame({
+        "value": np.linspace(1., 25., n) ** 1.4,
+        "category": [f"group_{i % 15}" for i in range(n)],
+        "small_category": [f"s{i % 4}" for i in range(n)],
+        "event_date": pd.date_range("2023-01-01", periods=n).astype(str),
+    })
+    rng = np.random.default_rng(43)
+    y = rng.integers(0, 2, size=n) if task == "classification" else rng.normal(40., 8., size=n)
+    if include_target:
+        frame["target"] = y
+    features = frame.drop(columns=["target"], errors="ignore")
+    config = PreprocessConfig(verbose=0)
+    analysis = AutoPreprocessor(config, task=task).analyze(
+        frame, target="target" if include_target else None)
+    overrides = {row["colonne"]: ColumnOverride(row["action"])
+                 for row in analysis.columns if not row.get("est_cible")}
+    fit_target = y if include_target else None
+    baseline = AutoPreprocessor(config, task=task).fit_transform(features, fit_target)
+    accepted = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides=overrides), task=task).fit_transform(features, fit_target)
+    pd.testing.assert_frame_equal(baseline, accepted)
+
+
+def test_phase2_test_data_cannot_change_train_fitted_statistics():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    train = pd.DataFrame({"amount": [1., 2., np.nan, 4., 5., 7.],
+                          "category": ["a", "b", "a", "b", "c", "a"]})
+    test_a = pd.DataFrame({"amount": [8., np.nan], "category": ["new", "a"]})
+    test_b = pd.DataFrame({"amount": [1e9, -1e9], "category": ["other", "other"]})
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+    train_result = prep.fit_transform(train)
+    learned_imputer = dict(prep.num_imputer_)
+    learned_frequency = {col: values.copy() for col, values in prep.freq_encoding_maps_.items()}
+    prep.transform(test_a)
+    prep.transform(test_b)
+    assert prep.num_imputer_ == learned_imputer
+    assert prep.freq_encoding_maps_ == learned_frequency
+    pd.testing.assert_frame_equal(train_result, AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(train))
+
+
+def test_phase2_save_load_transform_keeps_overrides_and_unknown_category_behavior(tmp_path):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    train = pd.DataFrame({"category": ["a", "b", "a", "c"] * 10,
+                          "amount": np.arange(40, dtype=float)})
+    test = pd.DataFrame({"category": ["unseen", "a", "other"], "amount": [50., 51., 52.]})
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0,
+        column_overrides={"category": {"encoding": "ONEHOT"}, "amount": {"scaling": "ROBUST"}}))
+    prep.fit(train)
+    expected = prep.transform(test)
+    path = tmp_path / "phase2.joblib"
+    prep.save(str(path))
+    loaded = AutoPreprocessor.load(str(path))
+    actual = loaded.transform(test)
+    pd.testing.assert_frame_equal(expected, actual)
+    assert loaded.config.column_overrides == prep.config.column_overrides
+    report = loaded.report()["colonnes_detaillees"].set_index("Colonne")
+    assert "choix utilisateur" in report.loc["category", "Choix utilisateur"]
+    assert "choix utilisateur" in report.loc["amount", "Choix utilisateur"]

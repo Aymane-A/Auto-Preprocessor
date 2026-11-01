@@ -102,6 +102,94 @@ ACTION_RECOMMENDATION_STEP = {
 }
 
 
+PREPROCESS_LABELS = {
+    "interface": {
+        "task": "Tâche", "data": "Données", "parameters": "Paramètres",
+        "result": "Résultat", "selection": "Sélection",
+    },
+    "steps": {
+        "nettoyage": ("Nettoyage général", "Résumé des corrections détectées."),
+        "clean_missing_tokens": ("Faux manquants", "Convertit certains marqueurs textuels en valeurs manquantes."),
+        "clean_variants": ("Variantes de modalités", "Fusionne les différences de casse, espaces et accents."),
+        "clean_numeric_text": ("Nombres écrits en texte", "Convertit les nombres importés comme chaînes."),
+        "clean_dates": ("Formats de dates", "Analyse les chaînes comme dates reconnues."),
+        "clean_impossible": ("Valeurs impossibles", "Traite les valeurs hors des bornes métier détectées."),
+        "duplicates": ("Lignes dupliquées", "Décide du traitement des lignes identiques."),
+        "type": ("Garder / Supprimer", "Conserve la colonne ou la retire des variables explicatives."),
+        "missing": ("Valeurs manquantes", "Impute les absences ou ajoute un indicateur."),
+        "outliers": ("Valeurs extrêmes", "Borne ou conserve les observations atypiques."),
+        "distribution": ("Distribution", "Transforme la forme de la distribution numérique."),
+        "scaling": ("Mise à l'échelle", "Met les variables numériques sur une échelle comparable."),
+        "encoding": ("Encodage", "Convertit les catégories en variables numériques."),
+        "dates": ("Dates", "Extrait des composantes calendaires."),
+        "text": ("Texte libre", "Vectorise et résume le contenu textuel."),
+        "target": ("Cible", "La cible est traitée séparément des features."),
+        "selection": ("Sélection finale", "Retire ou conserve les variables redondantes."),
+    },
+    "actions": {
+        "AUTO": ("Automatique", "Laisse la règle de détection choisir le traitement."),
+        "CLEAN_DEFAULT": ("Nettoyage automatique", "Applique les corrections détectées."),
+        "TO_NAN": ("Convertir en valeur manquante", "Reconnaît les marqueurs d'absence courants."),
+        "KEEP": ("Garder tel quel", "Préserve les valeurs originales."),
+        "SELECTED_TO_NAN": ("Convertir les valeurs choisies", "Ne remplace que les marqueurs sélectionnés."),
+        "MERGE": ("Fusionner les variantes", "Regroupe les libellés équivalents."),
+        "CONVERT": ("Convertir en numérique", "Extrait les nombres et retire les unités."),
+        "PARSE": ("Analyser comme date", "Convertit les chaînes en dates."),
+        "DROP_COLUMN": ("Supprimer la colonne", "Retire la colonne du dataset."),
+        "NAN": ("Remplacer par manquant", "Remplace les valeurs impossibles par une absence."),
+        "CLIP": ("Limiter aux bornes", "Ramène les valeurs aux limites autorisées."),
+        "DROP_ROWS": ("Supprimer les lignes", "Retire les observations contenant ces valeurs."),
+        "IGNORE": ("Ignorer", "Conserve les valeurs sans correction."),
+        "DROP": ("Supprimer", "Retire la colonne du modèle."),
+        "FORCE_NUMERIC": ("Forcer numérique", "Interprète la colonne comme une mesure numérique."),
+        "FORCE_CATEGORICAL": ("Forcer catégoriel", "Traite les valeurs comme des modalités."),
+        "FORCE_DATE": ("Forcer date", "Interprète les valeurs comme des dates."),
+        "FORCE_TEXT": ("Forcer texte", "Traite la colonne comme du texte libre."),
+        "KEEP_RAW": ("Garder brut", "Évite les corrections automatiques de contenu."),
+        "MEDIAN": ("Imputer par médiane", "Remplace les absences par la médiane."),
+        "MEAN": ("Imputer par moyenne", "Remplace les absences par la moyenne."),
+        "MODE": ("Imputer par mode", "Remplace les absences par la modalité la plus fréquente."),
+        "CONSTANT": ("Imputer par constante", "Remplace les absences par une valeur définie."),
+        "MISSING_CATEGORY": ("Modalité ‘manquant’", "Conserve l'absence comme modalité catégorielle."),
+        "MISSING_INDICATOR": ("Ajouter un indicateur", "Ajoute une variable signalant les absences."),
+        "WINSORIZE": ("Winsoriser", "Borne les extrêmes selon les quantiles."),
+        "IQR": ("Limiter par intervalle interquartile", "Borne les extrêmes selon l'IQR."),
+        "NONE": ("Aucun traitement", "Conserve les valeurs sans transformation supplémentaire."),
+        "LOG1P": ("Transformation logarithmique", "Compresse la queue droite de la distribution."),
+        "BOX_COX": ("Transformation Box-Cox", "Rend une variable positive plus symétrique."),
+        "YEO_JOHNSON": ("Transformation Yeo-Johnson", "Réduit l'asymétrie sans imposer des valeurs positives."),
+        "SQRT": ("Racine carrée", "Réduit modérément l'effet des grandes valeurs."),
+        "STANDARD": ("Standardiser", "Centre et réduit la variable."),
+        "SCALE_STANDARD": ("Standardiser", "Centre et réduit la variable."),
+        "ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
+        "SCALE_ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
+        "MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
+        "SCALE_MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
+        "MAXABS": ("Échelle valeur absolue maximale", "Préserve les zéros et réduit par maximum absolu."),
+        "NO_SCALE": ("Aucune mise à l'échelle", "Conserve les unités d'origine."),
+        "ONEHOT": ("Encodage One-Hot", "Crée une variable par modalité."),
+        "TARGET_ENCODE": ("Encodage supervisé", "Encode les modalités à partir de la cible hors pli."),
+        "FREQUENCY_ENCODE": ("Encodage par fréquence", "Remplace chaque modalité par sa fréquence."),
+        "ORDINAL": ("Encodage ordinal", "Associe un nombre selon l'ordre fourni."),
+        "BINARY_MAP": ("Mappage binaire", "Code les deux modalités en 0 et 1."),
+        "DATE_FEATURES": ("Extraire les dates", "Crée des variables calendaires."),
+        "TFIDF_SVD": ("Résumé TF-IDF", "Vectorise le texte puis le réduit en composantes."),
+        "KEEP_NUMERIC": ("Garder comme numérique", "Conserve les valeurs numériques."),
+        "NO_TARGET": ("Aucune cible", "Aucune relation supervisée n'est calculée."),
+        "TRANSFORM": ("Transformer la cible", "Transforme la cible de régression."),
+        "KEEP_SELECTION": ("Garder", "Conserve la variable dans la sélection finale."),
+    },
+    "types": {
+        "TARGET": "Cible", "DROP_ID": "Identifiant à supprimer", "DROP_CONSTANT": "Colonne constante",
+        "DROP_HIGH_MISSING": "Trop de valeurs manquantes", "DROP_DUPLICATE": "Colonne dupliquée",
+        "DROP_LEAKAGE": "Fuite de cible", "BINARY": "Binaire", "ORDINAL": "Ordinale",
+        "NUMERIC_CONTINUOUS": "Numérique continue", "NUMERIC_DISCRETE": "Numérique discrète",
+        "CATEGORICAL_LOW_CARD": "Catégorielle faible",
+        "CATEGORICAL_HIGH_CARD": "Catégorielle forte", "DATETIME": "Date / heure", "TEXT": "Texte libre",
+    },
+}
+
+
 def format_step_evidence(measure: str, threshold: str) -> str:
     """Formateur unique des preuves d'une recommandation d'étape."""
     return f"{str(measure).strip()} ; seuil : {str(threshold).strip()}"
@@ -109,16 +197,7 @@ def format_step_evidence(measure: str, threshold: str) -> str:
 
 def format_step_reason(action: str, measure: str, threshold: str) -> str:
     """Construit le résumé français depuis les champs de mesure et de seuil."""
-    action_labels = {
-        "DROP": "Suppression recommandée", "KEEP_NUMERIC": "Conserver comme numérique",
-        "YEO_JOHNSON": "Transformation Yeo-Johnson", "LOG1P": "Transformation log1p",
-        "BOX_COX": "Transformation Box-Cox", "SQRT": "Transformation racine carrée",
-        "DATE_FEATURES": "Extraire les dates", "TFIDF_SVD": "Résumer le texte par TF-IDF/SVD",
-        "ONEHOT": "Encodage One-Hot", "TARGET_ENCODE": "Encodage supervisé",
-        "FREQUENCY_ENCODE": "Encodage par fréquence", "ORDINAL": "Encodage ordinal",
-        "BINARY_MAP": "Mappage binaire",
-    }
-    label = action_labels.get(str(action), "Conserver le traitement automatique")
+    label = PREPROCESS_LABELS["actions"].get(str(action), ("Automatique", ""))[0]
     evidence = str(measure).strip()
     limit = str(threshold).strip()
     if action == "DROP":
@@ -132,11 +211,25 @@ def recommendation_step_name(action: Any) -> str:
     return ACTION_RECOMMENDATION_STEP.get(str(value), "type")
 
 
-def _is_time_only_column(name: Any, series: pd.Series) -> bool:
-    """Reconnaît une colonne heure sans date à partir du nom et des valeurs."""
-    column = str(name).casefold()
-    if not re.search(r"heure|time", column) or re.search(r"date|timestamp|datetime", column):
-        return False
+def _pipeline_distribution_values(values: pd.Series, config: PreprocessConfig) -> pd.Series:
+    """Reproduit le traitement des extrêmes et l'imputation avant la règle d'asymétrie."""
+    numeric = pd.to_numeric(values, errors="coerce").dropna().astype(float)
+    if numeric.empty:
+        return numeric
+    method = str(config.outlier_method).lower()
+    if method == "winsorize":
+        numeric = numeric.clip(numeric.quantile(config.outlier_lower_quantile),
+                                numeric.quantile(config.outlier_upper_quantile))
+    elif method == "iqr":
+        q1, q3 = numeric.quantile([.25, .75])
+        spread = q3 - q1
+        numeric = numeric.clip(q1 - config.outlier_iqr_multiplier * spread,
+                                q3 + config.outlier_iqr_multiplier * spread)
+    return numeric
+
+
+def _is_time_only_column(series: pd.Series) -> bool:
+    """Reconnaît une colonne contenant uniquement des heures, d'après ses valeurs."""
     values = series.dropna().astype(str).str.strip()
     if values.empty:
         return False
@@ -236,30 +329,31 @@ def recommendation_confidence(sample_size: int, evidence_strength: float,
     return "faible"
 
 
-def _recommend_scaler(values: pd.Series) -> Tuple[str, str, str]:
+def _recommend_scaler(values: pd.Series, config: Optional[PreprocessConfig] = None) -> Tuple[str, str, str]:
     """Règle statistique unique de choix du scaler, appelée par analyze et fit."""
+    config = config or PreprocessConfig(verbose=0)
     x = pd.to_numeric(values, errors="coerce").dropna()
     if len(x) < 8:
         return "STANDARD", f"observations disponibles : {len(x)}", "échantillon < 8; scaler standard par défaut"
     q1, q3 = x.quantile(.25), x.quantile(.75)
     spread = q3 - q1
-    iqr_pct = float(((x < q1 - 1.5 * spread) | (x > q3 + 1.5 * spread)).mean() * 100)
+    iqr_pct = float(((x < q1 - config.outlier_iqr_multiplier * spread) | (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100)
     mad = float(np.median(np.abs(x - np.median(x))))
-    mad_pct = float((np.abs(x - np.median(x)) > 3.5 * 1.4826 * mad).mean() * 100) if mad else 0.0
+    mad_pct = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
     kurt = float(x.kurt()) if len(x) > 3 else 0.0
     try:
         p_normal = float(stats.normaltest(x.sample(min(len(x), 5000), random_state=42)).pvalue)
     except Exception:
         p_normal = float("nan")
     zero_pct = float((x == 0).mean() * 100)
-    if zero_pct >= 50:
-        return "MAXABS", f"zéros : {zero_pct:.1f}%", "zéros ≥ 50 %"
-    if x.min() >= 0 and x.max() <= 1:
-        return "MINMAX", f"bornes=[{x.min():.3g}, {x.max():.3g}]", "bornes observées dans [0, 1]"
-    if iqr_pct > 5 or mad_pct > 5 or abs(kurt) > 3:
-        return "ROBUST", f"outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%, kurtosis : {kurt:.2f}", "outliers > 5 % ou |kurtosis| > 3"
-    if pd.notna(p_normal) and p_normal > .05 and iqr_pct <= 5 and mad_pct <= 5:
-        return "STANDARD", f"p normalité : {p_normal:.3g}; outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%", "p > 0,05 et outliers ≤ 5 %"
+    if zero_pct >= config.scaler_zero_threshold * 100:
+        return "MAXABS", f"zéros : {zero_pct:.1f}%", f"zéros ≥ {config.scaler_zero_threshold:.1%}"
+    if x.min() >= config.scaler_bounded_min and x.max() <= config.scaler_bounded_max:
+        return "MINMAX", f"bornes observées : [{x.min():.3g}, {x.max():.3g}]", f"bornes incluses dans [{config.scaler_bounded_min:g}, {config.scaler_bounded_max:g}]"
+    if iqr_pct > config.scaler_outlier_threshold * 100 or mad_pct > config.scaler_outlier_threshold * 100 or abs(kurt) > config.scaler_kurtosis_threshold:
+        return "ROBUST", f"outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%, kurtosis : {kurt:.2f}", f"outliers > {config.scaler_outlier_threshold:.1%} ou |kurtosis| > {config.scaler_kurtosis_threshold:g}"
+    if pd.notna(p_normal) and p_normal > config.normality_p_threshold and iqr_pct <= config.scaler_outlier_threshold * 100 and mad_pct <= config.scaler_outlier_threshold * 100:
+        return "STANDARD", f"p normalité : {p_normal:.3g}; outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%", f"p > {config.normality_p_threshold:g} et outliers ≤ {config.scaler_outlier_threshold:.1%}"
     return "STANDARD", f"p normalité : {p_normal:.3g}; outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%; kurtosis : {kurt:.2f}", "Standard par défaut faute de critère spécifique"
 
 
@@ -286,6 +380,7 @@ class StepRecommendation:
     explanation: str
     confidence: str
     choices: List[str] = field(default_factory=list)
+    rule: str = ""
 
 
 @dataclass
@@ -383,10 +478,20 @@ class PreprocessConfig:
     outlier_lower_quantile: float = 0.01
     outlier_upper_quantile: float = 0.99
     outlier_iqr_multiplier: float = 1.5
+    outlier_mad_threshold: float = 3.5
+    scaler_zero_threshold: float = 0.50
+    scaler_outlier_threshold: float = 0.05
+    scaler_kurtosis_threshold: float = 3.0
+    scaler_bounded_min: float = 0.0
+    scaler_bounded_max: float = 1.0
+    normality_p_threshold: float = 0.05
+    date_parse_threshold: float = 0.80
+    target_relation_p_threshold: float = 0.05
     missing_indicator_threshold: float = 0.05
     variance_threshold: float = 0.0
     constant_threshold: float = 0.99
     identifier_unique_threshold: float = 0.90
+    value_bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = field(default_factory=dict)
     max_text_features: int = 15
     text_svd_components: int = 4
     ordinal_orders: Optional[Dict[str, List[Any]]] = None
@@ -532,7 +637,7 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
         self.output_feature_names_ = []
 
         for col in self.columns_:
-            time_only = _is_time_only_column(col, X[col])
+            time_only = _is_time_only_column(X[col])
             self.time_only_[col] = time_only
             dt_series = _parse_datetime_values(X[col], time_only)
             valid_dt = dt_series.dropna()
@@ -1227,13 +1332,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 raise ValueError(f"Action clean_impossible invalide pour {col!r}: {action}")
             series = out[col]
             lower = upper = None
-            name = str(col).casefold()
-            if re.search(r"(^|_)(age|ages)(_|$)", name):
-                lower, upper = 0.0, 120.0
-            elif re.search(r"percent|pourcent|pct|ratio|(^|_)rate(_|$)", name):
-                lower, upper = 0.0, 100.0
-            elif re.search(r"prix|price|montant|amount|surface|quantity|quantite", name):
-                lower = 0.0
+            configured_bounds = (self.config.value_bounds or {}).get(str(col))
+            if configured_bounds is not None:
+                lower, upper = configured_bounds
             mask = pd.Series(False, index=out.index)
             if lower is not None or upper is not None:
                 numeric = pd.to_numeric(series, errors="coerce")
@@ -1241,7 +1342,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     mask |= numeric < lower
                 if upper is not None:
                     mask |= numeric > upper
-            if pd.api.types.is_datetime64_any_dtype(series) and not _is_time_only_column(col, series):
+            if pd.api.types.is_datetime64_any_dtype(series) and not _is_time_only_column(series):
                 now = _current_timestamp(series.dt.tz).normalize()
                 mask |= series > now
             count = int(mask.sum())
@@ -1407,14 +1508,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             seen_contents[content_hash] = col
 
             # 4. Colonne d'identifiant (ID)
-            identifier_name = bool(re.search(r"(^|_)(id|code|ref|num)(_|$)", str(col).strip().lower()))
             unique_ratio = n_unique / max(n_rows, 1)
-            is_id_candidate = (
-                n_rows > 30
-                and (identifier_name or (unique_ratio > self.config.identifier_unique_threshold and
-                     (pd.api.types.is_integer_dtype(series) or pd.api.types.is_object_dtype(series)
-                      or pd.api.types.is_string_dtype(series))))
-            )
+            textual_identifier = (pd.api.types.is_object_dtype(series) or
+                                  pd.api.types.is_string_dtype(series))
+            integer_sequence = False
+            if pd.api.types.is_integer_dtype(series) and unique_ratio > self.config.identifier_unique_threshold:
+                ordered_values = np.sort(pd.to_numeric(non_null, errors="coerce").dropna().unique())
+                diffs = np.diff(ordered_values)
+                integer_sequence = len(diffs) > 0 and bool(np.all(diffs == diffs[0]))
+            is_id_candidate = (n_rows > 30 and unique_ratio > self.config.identifier_unique_threshold
+                               and (textual_identifier or integer_sequence))
             # Vérifier si ce n'est pas un texte long
             # Une colonne date/heure quasi unique (horodatage) n'est pas un ID
             date_clean_action, _ = self._override_value(str(col), "clean_dates")
@@ -1424,9 +1527,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 mean_str_len = non_null.astype(str).str.len().mean() if len(non_null) > 0 else 0
                 if mean_str_len < 30:
                     meta["type"] = FeatureType.DROP_ID
-                    meta["reason"] = (f"Identifiant détecté : ratio uniques/lignes = {unique_ratio:.1%} "
-                                       f"(seuil > {self.config.identifier_unique_threshold:.0%})" if unique_ratio > self.config.identifier_unique_threshold else
-                                       f"Nom évocateur d'un identifiant ({col!r}); ratio uniques/lignes = {unique_ratio:.1%}")
+                    meta["reason"] = (f"Profil d'identifiant : uniques/lignes = {unique_ratio:.1%} "
+                                       f"(seuil > {self.config.identifier_unique_threshold:.0%})")
                     meta["action"] = "DROP"
                     self.columns_to_drop_.append(col)
                     self.column_metadata_[col] = meta
@@ -1974,7 +2076,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             elif kind_name == "DATETIME":
                 action = Action.DATE_FEATURES
                 alternatives = [Action.DROP]
-                time_only = _is_time_only_column(col, nonnull)
+                time_only = _is_time_only_column(nonnull)
                 dates = _parse_datetime_values(nonnull, time_only)
                 parsed_dates = dates.dropna().sort_values()
                 gaps = parsed_dates.diff().dropna().dt.total_seconds()
@@ -2024,15 +2126,18 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             else:
                 vals = pd.to_numeric(nonnull, errors="coerce").dropna()
                 skew = float(vals.skew()) if len(vals) > 2 else 0.0
+                distribution_values = _pipeline_distribution_values(s, self.config)
+                decision_skew = float(stats.skew(distribution_values)) if len(distribution_values) > 2 else 0.0
                 q1, q3 = vals.quantile(.25), vals.quantile(.75)
                 iqr = q3 - q1
-                outlier_pct = float((((vals < q1 - 1.5 * iqr) | (vals > q3 + 1.5 * iqr)).mean()) * 100) if len(vals) else 0.0
+                outlier_pct = float((((vals < q1 - self.config.outlier_iqr_multiplier * iqr) | (vals > q3 + self.config.outlier_iqr_multiplier * iqr)).mean()) * 100) if len(vals) else 0.0
                 stats_row.update(min=vals.min() if len(vals) else np.nan, max=vals.max() if len(vals) else np.nan,
                                  mean=vals.mean() if len(vals) else np.nan, median=vals.median() if len(vals) else np.nan,
                                  std=vals.std() if len(vals) else np.nan, skew=skew,
-                                 kurtosis=float(vals.kurt()) if len(vals) > 3 else np.nan, outliers_pct=outlier_pct)
+                                  kurtosis=float(vals.kurt()) if len(vals) > 3 else np.nan, outliers_pct=outlier_pct,
+                                  skew_after_outlier_treatment=decision_skew)
                 mad = float(np.median(np.abs(vals - np.median(vals)))) if len(vals) else 0.0
-                mad_rate = float((np.abs(vals - np.median(vals)) > 3.5 * 1.4826 * mad).mean() * 100) if mad else 0.0
+                mad_rate = float((np.abs(vals - np.median(vals)) > self.config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
                 cv = float(vals.std() / abs(vals.mean())) if len(vals) and vals.mean() else np.nan
                 normality_p = np.nan
                 shapiro_p = np.nan
@@ -2046,17 +2151,19 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 zero_pct = float((vals == 0).mean() * 100) if len(vals) else 0.0
                 stats_row.update(outliers_mad_pct=mad_rate, coefficient_variation=cv,
                                  normality_p=normality_p, shapiro_p=shapiro_p, zero_pct=zero_pct)
-                action = Action.YEO_JOHNSON if abs(skew) > self.config.skew_threshold else Action.KEEP_NUMERIC
+                action = Action.YEO_JOHNSON if abs(decision_skew) > self.config.skew_threshold else Action.KEEP_NUMERIC
                 alternatives = [Action.DROP, Action.YEO_JOHNSON, Action.LOG1P, Action.WINSORIZE,
                                 Action.SCALE_STANDARD, Action.SCALE_ROBUST, Action.SCALE_MINMAX, Action.NO_SCALE]
-                reason = (f"Asymétrie = {skew:.2f}; Yeo-Johnson est activé par défaut au-dessus de "
+                reason = (f"Asymétrie après bornage = {decision_skew:.2f}; Yeo-Johnson est activé par défaut au-dessus de "
                           f"{self.config.skew_threshold:g}." if action == Action.YEO_JOHNSON else
-                          f"Asymétrie = {skew:.2f}, sous le seuil {self.config.skew_threshold:g}; traitement numérique standard.")
+                          f"Asymétrie après bornage = {decision_skew:.2f}, sous le seuil {self.config.skew_threshold:g}; traitement numérique standard.")
             # Les 11 étapes sont explicites. Les étapes non configurées reprennent le comportement du pipeline.
             def rec(action_name: str, measure: str, threshold: str, explanation: str,
-                    choices: List[str], conf: str = "moyenne") -> Dict[str, Any]:
+                    choices: List[str], conf: str = "moyenne", rule: str = "") -> Dict[str, Any]:
                 return {"action": action_name, "measure": measure, "threshold": threshold,
-                        "explanation": explanation, "confidence": conf, "choices": choices}
+                        "explanation": explanation, "confidence": conf, "choices": choices,
+                        "rule": rule or "règle de décision basée sur les mesures de la colonne",
+                        "domain": kind_name}
             step_recs["nettoyage"] = rec("CLEAN_DEFAULT", f"{missing:.1%} de valeurs manquantes", "règles de nettoyage du module",
                 "Nettoyage des sous-étapes sélectionnées.", ["AUTO"])
             false_tokens = text_values.str.strip().str.casefold().isin(DEFAULT_NA_VALUES)
@@ -2071,11 +2178,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             numeric_text_ratio = float(numeric_converted.notna().mean()) if len(numeric_converted) else 0.0
             convertible_values = raw_nonnull[numeric_converted.notna()] if len(numeric_converted) else pd.Series(dtype=object)
             units = sorted(set(convertible_values.astype(str).str.extract(r"([A-Za-z%]{1,8})\s*$", expand=False).dropna().str.upper())) if len(convertible_values) else []
+            units_text = ", ".join(units) if units else "aucune"
             date_parse_rate = 0.0
             mixed_date_formats = 0
-            if len(nonnull) and (kind_name == "DATETIME" or re.search(r"date|heure|time", str(col), re.I)):
+            if len(nonnull) and kind_name == "DATETIME":
                 date_source = raw_s.dropna()
-                time_only = _is_time_only_column(col, date_source)
+                time_only = _is_time_only_column(date_source)
                 parsed_dates = _parse_datetime_values(date_source, time_only)
                 date_parse_rate = float(parsed_dates.notna().mean())
                 if not time_only:
@@ -2085,61 +2193,78 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             duplicate_rows = int(raw.duplicated().sum())
             step_recs["clean_missing_tokens"] = rec(
                 "TO_NAN", f"{int(false_tokens.sum())} cellules; marqueurs trouvés : {found_false}", "marqueurs de valeurs manquantes reconnus",
-                f"{int(false_tokens.sum())} faux manquants détectés : {found_false}.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
+                "Les marqueurs de manque reconnus deviennent des valeurs imputables; les conserver convient s'ils représentent une vraie modalité.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
             step_recs["clean_variants"] = rec(
                 "MERGE", f"{variant_count} variantes fusionnables", "même texte après trim/casse/accents",
-                f"{variant_count} représentation(s) redondante(s) après normalisation des espaces, casse et accents.", ["MERGE", "KEEP"])
+                "La fusion normalise les espaces, la casse et les accents pour regrouper les modalités équivalentes.", ["MERGE", "KEEP"])
             step_recs["clean_numeric_text"] = rec(
                 "CONVERT" if numeric_text_ratio >= self.config.numeric_string_threshold else "KEEP",
-                f"{numeric_text_ratio:.1%} de nombres convertibles; unités : {units}", f"conversion si ≥ {self.config.numeric_string_threshold:.0%}",
-                f"{numeric_text_ratio:.1%} des cellules textuelles sont numériques; unités repérées: {units or 'aucune'}.", ["AUTO", "CONVERT", "KEEP"])
+                f"{numeric_text_ratio:.1%} de nombres convertibles; unités : {units_text}", f"conversion si ≥ {self.config.numeric_string_threshold:.0%}",
+                "La conversion transforme les chaînes numériques en mesures et retire leurs unités textuelles; garder le texte convient aux codes.", ["AUTO", "CONVERT", "KEEP"])
             step_recs["clean_dates"] = rec(
-                "PARSE" if date_parse_rate >= .8 and date_parse_rate > 0 else "KEEP",
-                f"{date_parse_rate:.1%} parsables; {1-date_parse_rate:.1%} non parsables; formats mélangés : {mixed_date_formats}", "parser si ≥ 80 %",
-                f"{date_parse_rate:.1%} des valeurs sont parsables; formats mélangés estimés à {mixed_date_formats}.", ["AUTO", "PARSE", "KEEP", "DROP_COLUMN"])
+                "PARSE" if date_parse_rate >= self.config.date_parse_threshold and date_parse_rate > 0 else "KEEP",
+                f"{date_parse_rate:.1%} parsables; {1-date_parse_rate:.1%} non parsables; formats mélangés : {mixed_date_formats}", f"parser si ≥ {self.config.date_parse_threshold:.0%}",
+                "Le parsing convertit les dates reconnues pour permettre la création de variables calendaires; garder le texte évite une interprétation incertaine.", ["AUTO", "PARSE", "KEEP", "DROP_COLUMN"])
             step_recs["clean_impossible"] = rec(
                 "NAN" if impossible_count else "IGNORE", f"cas impossibles : {impossible_count}",
                 "age [0,120], pourcentage [0,100], montants/surfaces ≥ 0, dates ≤ aujourd'hui",
-                f"{impossible_count} valeur(s) hors des bornes métier codées ont été détectées.", ["AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"])
+                "Les valeurs hors bornes explicitement configurées sont traitées comme incohérentes; sans bornes configurées, elles restent inchangées.", ["AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"])
             step_recs["duplicates"] = rec(
                 "DROP" if duplicate_rows else "KEEP", f"lignes dupliquées : {duplicate_rows}", "égalité exacte de toutes les cellules",
-                f"{duplicate_rows} ligne(s) dupliquée(s) exacte(s) dans le dataset.", ["DROP", "KEEP"])
-            step_recs["type"] = rec("DROP" if kind_name.startswith("DROP") else "AUTO", f"{nunique} valeurs uniques", f"cardinalité au plus {self.config.cardinality_threshold} modalités",
-                f"Type détecté : {kind_name}; {reason}", ["AUTO", "DROP", "NUMERIC", "CATEGORICAL", "DATETIME", "TEXT"], confidence)
+                "La suppression des lignes strictement identiques évite de surpondérer les répétitions accidentelles.", ["DROP", "KEEP"])
+            step_recs["type"] = rec("DROP" if kind_name.startswith("DROP") else "AUTO", f"{nunique} valeurs uniques", f"identifiant si ratio > {self.config.identifier_unique_threshold:.1%}; suppression si manquants ≥ {self.config.missing_threshold:.1%}",
+                "La détection conserve les variables exploitables et écarte les profils vides, constants ou identifiants selon les seuils configurés.", ["AUTO", "DROP", "NUMERIC", "CATEGORICAL", "DATETIME", "TEXT"], confidence)
             step_recs["missing"] = rec("MEDIAN" if kind_name.startswith("NUMERIC") else "AUTO",
                 f"{missing:.1%} de valeurs manquantes", f"indicateur si > {self.config.missing_indicator_threshold:.1%}",
-                f"Le taux manquant observé est {missing:.1%}; imputation ajustée sur train.",
+                "L'imputation est ajustée sur le jeu d'entraînement; un indicateur complémentaire peut préserver le signal porté par les absences.",
                 ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR"])
             step_recs["outliers"] = rec("WINSORIZE" if kind_name.startswith("NUMERIC") else "AUTO",
                 f"outliers IQR : {stats_row.get('outliers_pct', 0):.2f}%; outliers MAD : {stats_row.get('outliers_mad_pct', 0):.2f}%",
-                "bornes IQR 1,5; MAD robuste 3,5",
-                "Le clipping par quantiles est appliqué selon la configuration du pipeline.",
+                f"IQR : {self.config.outlier_iqr_multiplier:g}; MAD robuste : {self.config.outlier_mad_threshold:g}",
+                "La méthode configurée borne les queues de distribution pour limiter l'influence des extrêmes; les conserver convient s'ils sont légitimes.",
                 ["AUTO", "NONE", "WINSORIZE", "IQR"])
             normality_p = stats_row.get("normality_p", np.nan)
             p_text = ("p < 0.001" if pd.notna(normality_p) and normality_p < .001 else
                       f"p = {normality_p:.3g}" if pd.notna(normality_p) else "p-value indisponible")
-            normality_text = (f"normalité rejetée ({p_text})" if pd.notna(normality_p) and normality_p < .05 else
+            normality_text = (f"normalité rejetée ({p_text})" if pd.notna(normality_p) and normality_p < self.config.normality_p_threshold else
                               f"normalité non rejetée ({p_text})")
-            skew = float(stats_row.get("skew", np.nan))
+            skew = float(stats_row.get("skew_after_outlier_treatment", stats_row.get("skew", np.nan)))
             skew_reaches_threshold = abs(skew) > self.config.skew_threshold
+            distribution_explanation = (
+                "Yeo-Johnson réduit l'asymétrie et accepte les valeurs négatives, ce qui aide les modèles sensibles à la distribution."
+                if action == Action.YEO_JOHNSON else
+                "La distribution conserve son échelle d'origine; ce choix préserve les unités et convient aux méthodes peu sensibles à l'asymétrie."
+            )
             step_recs["distribution"] = rec(action.value if action == Action.YEO_JOHNSON else "AUTO",
-                f"asymétrie = {skew:.2f}; {normality_text}",
-                f"seuil |skew| > {self.config.skew_threshold:g} {'atteint' if skew_reaches_threshold else 'non atteint'}", reason,
+                f"asymétrie après bornage = {skew:.2f}; {normality_text}",
+                f"seuil |skew| > {self.config.skew_threshold:g} {'atteint' if skew_reaches_threshold else 'non atteint'}", distribution_explanation,
                 ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT"])
             scale_recommendation = "AUTO"
             scale_measure = "type non numérique"
             scale_threshold = "aucun"
-            scale_reason = "Aucun scaler numérique recommandé pour cette famille de colonnes."
+            scale_reason = "Aucune mise à l'échelle particulière n'est nécessaire pour ce type de colonne."
             if kind_name.startswith("NUMERIC"):
-                scale_recommendation, scale_measure, scale_threshold = _recommend_scaler(s)
-                scale_reason = f"{scale_measure}; seuil {scale_threshold} → {scale_recommendation}."
+                scale_recommendation, scale_measure, scale_threshold = _recommend_scaler(s, self.config)
+                scale_reason = {
+                    "ROBUST": "L'échelle robuste centre par la médiane et réduit par l'IQR; elle limite l'effet des valeurs extrêmes.",
+                    "STANDARD": "La standardisation centre et réduit la variable; elle convient aux données proches d'une distribution régulière.",
+                    "MINMAX": "L'échelle Min-Max ramène la variable dans une plage bornée tout en préservant l'ordre.",
+                    "MAXABS": "L'échelle par maximum absolu préserve les zéros et convient aux données creuses.",
+                }.get(scale_recommendation, "Les unités d'origine sont conservées, ce qui convient aux méthodes peu sensibles à l'échelle.")
             step_recs["scaling"] = rec(scale_recommendation, scale_measure, scale_threshold,
                 scale_reason, ["AUTO", "NONE", "STANDARD", "ROBUST", "MINMAX", "MAXABS"])
+            encoding_explanation = {
+                Action.ONEHOT: "One-Hot crée une variable par modalité et convient aux catégories sans ordre.",
+                Action.TARGET_ENCODE: "L'encodage supervisé résume les modalités par une statistique de cible calculée hors pli.",
+                Action.FREQUENCY_ENCODE: "L'encodage par fréquence remplace les modalités par leur fréquence d'apparition.",
+                Action.ORDINAL: "L'encodage ordinal associe des nombres aux modalités selon un ordre défini.",
+                Action.BINARY_MAP: "Le mappage binaire transforme deux modalités en indicateurs numériques.",
+            }.get(action, "Aucun encodage particulier n'est recommandé pour le type observé.")
             step_recs["encoding"] = rec(action.value if action in (Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.ORDINAL, Action.BINARY_MAP) else "NONE",
-                f"{nunique} modalités", f"haute cardinalité > {self.config.cardinality_threshold} modalités", reason,
+                f"{nunique} modalités", f"haute cardinalité > {self.config.cardinality_threshold} modalités", encoding_explanation,
                 ["AUTO", "ONEHOT", "ORDINAL", "TARGET_ENCODE", "FREQUENCY_ENCODE", "BINARY_MAP"])
             step_recs["dates"] = rec("DATE_FEATURES" if kind_name == "DATETIME" else "AUTO", f"{nunique} valeurs uniques", "date parsable",
-                "Les composantes de date sont extraites si le type est détecté comme date.", ["AUTO", "DATE_FEATURES"])
+                "Les composantes calendaires rendent les dates exploitables par les modèles numériques.", ["AUTO", "DATE_FEATURES"])
             if kind_name == "DATETIME":
                 min_date = stats_row.get("date_min")
                 max_date = stats_row.get("date_max")
@@ -2152,10 +2277,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 granularity = stats_row.get("date_granularity", "indéterminée")
                 step_recs["dates"].update(
                     measure=f"{date_range}; valeurs parsables {parse_pct:.1f}%; granularité {granularity}",
-                    threshold="date reconnue; parsing ≥ 80%",
+                    threshold=f"date reconnue; parsing ≥ {self.config.date_parse_threshold:.0%}",
                     explanation="La plage, le taux de parsing et la granularité justifient l'extraction des composantes calendaires.")
-            step_recs["text"] = rec("TFIDF_SVD" if kind_name == "TEXT" else "AUTO", f"{nunique} valeurs uniques", "texte long détecté",
-                "TF-IDF/SVD est utilisé pour les colonnes détectées comme texte libre.", ["AUTO", "TFIDF_SVD"])
+            step_recs["text"] = rec("TFIDF_SVD" if kind_name == "TEXT" else "AUTO", f"{nunique} valeurs uniques", "profil de texte libre détecté selon les valeurs",
+                "TF-IDF suivi de SVD représente le vocabulaire en composantes numériques compactes.", ["AUTO", "TFIDF_SVD"])
             step_recs["target"] = rec("AUTO" if target else "NONE", "cible fournie" if target else "aucune cible", "classification/régression",
                 "La cible est traitée séparément; les statistiques de features ne l'ajustent pas.", ["NONE", "AUTO", "TRANSFORM"])
             step_recs["selection"] = rec("AUTO", f"{nunique} valeurs uniques", f"variance > {self.config.variance_threshold}",
@@ -2275,11 +2400,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     target_relation_method = "information mutuelle (échelle [0, +∞[)"
                 elif pd.notna(target_spearman):
                     target_relation_method = "Spearman (échelle [-1, 1])"
-            if pd.notna(missing_target_p) and missing_target_p < 0.05:
+            if pd.notna(missing_target_p) and missing_target_p < self.config.target_relation_p_threshold:
                 step_recs["missing"]["action"] = "MISSING_INDICATOR"
                 missing_p_text = "p < 0.001" if missing_target_p < .001 else f"p = {missing_target_p:.3g}"
                 step_recs["missing"]["measure"] += f"; {missing_p_text} pour le lien avec la cible"
-                step_recs["missing"]["threshold"] = "p < 0,05"
+                step_recs["missing"]["threshold"] = f"p < {self.config.target_relation_p_threshold:g}"
                 step_recs["missing"]["explanation"] = (
                     f"Le statut manquant est associé à la cible (p={missing_target_p:.3g} < 0,05); "
                     "un indicateur de manquant est recommandé."
@@ -2301,21 +2426,20 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     "other"))
                 date_format_count = int(max(patterns.nunique() - 1, 0))
             cleanup_total += date_format_count
-            negative_impossible = int((pd.to_numeric(s, errors="coerce") < 0).sum()) if re.search(r"age|prix|price|montant|surface|quantite|quantity", str(col), re.I) else 0
-            cleanup_total += negative_impossible
+            configured_bounds = (self.config.value_bounds or {}).get(str(col))
+            impossible_count = int(getattr(prep, "impossible_counts_", {}).get(str(col), 0))
+            cleanup_total += impossible_count
             step_recs["nettoyage"]["measure"] = (
                 f"{false_missing} faux manquants; {variant_count} variantes; {numeric_text_count} nombres texte; "
-                f"{date_format_count} formats de date; {negative_impossible} valeurs négatives suspectes; "
+                f"{date_format_count} formats de date; {impossible_count} valeurs hors bornes configurées; "
                 f"{cleanup_total} cellules candidates"
             )
             step_recs["nettoyage"]["threshold"] = (
                 f"nombres texte ≥ {self.config.numeric_string_threshold:.0%}; faux manquants connus; variantes normalisées"
             )
             step_recs["nettoyage"]["explanation"] = (
-                f"Le nettoyage standard corrige les faux manquants ({false_missing}), variantes de casse/espaces "
-                f"({variant_count}), nombres textuels détectés ({numeric_text_count}) et formats dates distincts "
-                f"({date_format_count}); "
-                f"{negative_impossible} valeurs négatives sont suspectes selon le nom de colonne."
+                "Les corrections automatiques normalisent les marqueurs de manque, les modalités et les formats numériques ou calendaires reconnus. "
+                "Les bornes métier ne sont vérifiées que lorsqu'elles sont explicitement configurées."
             )
             sample_n = len(nonnull)
             if sample_n < 30 and confidence != "haute":
@@ -2324,6 +2448,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     detail["confidence"] = "faible"
                     detail["explanation"] += " Échantillon inférieur à 30 valeurs : interprétation prudente."
             for step_name, detail in step_recs.items():
+                detail["rule"] = {
+                    "name": step_name,
+                    "measure": detail.get("measure", ""),
+                    "threshold": detail.get("threshold", ""),
+                    "domain": kind_name,
+                    "action": detail.get("action", "AUTO"),
+                }
                 strength = 0.60
                 p_evidence = None
                 if step_name == "distribution":
@@ -2379,13 +2510,6 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     detail["confidence"] = "haute"
                 else:
                     detail["confidence"] = recommendation_confidence(sample_n, strength, p_evidence)
-                measure_text = str(detail.get("measure", "")).strip()
-                threshold_text = str(detail.get("threshold", "")).strip()
-                if measure_text and measure_text not in str(detail.get("explanation", "")):
-                    detail["explanation"] = (
-                        f"{str(detail.get('explanation', '')).rstrip()} "
-                        f"Preuve : {measure_text}; seuil : {threshold_text}."
-                    )
 
             if action == Action.DROP and kind_name.startswith("DROP"):
                 overall_strength = 1.0
@@ -2438,13 +2562,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                          "spearman_cible": target_spearman, "cramer_cible": target_cramer,
                          "information_mutuelle_cible": target_mi,
                          "p_manquants_cible": missing_target_p,
-                         "manquant_informatif": bool(pd.notna(missing_target_p) and missing_target_p < .05),
+                         "manquant_informatif": bool(pd.notna(missing_target_p) and missing_target_p < self.config.target_relation_p_threshold),
                          "est_cible": False,
                          **stats_row})
         # Paires de features fortement corrélées; ordre d'entrée = règle explicite du préprocesseur.
-        numeric_df = raw.select_dtypes(include=[np.number]).drop(columns=[target] if target else [], errors="ignore")
+        numeric_df = clean.select_dtypes(include=[np.number]).drop(
+            columns=[target] + list(prep.columns_to_drop_) if target else list(prep.columns_to_drop_),
+            errors="ignore")
         correlation_pairs = []
-        if numeric_df.shape[1] > 1:
+        projected_feature_count = max(numeric_df.shape[1], len(clean.columns))
+        if numeric_df.shape[1] > 1 and projected_feature_count >= max(2, self.config.min_features_for_collinearity):
             corr = numeric_df.corr().abs()
             names = list(corr.columns)
             for i, left in enumerate(names):
@@ -2461,10 +2588,22 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     rec_sel["measure"] += f"; corrélation avec {other} : |r|={pair['correlation_abs']:.3f}"
                     rec_sel["threshold"] = f"|r| > {self.config.correlation_threshold:.3f}"
                     rec_sel["explanation"] = (
-                        f"Redondance avec {other} : |r|={pair['correlation_abs']:.3f} > "
-                        f"{self.config.correlation_threshold:.3f}; la colonne {pair['gardee_selon_ordre']} "
-                        "est prioritaire selon l'ordre d'entrée. Le fit final réévalue ce choix sur le train."
+                        "Une variable redondante est écartée selon l'ordre stable des colonnes; le modèle garde la première représentation disponible."
                     )
+                    if col == pair["droite"]:
+                        selected = row_by_name[col]
+                        selected["action"] = Action.DROP.value
+                        selected["recommendation_step"] = "selection"
+                        rec_sel["action"] = "DROP"
+                        rec_sel["rule"] = {
+                            "name": "selection_colinearite",
+                            "measure": rec_sel["measure"],
+                            "threshold": rec_sel["threshold"],
+                            "domain": selected.get("type", ""),
+                            "action": "DROP",
+                        }
+                        if "DROP" not in selected["alternatives"]:
+                            selected["alternatives"].append("DROP")
         for row in rows:
             row["paires_correlees"] = [p for p in correlation_pairs if row["colonne"] in (p["gauche"], p["droite"])]
             if row.get("est_cible"):
@@ -2472,13 +2611,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 row["ratio_uniques_lignes"] = np.nan
                 continue
             unique_ratio = row["uniques"] / max(len(raw), 1)
-            id_named = bool(re.search(r"(^|_)(id|code|ref|num)(_|$)", row["colonne"].lower()))
             row["ratio_uniques_lignes"] = unique_ratio
             row["seuil_identifiant_uniques"] = self.config.identifier_unique_threshold
             if row["type"] == FeatureType.DROP_ID.value:
                 row["drop_preuve"] = f"uniques = {row['uniques']} / {len(raw)} lignes ({unique_ratio:.1%})"
-                row["drop_seuil"] = (f"nom évocateur ou ratio > "
-                                     f"{self.config.identifier_unique_threshold:.1%} des lignes")
+                row["drop_seuil"] = f"ratio uniques/lignes > {self.config.identifier_unique_threshold:.1%}"
             elif row["type"] == FeatureType.DROP_HIGH_MISSING.value:
                 row["drop_preuve"] = f"manquants = {row['manquants_pct']:.1f}%"
                 row["drop_seuil"] = f">= {self.config.missing_threshold:.1%} des lignes"
@@ -2501,30 +2638,26 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 type_recommendation = row.setdefault("steps", {}).setdefault("type", {})
                 type_recommendation.update(
                     action="DROP", measure=row["drop_preuve"], threshold=row["drop_seuil"],
-                    rule=f"{row['type']} déclenché selon la configuration du préprocesseur",
+                    rule={"name": row["type"], "measure": row["drop_preuve"],
+                          "threshold": row["drop_seuil"], "domain": row["type"],
+                          "action": "DROP"},
                     explanation="La suppression est recommandée par la règle de détection correspondante.")
             for recommendation in row.get("steps", {}).values():
                 recommendation["evidence"] = format_step_evidence(
                     recommendation.get("measure", ""), recommendation.get("threshold", ""))
-            primary_step = recommendation_step_name(row.get("action", "AUTO"))
+            primary_step = row.get("recommendation_step") or recommendation_step_name(row.get("action", "AUTO"))
             primary_recommendation = row.get("steps", {}).get(primary_step, {})
             if primary_recommendation:
                 primary_recommendation["reason"] = format_step_reason(
                     row.get("action", "AUTO"), primary_recommendation.get("measure", ""),
                     primary_recommendation.get("threshold", ""))
                 row["raison"] = primary_recommendation["reason"]
-            row["alerte_identifiant"] = bool(row["type"] == FeatureType.DROP_ID.value or
-                                              (unique_ratio > self.config.identifier_unique_threshold and row["type"] != FeatureType.DATETIME.value))
+            row["alerte_identifiant"] = row["type"] == FeatureType.DROP_ID.value
             row["relation_cible_non_fiable_identifiant"] = bool(row.get("relation_cible_non_fiable_identifiant") or row["alerte_identifiant"])
             if row["alerte_identifiant"]:
                 row["relation_cible"] = np.nan
                 row["spearman_cible"] = row["cramer_cible"] = row["information_mutuelle_cible"] = np.nan
                 row["relation_cible_methode"] = "non fiable (identifiant)"
-            if unique_ratio > self.config.identifier_unique_threshold and row["type"] not in {FeatureType.DROP_ID.value, FeatureType.DATETIME.value}:
-                row["raison"] += (f" Avertissement identifiant : ratio uniques/lignes={unique_ratio:.1%} "
-                                   f"(> {self.config.identifier_unique_threshold:.1%}), mais la règle de type ne l'a pas supprimée.")
-                if row["confiance"] != "haute":
-                    row["confiance"] = "faible"
         return AnalysisResult(rows, sample_note)
 
     def fit(self, X: pd.DataFrame, y: Optional[Union[pd.Series, np.ndarray]] = None) -> AutoPreprocessor:
@@ -2665,7 +2798,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Un scaler statistique commun à analyze et fit: les seuils sont réestimés sur le train.
         for col in self.num_cols_:
             if col not in self.column_scalers_:
-                mode = (_recommend_scaler(X_clean[col])[0] if self.config.scaler_type == "standard"
+                mode = (_recommend_scaler(X_clean[col], self.config)[0] if self.config.scaler_type == "standard"
                         else self.config.scaler_type.upper())
                 self.column_scalers_[col] = mode
 
@@ -3065,20 +3198,6 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             corr_mat = X_curr.corr().abs()
             to_drop_collinear = set()
 
-            # Corrélation avec y si disponible
-            target_corrs = {}
-            if y is not None:
-                for col in retained_after_var:
-                    try:
-                        valid_mask = ~np.isnan(X_curr[col]) & ~np.isnan(y)
-                        if valid_mask.sum() > 2:
-                            r, _ = stats.pearsonr(X_curr[col][valid_mask], y[valid_mask])
-                            target_corrs[col] = abs(r) if not np.isnan(r) else 0.0
-                        else:
-                            target_corrs[col] = 0.0
-                    except Exception:
-                        target_corrs[col] = 0.0
-
             for i in range(len(retained_after_var)):
                 c1 = retained_after_var[i]
                 if c1 in to_drop_collinear:
@@ -3089,10 +3208,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         continue
                     r_val = corr_mat.loc[c1, c2]
                     if not np.isnan(r_val) and r_val > self.config.correlation_threshold:
-                        # Garder celle la plus corrélée à y ou à plus forte variance
-                        score1 = target_corrs.get(c1, variances.get(c1, 0))
-                        score2 = target_corrs.get(c2, variances.get(c2, 0))
-                        drop_col = c2 if score1 >= score2 else c1
+                        # Une règle stable indépendante de la cible: garder la première
+                        # représentation selon l'ordre d'entrée et retirer la suivante.
+                        drop_col = c2
                         to_drop_collinear.add(drop_col)
                         logger.debug(
                             f"Colinéarité détectée entre {c1} et {c2} (|r|={r_val:.3f}) -> suppression de {drop_col}"
@@ -3262,6 +3380,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
     def report(self) -> Dict[str, Any]:
         """Génère un rapport exhaustif et explicable de toutes les décisions prises."""
         columns_summary = []
+        analyzed = {str(row.get("colonne")): row for row in
+                    getattr(getattr(self, "analysis_result_", None), "columns", [])}
 
         for col, meta in self.column_metadata_.items():
             status = "GARDÉE"
@@ -3274,6 +3394,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
             # Identifier les features créées
             created_features = [f for f in self.final_feature_names_ if f == col or f.startswith(f"{col}_")]
+            recommendation = analyzed.get(str(col), {})
+            primary_step = (recommendation.get("recommendation_step") or
+                            recommendation_step_name(recommendation.get("action", "AUTO"))) if recommendation else ""
+            recommendation_detail = recommendation.get("steps", {}).get(primary_step, {})
 
             columns_summary.append({
                 "Colonne": col,
@@ -3285,6 +3409,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "Nb features créées": len(created_features),
                 "Choix utilisateur": self.user_override_notes_.get(col, "recommandation suivie"),
                 "Action appliquée": self._reported_action(col, meta),
+                "Raison recommandée": recommendation.get("raison", ""),
+                "Preuve recommandée": recommendation_detail.get("evidence", ""),
+                "Explication recommandée": recommendation_detail.get("explanation", ""),
                 "Détails nettoyage": self.cleaning_decisions_.get(col, {}),
             })
 

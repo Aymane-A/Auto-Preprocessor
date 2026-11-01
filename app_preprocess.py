@@ -31,7 +31,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from auto_preprocessor import (Action, AnalysisResult, AutoPreprocessor, ColumnOverride,
-                               PreprocessConfig, format_step_evidence,
+                               PreprocessConfig, PREPROCESS_LABELS, format_step_evidence,
                                format_step_reason, recommendation_step_name,
                                recommendation_confidence)
 
@@ -39,88 +39,7 @@ NO_TARGET_LABEL = "(aucune : sans cible)"
 
 # Libellés visibles dans l'interface. Les clés techniques restent utilisées dans
 # la configuration, les validations et le JSON exporté.
-LABELS = {
-    "steps": {
-        "nettoyage": ("Nettoyage général", "Résumé des corrections détectées."),
-        "clean_missing_tokens": ("Faux manquants", "Convertit certains marqueurs textuels en valeurs manquantes."),
-        "clean_variants": ("Variantes de modalités", "Fusionne les différences de casse, espaces et accents."),
-        "clean_numeric_text": ("Nombres écrits en texte", "Convertit les nombres importés comme chaînes."),
-        "clean_dates": ("Formats de dates", "Analyse les chaînes comme dates reconnues."),
-        "clean_impossible": ("Valeurs impossibles", "Traite les valeurs hors des bornes métier détectées."),
-        "duplicates": ("Lignes dupliquées", "Décide du traitement des lignes identiques."),
-        "type": ("Garder / Supprimer", "Conserve la colonne ou la retire des variables explicatives."),
-        "missing": ("Valeurs manquantes", "Impute les absences ou ajoute un indicateur."),
-        "outliers": ("Valeurs extrêmes", "Borne ou conserve les observations atypiques."),
-        "distribution": ("Distribution", "Transforme la forme de la distribution numérique."),
-        "scaling": ("Mise à l'échelle", "Met les variables numériques sur une échelle comparable."),
-        "encoding": ("Encodage", "Convertit les catégories en variables numériques."),
-        "dates": ("Dates", "Extrait des composantes calendaires."),
-        "text": ("Texte libre", "Vectorise et résume le contenu textuel."),
-        "target": ("Cible", "La cible est traitée séparément des features."),
-        "selection": ("Sélection finale", "Retire ou conserve les variables redondantes."),
-    },
-    "actions": {
-        "AUTO": ("Automatique", "Laisse la règle de détection choisir le traitement."),
-        "CLEAN_DEFAULT": ("Nettoyage automatique", "Applique les corrections détectées."),
-        "TO_NAN": ("Convertir en valeur manquante", "Reconnaît les marqueurs d'absence courants."),
-        "KEEP": ("Garder tel quel", "Préserve les valeurs originales."),
-        "SELECTED_TO_NAN": ("Convertir les valeurs choisies", "Ne remplace que les marqueurs sélectionnés."),
-        "MERGE": ("Fusionner les variantes", "Regroupe les libellés équivalents."),
-        "CONVERT": ("Convertir en numérique", "Extrait les nombres et retire les unités."),
-        "PARSE": ("Analyser comme date", "Convertit les chaînes en dates."),
-        "DROP_COLUMN": ("Supprimer la colonne", "Retire la colonne du dataset."),
-        "NAN": ("Remplacer par manquant", "Remplace les valeurs impossibles par une absence."),
-        "CLIP": ("Limiter aux bornes", "Ramène les valeurs aux limites autorisées."),
-        "DROP_ROWS": ("Supprimer les lignes", "Retire les observations contenant ces valeurs."),
-        "IGNORE": ("Ignorer", "Conserve les valeurs sans correction."),
-        "DROP": ("Supprimer", "Retire la colonne du modèle."),
-        "FORCE_NUMERIC": ("Forcer numérique", "Interprète la colonne comme une mesure numérique."),
-        "FORCE_CATEGORICAL": ("Forcer catégoriel", "Traite les valeurs comme des modalités."),
-        "FORCE_DATE": ("Forcer date", "Interprète les valeurs comme des dates."),
-        "FORCE_TEXT": ("Forcer texte", "Traite la colonne comme du texte libre."),
-        "KEEP_RAW": ("Garder brut", "Évite les corrections automatiques de contenu."),
-        "MEDIAN": ("Imputer par médiane", "Remplace les absences par la médiane."),
-        "MEAN": ("Imputer par moyenne", "Remplace les absences par la moyenne."),
-        "MODE": ("Imputer par mode", "Remplace les absences par la modalité la plus fréquente."),
-        "CONSTANT": ("Imputer par constante", "Remplace les absences par une valeur définie."),
-        "MISSING_CATEGORY": ("Modalité ‘manquant’", "Conserve l'absence comme modalité catégorielle."),
-        "MISSING_INDICATOR": ("Ajouter un indicateur", "Ajoute une variable signalant les absences."),
-        "WINSORIZE": ("Winsoriser", "Borne les extrêmes selon les quantiles."),
-        "IQR": ("Limiter par intervalle interquartile", "Borne les extrêmes selon l'IQR."),
-        "NONE": ("Aucun traitement", "Conserve les valeurs sans transformation supplémentaire."),
-        "LOG1P": ("Transformation logarithmique", "Compresse la queue droite de la distribution."),
-        "BOX_COX": ("Transformation Box-Cox", "Rend une variable positive plus symétrique."),
-        "YEO_JOHNSON": ("Transformation Yeo-Johnson", "Réduit l'asymétrie sans imposer des valeurs positives."),
-        "SQRT": ("Racine carrée", "Réduit modérément l'effet des grandes valeurs."),
-        "STANDARD": ("Standardiser", "Centre et réduit la variable."),
-        "SCALE_STANDARD": ("Standardiser", "Centre et réduit la variable."),
-        "ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
-        "SCALE_ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
-        "MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
-        "SCALE_MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
-        "MAXABS": ("Échelle valeur absolue maximale", "Préserve les zéros et réduit par maximum absolu."),
-        "NO_SCALE": ("Aucune mise à l'échelle", "Conserve les unités d'origine."),
-        "ONEHOT": ("Encodage One-Hot", "Crée une variable par modalité."),
-        "TARGET_ENCODE": ("Encodage supervisé", "Encode les modalités à partir de la cible hors pli."),
-        "FREQUENCY_ENCODE": ("Encodage par fréquence", "Remplace chaque modalité par sa fréquence."),
-        "ORDINAL": ("Encodage ordinal", "Associe un nombre selon l'ordre fourni."),
-        "BINARY_MAP": ("Mappage binaire", "Code les deux modalités en 0 et 1."),
-        "DATE_FEATURES": ("Extraire les dates", "Crée des variables calendaires."),
-        "TFIDF_SVD": ("Résumé TF-IDF", "Vectorise le texte puis le réduit en composantes."),
-        "KEEP_NUMERIC": ("Garder comme numérique", "Conserve les valeurs numériques."),
-        "NO_TARGET": ("Aucune cible", "Aucune relation supervisée n'est calculée."),
-        "TRANSFORM": ("Transformer la cible", "Transforme la cible de régression."),
-        "KEEP_SELECTION": ("Garder", "Conserve la variable dans la sélection finale."),
-    },
-    "types": {
-        "TARGET": "Cible", "DROP_ID": "Identifiant à supprimer", "DROP_CONSTANT": "Colonne constante",
-        "DROP_HIGH_MISSING": "Trop de valeurs manquantes", "DROP_DUPLICATE": "Colonne dupliquée",
-        "DROP_LEAKAGE": "Fuite de cible", "BINARY": "Binaire", "ORDINAL": "Ordinale",
-        "NUMERIC_CONTINUOUS": "Numérique continue", "NUMERIC_DISCRETE": "Numérique discrète",
-        "CATEGORICAL_LOW_CARD": "Catégorielle faible",
-        "CATEGORICAL_HIGH_CARD": "Catégorielle forte", "DATETIME": "Date / heure", "TEXT": "Texte libre",
-    },
-}
+LABELS = PREPROCESS_LABELS
 
 
 def label_action(action: Any) -> str:
@@ -141,15 +60,8 @@ def label_type(value: Any) -> str:
 
 
 def localize_display_text(text: Any) -> str:
-    """Retire les clés internes et les rend lisibles dans les champs visibles."""
-    value = str(text).replace("{}", "aucune").replace("DEFAULT_NA_VALUES", "marqueurs de valeurs manquantes")
-    replacements = {}
-    replacements.update({key: val[0] for key, val in LABELS["steps"].items()})
-    replacements.update({key: val[0] for key, val in LABELS["actions"].items()})
-    replacements.update({key: val for key, val in LABELS["types"].items()})
-    for key in sorted(replacements, key=len, reverse=True):
-        value = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])", replacements[key], value)
-    return value
+    """Retourne le texte déjà formaté sans modifier les noms ou valeurs utilisateur."""
+    return str(text)
 
 
 # =============================================================================
@@ -245,7 +157,7 @@ def build_analysis_table(result: AnalysisResult, choices: Optional[Dict[str, str
                     rendered += f" ({params})"
                 labels.append(rendered)
             return "; ".join(labels) if labels else "Aucune"
-        return str(value)
+        return label_action(value)
     table["choix_final"] = ["cible" if row.get("est_cible") else display(row["colonne"], row["action"])
                             for row in result.columns]
     table["état_choix"] = ["cible" if row.get("est_cible") else
@@ -260,9 +172,7 @@ def build_analysis_table(result: AnalysisResult, choices: Optional[Dict[str, str
             table.loc[index, f"recommandation_{step}"] = detail["action"]
             table.loc[index, f"preuve_{step}"] = detail.get("evidence") or format_step_evidence(
                 detail.get("measure", ""), detail.get("threshold", ""))
-            table.loc[index, f"explication_{step}"] = _explanation_without_proof(
-                step, detail.get("action", "AUTO"), detail.get("measure", ""),
-                detail.get("threshold", ""), row.get("type", ""))
+            table.loc[index, f"explication_{step}"] = detail.get("explanation", "")
     return table
 
 
@@ -350,8 +260,7 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
             base = f"L'action conserve le comportement ou les valeurs actuelles; elle convient si la mesure reste compatible avec le seuil observé ({threshold}), mais laisse les limites de cette représentation en place."
         else:
             base = f"{action} applique le traitement prévu pour l'étape {step}; il est proposé au vu de {measure} et du seuil {threshold}. Vérifiez que cette hypothèse métier convient à la colonne."
-    evidence = f"Preuve : {measure}; seuil : {threshold}." if measure or threshold else ""
-    return f"{base} {evidence}".strip()
+    return base.strip()
 
 
 def recommendation_help(step: str, action: str, measure: str = "mesure observée",
@@ -362,7 +271,7 @@ def recommendation_help(step: str, action: str, measure: str = "mesure observée
 
 def recommendation_step(row: Dict[str, Any]) -> str:
     """Etape qui porte la decision principale de la colonne."""
-    return recommendation_step_name(row.get("action", "AUTO"))
+    return str(row.get("recommendation_step") or recommendation_step_name(row.get("action", "AUTO")))
 
 
 def analysis_recommendation_summary(row: Dict[str, Any]) -> Dict[str, str]:
@@ -419,10 +328,7 @@ def _display_action_for_step(step: str, action: str, drop_column: bool = False) 
 
 def _explanation_without_proof(step: str, action: str, measure: str,
                                threshold: str, column_type: str) -> str:
-    text = pedagogical_explanation(step, action, measure, threshold, column_type)
-    text = re.sub(r"\s*Preuve\s*:\s*.*$", "", text)
-    text = text.replace("1,5 IQR", "intervalle interquartile")
-    return localize_display_text(text)
+    return pedagogical_explanation(step, action, measure, threshold, column_type)
 
 
 def build_analysis_detail(result: AnalysisResult, column: Optional[str],
@@ -471,9 +377,8 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
         detail_rows.append({"etape": "type", "etape_label": "Garder / Supprimer",
                             "recommandation": recommended, "recommandation_label": _display_action_for_step("type", recommended, True),
                             "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
-                            "explication": _explanation_without_proof(
-                                "type", recommended, measure, threshold, row.get("type", "")),
-                            "explication_affichee": _explanation_without_proof("type", recommended, measure, threshold, row.get("type", "")),
+                             "explication": detail.get("explanation", ""),
+                             "explication_affichee": detail.get("explanation", ""),
                             "choix": action, "choix_label": _display_action_for_step("type", action, True),
                             "choix_labels": [_display_action_for_step("type", item, True) for item in choices_for_step],
                             "modifie": action != recommended,
@@ -505,9 +410,8 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
                             "recommandation": recommended,
                             "recommandation_label": _display_action_for_step(step, recommended),
                             "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
-                            "explication": _explanation_without_proof(
-                                step, recommended, measure, threshold, row.get("type", "")),
-                            "explication_affichee": _explanation_without_proof(step, recommended, measure, threshold, row.get("type", "")),
+                             "explication": detail.get("explanation", ""),
+                             "explication_affichee": detail.get("explanation", ""),
                             "choix": action, "modifie": action != recommended,
                             "choix_label": _display_action_for_step(step, action),
                             "choix_labels": [_display_action_for_step(step, item) for item in choices_for_step],
@@ -534,10 +438,16 @@ def format_analysis_value(column: str, value: Any) -> str:
             return f"{number:.1f}%"
         return f"{number:.2f}" if isinstance(value, (float, np.floating)) else str(value)
     if isinstance(value, dict):
-        return "Aucune" if not value else localize_display_text(value)
+        if not value:
+            return "Aucune"
+        return "; ".join(f"{key} ({format_analysis_value('', item)})" for key, item in value.items())
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(format_analysis_value("", item) for item in value) or "Aucune"
     s = localize_display_text(value).strip()
     if column == "type":
         s = label_type(value)
+    elif column in {"action", "choix_final"}:
+        s = label_action(value)
     return "—" if not s else s
 
 
@@ -564,29 +474,50 @@ def truncate_reason(text: str, limit: int = 92) -> str:
 
 def export_analysis_csv(result: AnalysisResult, path: str,
                         choices: Optional[Dict[str, Any]] = None) -> str:
-    """Exporte les raisons, preuves et explications de chaque étape applicables."""
-    build_analysis_table(result, choices).to_csv(path, index=False, encoding="utf-8-sig")
+    """Exporte les statistiques et textes déjà formatés, avec des en-têtes français."""
+    source = build_analysis_table(result, choices)
+    safe_columns = [column for column in (
+        "colonne", "type", "dtype", "manquants_pct", "uniques", "exemples", "min", "max",
+        "mean", "median", "std", "skew", "kurtosis", "outliers_pct", "outliers_mad_pct",
+        "rare_category_pct", "cardinality", "relation_cible", "action", "choix_final",
+        "état_choix", "confiance", "raison", "preuve", "explication") if column in source]
+    exported = source[safe_columns].copy()
+    exported["type"] = exported["type"].map(label_type)
+    exported["action"] = exported["action"].map(label_action)
+    if "exemples" in exported:
+        exported["exemples"] = exported["exemples"].map(
+            lambda values: ", ".join(map(str, values)) if isinstance(values, (list, tuple)) else str(values))
+    exported = exported.rename(columns={"colonne": "Colonne", "type": "Type détecté",
+        "dtype": "Type brut", "manquants_pct": "Manquants (%)", "uniques": "Valeurs uniques",
+        "min": "Minimum", "max": "Maximum", "mean": "Moyenne", "median": "Médiane",
+        "std": "Écart-type", "skew": "Asymétrie", "kurtosis": "Kurtosis",
+        "outliers_pct": "Outliers IQR (%)", "outliers_mad_pct": "Outliers MAD (%)",
+        "rare_category_pct": "Modalités rares (%)", "cardinality": "Cardinalité",
+        "relation_cible": "Relation cible", "action": "Action recommandée",
+        "choix_final": "Choix final", "état_choix": "État du choix",
+        "confiance": "Confiance", "raison": "Raison", "preuve": "Preuve",
+        "explication": "Explication"})
+    for row_index, row in enumerate(result.columns):
+        for step, detail in row.get("steps", {}).items():
+            step_label = label_step(step)
+            action_col = f"Action — {step_label}"
+            evidence_col = f"Preuve — {step_label}"
+            explanation_col = f"Explication — {step_label}"
+            exported.loc[row_index, action_col] = label_action(detail.get("action", "AUTO"))
+            exported.loc[row_index, evidence_col] = detail.get("evidence", "")
+            exported.loc[row_index, explanation_col] = detail.get("explanation", "")
+    exported.to_csv(path, index=False, encoding="utf-8-sig")
     return path
 
 
 def suggest_target_column(frame: pd.DataFrame) -> Optional[str]:
-    """Suggère une cible nommée, puis la dernière colonne binaire."""
-    columns = [str(column) for column in frame.columns]
-    named = []
-    for position, column in enumerate(columns):
-        normalized = column.strip().casefold()
-        tokens = set(re.findall(r"[a-z0-9]+", normalized))
-        if normalized.startswith(("is_", "fraud")) or tokens.intersection(
-                {"target", "cible", "label", "y", "class", "churn", "fraud", "prix", "price"}):
-            priority = 0 if tokens.intersection({"target", "cible", "label", "y", "class", "churn", "fraud"}) or normalized.startswith(("is_", "fraud")) else 1
-            named.append((priority, position, column))
-    if named:
-        return sorted(named, key=lambda item: (item[0], item[1]))[0][2]
-    for position in reversed(range(len(columns))):
-        column = columns[position]
-        series = frame.iloc[:, position]
-        if pd.api.types.is_bool_dtype(series) or series.dropna().nunique() == 2:
-            return column
+    """Suggère la dernière colonne seulement si son contenu est binaire."""
+    if frame.shape[1] == 0:
+        return None
+    column = str(frame.columns[-1])
+    series = frame.iloc[:, -1]
+    if pd.api.types.is_bool_dtype(series) or series.dropna().nunique() == 2:
+        return column
     return None
 
 
@@ -783,6 +714,7 @@ def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) ->
     notes: List[str] = []
     config = build_config(opts)
     prep = AutoPreprocessor(config=config, task=opts.task)
+    prep.analysis_result_ = AutoPreprocessor(config=config, task=opts.task).analyze(df, target=target or None)
     n_rows_in, n_cols_in = df.shape
 
     # Cas non supervisé : pas de cible
@@ -850,7 +782,35 @@ def report_text(result: RunResult) -> str:
     """Rapport lisible : résumé, décisions colonne par colonne, fuites, classes de la cible."""
     prep = result.prep
     rep = prep.report()
-    lines = [prep.summary(), ""]
+    report_table = rep["colonnes_detaillees"].copy()
+    def report_status(value: Any) -> str:
+        text = str(value)
+        prefix = "SUPPRIMÉE ("
+        if text.startswith(prefix) and text.endswith(")"):
+            return f"Supprimée ({label_type(text[len(prefix):-1])})"
+        return text
+
+    def report_choice(value: Any) -> str:
+        text = str(value)
+        prefix = "choix utilisateur : "
+        if text.startswith(prefix):
+            action = text[len(prefix):].split(" ", 1)[0]
+            return f"Choix utilisateur : {label_action(action)}"
+        return "Recommandation suivie" if text == "recommandation suivie" else text
+
+    if not report_table.empty:
+        report_table["Type détecté"] = report_table["Type détecté"].map(label_type)
+        report_table["Action appliquée"] = report_table["Action appliquée"].map(label_action)
+        report_table["Choix utilisateur"] = report_table["Choix utilisateur"].map(report_choice)
+        report_table["Justification"] = report_table.apply(
+            lambda row: row["Raison recommandée"] or "La colonne suit la règle statistique du préprocesseur.", axis=1)
+        report_table["Statut"] = report_table["Statut"].map(report_status)
+        report_table = report_table.drop(columns=["Détails nettoyage", "Raison recommandée",
+                                                   "Preuve recommandée", "Explication recommandée"], errors="ignore")
+    task_names = {"classification": "classification", "regression": "régression", "unsupervised": "sans supervision"}
+    lines = ["Résumé du prétraitement",
+             f"{LABELS['interface']['task']} : {task_names.get(str(rep['tache_detectee']).lower(), str(rep['tache_detectee']))}",
+             f"Dimensions : {rep['nb_features_initiales']} colonnes d'entrée, {rep['nb_features_finales']} variables finales", ""]
     lines.append(f"Fichier : {result.n_rows_in} lignes x {result.n_cols_in} colonnes")
     lines.append(f"Train   : {result.X_train.shape[0]} lignes x {result.X_train.shape[1]} features numériques")
     if result.X_test is not None:
@@ -867,9 +827,17 @@ def report_text(result: RunResult) -> str:
     if scores:
         top = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:5]
         lines.append("Test de fuite (score d'une colonne seule, 5 plus hauts) : "
-                     + ", ".join(f"{c}={s:.3f}" for c, s in top))
+                     + ", ".join(f"{c} (score {s:.3f})" for c, s in top))
     lines += ["", "Détail des transformations par colonne :",
-              rep["colonnes_detaillees"].to_string(index=False)]
+              report_table.to_string(index=False, max_colwidth=None)]
+    analysis = getattr(prep, "analysis_result_", None)
+    if analysis is not None:
+        lines.extend(["", "Analyse et recommandations :"])
+        for row in analysis.columns:
+            summary = analysis_recommendation_summary(row)
+            lines.extend([f"{row['colonne']} — {summary['raison']}",
+                          f"Preuve : {summary['preuve']}",
+                          f"Explication : {summary['explication']}"])
     return "\n".join(lines)
 
 

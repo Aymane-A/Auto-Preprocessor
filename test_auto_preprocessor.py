@@ -721,13 +721,14 @@ def test_cleaning_dates_and_impossible_value_actions():
         column_overrides={"date_event": {"clean_dates": "KEEP"}})).fit_transform(frame)
     dropped_date = AutoPreprocessor(PreprocessConfig(verbose=0,
         column_overrides={"date_event": {"clean_dates": "DROP_COLUMN"}})).fit_transform(frame)
-    clipped = AutoPreprocessor(PreprocessConfig(verbose=0,
+    bounds = {"age": (0., 120.)}
+    clipped = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "CLIP"}})).fit_transform(frame)
-    replaced = AutoPreprocessor(PreprocessConfig(verbose=0,
+    replaced = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "NAN"}})).fit_transform(frame)
-    ignored = AutoPreprocessor(PreprocessConfig(verbose=0,
+    ignored = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "IGNORE"}})).fit_transform(frame)
-    dropped_rows = AutoPreprocessor(PreprocessConfig(verbose=0,
+    dropped_rows = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "DROP_ROWS"}})).fit_transform(frame)
     assert any(c.startswith("date_event_") for c in parsed.columns)
     assert not any(c.startswith("date_event_") for c in kept_date.columns)
@@ -902,8 +903,8 @@ def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
     path = tmp_path / "analyse_colonnes.csv"
     export_analysis_csv(result, str(path))
     exported = pd.read_csv(path)
-    assert {"raison", "preuve", "explication", "explication_distribution"}.issubset(exported.columns)
-    assert exported.loc[exported["colonne"] == "amount", "explication_distribution"].notna().all()
+    assert {"Raison", "Preuve", "Explication", "Explication — Distribution"}.issubset(exported.columns)
+    assert exported.loc[exported["Colonne"] == "amount", "Explication — Distribution"].notna().all()
 
 
 def test_dropped_column_detail_shows_only_keep_or_drop_stage():
@@ -936,7 +937,9 @@ def test_visible_analysis_labels_do_not_expose_internal_identifiers():
 
     frame = read_table("data/fraud_signal_demo.csv")
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
-    texts = [format_analysis_value("type", "DROP_ID"), format_analysis_value("choix_final", "type=DROP; clean_missing_tokens=TO_NAN")]
+    from app_preprocess import label_action, label_step
+    texts = [format_analysis_value("type", "DROP_ID"), label_action("TO_NAN"),
+             label_step("clean_missing_tokens")]
     for row in result.columns:
         detail = build_analysis_detail(result, row["colonne"], show_all=True)
         texts.append(detail["header"])
@@ -967,7 +970,7 @@ def test_target_suggestion_for_demo_datasets():
 
     assert suggest_target_column(read_table("data/churn_telecom_demo.csv")) == "churn"
     assert suggest_target_column(read_table("data/fraud_signal_demo.csv")) == "is_fraud"
-    assert suggest_target_column(read_table("data/immobilier_demo.csv")) == "prix_dh"
+    assert suggest_target_column(read_table("data/immobilier_demo.csv")) is None
 
 
 def test_tk_smoke_load_analyze_and_treeview_count():
@@ -1270,10 +1273,10 @@ def test_phase1_source_encoding_and_demo_recommendation_text():
     from app_preprocess import analysis_recommendation_summary, read_table
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
-    mojibake = (chr(0xC3), chr(0xE2))
+    mojibake = re.compile(r"(?:Ã[©-ÿ]|â€|Â\s)")
     for filename in ("auto_preprocessor.py", "app_preprocess.py"):
         source = Path(filename).read_text(encoding="utf-8-sig")
-        assert all(marker not in source for marker in mojibake)
+        assert not mojibake.search(source)
         assert "# -*- coding: utf-8 -*-" in source.splitlines()[:2]
 
     technical = re.compile(r"\b(?:skew|cardinality|normality_p|p_cible|IQR|MAD)=\S", re.I)
@@ -1283,7 +1286,7 @@ def test_phase1_source_encoding_and_demo_recommendation_text():
         for row in result.columns:
             summary = analysis_recommendation_summary(row)
             for text in (summary["raison"], summary["preuve"], summary["explication"]):
-                assert all(marker not in text for marker in mojibake)
+                assert not mojibake.search(text)
                 assert "p 0" not in text.lower()
                 assert "plus de" not in text.lower()
                 assert not technical.search(text), (filename, row["colonne"], text)
@@ -1418,3 +1421,159 @@ def test_phase2_save_load_transform_keeps_overrides_and_unknown_category_behavio
     report = loaded.report()["colonnes_detaillees"].set_index("Colonne")
     assert "choix utilisateur" in report.loc["category", "Choix utilisateur"]
     assert "choix utilisateur" in report.loc["amount", "Choix utilisateur"]
+
+
+def invariant_validation_frames():
+    """Jeux variés indépendants des noms de colonnes et règles métier particulières."""
+    from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
+    from app_preprocess import read_table
+
+    frames = [read_table(path) for path in (
+        "data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+        "data/fraud_signal_demo.csv")]
+    frames.extend(loader(as_frame=True).data for loader in
+                  (load_wine, load_breast_cancer, load_diabetes))
+    for seed in (310, 311, 312):
+        rng = np.random.default_rng(seed)
+        size = 160
+        continuous = rng.lognormal(mean=1.0, sigma=1.4, size=size)
+        continuous[0] = 1e4
+        frame = pd.DataFrame({
+            "continuous_measure": continuous,
+            "discrete_measure": rng.integers(0, 8, size=size),
+            "binary_category": rng.choice(["a", "b"], size=size),
+            "five_category": rng.choice(list("abcde"), size=size),
+            "many_category": rng.choice([f"class_{i}" for i in range(50)], size=size),
+            "calendar_values": pd.date_range("2024-01-01", periods=size).astype(str),
+            "clock_values": [f"{i % 24:02d}:{i % 60:02d}:00" for i in range(size)],
+            "free_text": [f"sample phrase topic {i % 17}" for i in range(size)],
+            "sequential_integer": np.arange(size),
+            "opaque_text_identifier": [f"C{i:04d}" for i in range(size)],
+            "constant_feature": ["same"] * size,
+            "empty_feature": [np.nan] * size,
+            "partial_missing": [np.nan if i % 5 < 2 else float(i) for i in range(size)],
+            "false_missing_markers": ["?" if i % 19 == 0 else "valid" for i in range(size)],
+            "numeric_text_measure": [f"{value:.2f} EUR" for value in continuous],
+        })
+        frames.append(frame)
+    return frames
+
+
+def _display_texts_for_analysis(frame):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import analysis_recommendation_summary
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    texts = []
+    for row in result.columns:
+        summary = analysis_recommendation_summary(row)
+        texts.extend(summary[key] for key in ("raison", "preuve", "explication"))
+        for step in row.get("steps", {}).values():
+            texts.extend(step.get(key, "") for key in ("reason", "evidence", "explanation"))
+    return result, texts
+
+
+def test_invariant_c1_recommendation_text_is_single_source_across_outputs(tmp_path):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
+                                build_analysis_table, export_analysis_csv, report_text, RunResult)
+
+    forbidden = re.compile(r"Ã[©-ÿ]|â€|Â\s|\w+=\S|[{}\[\]]|\bNone\b|\bnan\b|\bTO_NAN\b|\bDEFAULT_NA_VALUES\b|\bclean_\w+", re.I)
+    for frame in invariant_validation_frames():
+        prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+        result = prep.analyze(frame)
+        prep.analysis_result_ = result
+        fitted = prep.fit_transform(frame)
+        report = prep.report()["colonnes_detaillees"].set_index("Colonne")
+        rendered_report = report_text(RunResult(prep, None, fitted, None,
+                                                n_rows_in=len(frame), n_cols_in=frame.shape[1]))
+        assert not forbidden.search(rendered_report)
+        table = build_analysis_table(result)
+        for i, row in enumerate(result.columns):
+            summary = analysis_recommendation_summary(row)
+            assert table.loc[i, "raison"] == summary["raison"]
+            assert table.loc[i, "preuve"] == summary["preuve"]
+            assert table.loc[i, "explication"] == summary["explication"]
+            assert summary["raison"] in rendered_report
+            assert summary["preuve"] in rendered_report
+            assert summary["explication"] in rendered_report
+            if row["colonne"] in report.index:
+                assert report.loc[row["colonne"], "Raison recommandée"] == summary["raison"]
+                assert report.loc[row["colonne"], "Action appliquée"] == row["action"]
+                step_name = next((name for name, detail in row["steps"].items()
+                                  if detail.get("reason") == summary["raison"]), None)
+                if step_name:
+                    assert report.loc[row["colonne"], "Preuve recommandée"] == row["steps"][step_name]["evidence"]
+            for text in summary.values():
+                assert not forbidden.search(str(text)), (row["colonne"], text)
+            detail = build_analysis_detail(result, row["colonne"], show_all=True)
+            for step_row in detail["rows"]:
+                source_step = row["steps"][step_row["etape"]]
+                assert step_row["preuve"] == source_step["evidence"]
+                assert step_row["explication"] == source_step["explanation"]
+        output = tmp_path / "analysis.csv"
+        export_analysis_csv(result, str(output))
+        exported = pd.read_csv(output, encoding="utf-8-sig")
+        assert exported["Raison"].tolist() == table["raison"].tolist()
+
+
+def test_invariant_c2_each_decision_exposes_its_evaluated_rule():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    config = PreprocessConfig(verbose=0)
+    for frame in invariant_validation_frames():
+        result = AutoPreprocessor(config).analyze(frame)
+        for row in result.columns:
+            for step, recommendation in row.get("steps", {}).items():
+                if len(recommendation.get("choices", [])) <= 1:
+                    continue
+                assert recommendation.get("rule"), (row["colonne"], step)
+                assert recommendation.get("measure")
+                assert recommendation.get("threshold")
+                assert recommendation.get("evidence")
+                assert isinstance(recommendation["rule"], dict)
+                assert recommendation["rule"]["measure"] == recommendation["measure"]
+                assert recommendation["rule"]["threshold"] == recommendation["threshold"]
+                assert recommendation["rule"]["domain"] == row["type"]
+
+
+def test_invariant_c3_explanations_are_measure_consistent_and_step_free():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import LABELS
+
+    step_labels = [label for label, _ in LABELS["steps"].values()]
+    for frame in invariant_validation_frames():
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+        for row in result.columns:
+            for step, recommendation in row.get("steps", {}).items():
+                explanation = recommendation.get("explanation", "")
+                if len(recommendation.get("choices", [])) <= 1:
+                    continue
+                assert explanation.strip()
+                assert recommendation.get("measure", "") not in explanation
+                assert recommendation.get("evidence", "") not in explanation
+                assert not any(label in explanation for label in step_labels)
+
+
+def test_invariant_c4_source_and_label_accents_are_preserved():
+    from pathlib import Path
+    from app_preprocess import LABELS
+
+    for filename in ("auto_preprocessor.py", "app_preprocess.py"):
+        source = Path(filename).read_text(encoding="utf-8")
+        assert not re.search(r"(?:Ã[©-ÿ]|â€|Â\s)", source)
+    all_labels = " ".join(str(item) for group in LABELS.values()
+                           for item in group.values())
+    for word in ("Tâche", "Données", "Paramètres", "Résultat", "Sélection"):
+        assert word in all_labels
+
+
+def test_invariant_c6_user_column_names_are_not_reformatted():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import build_analysis_table
+
+    column = "Étage = {Nord}"
+    frame = pd.DataFrame({column: np.arange(40, dtype=float)})
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    table = build_analysis_table(result)
+    assert table.loc[0, "colonne"] == column

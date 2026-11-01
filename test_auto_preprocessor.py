@@ -1577,3 +1577,24 @@ def test_invariant_c6_user_column_names_are_not_reformatted():
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
     table = build_analysis_table(result)
     assert table.loc[0, "colonne"] == column
+
+
+def test_invariant_c4_no_unaccented_french_words_in_sources():
+    """Les mots français courants gardent leur accent circonflexe dans les sources."""
+    import re
+    from pathlib import Path
+
+    here = Path(__file__).parent
+    # « \b » n'accroche pas les identifiants techniques comme tache_detectee (le « _ » est un caractère de mot).
+    forbidden = re.compile(r"\b[Tt]aches?\b")
+    for name in ("app_preprocess.py", "auto_preprocessor.py"):
+        text = (here / name).read_text(encoding="utf-8")
+        hits = [m.group(0) for m in forbidden.finditer(text)]
+        assert not hits, f"{name} contient un mot sans accent : {hits}"
+
+
+def test_invariant_c4_task_label_keeps_circumflex():
+    from pathlib import Path
+
+    source = (Path(__file__).parent / "app_preprocess.py").read_text(encoding="utf-8")
+    assert "Tâche" in source

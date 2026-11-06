@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 AutoPreprocessor - Module de prétraitement automatisé et robuste pour Machine Learning tabulaire.
 
@@ -11,6 +12,7 @@ import copy
 import datetime
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -26,6 +28,7 @@ from scipy import stats
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
@@ -34,6 +37,7 @@ from sklearn.preprocessing import (
     RobustScaler,
     StandardScaler,
     MinMaxScaler,
+    MaxAbsScaler,
     TargetEncoder,
 )
 
@@ -67,9 +71,333 @@ class FeatureType(str, Enum):
     DROP_LEAKAGE = "DROP_LEAKAGE"
 
 
+class Action(str, Enum):
+    """Actions proposées dans l'analyse préalable."""
+    DROP = "DROP"
+    KEEP_NUMERIC = "KEEP_NUMERIC"
+    IMPUTE_MEDIAN = "IMPUTE_MEDIAN"
+    WINSORIZE = "WINSORIZE"
+    YEO_JOHNSON = "YEO_JOHNSON"
+    LOG1P = "LOG1P"
+    SCALE_STANDARD = "SCALE_STANDARD"
+    SCALE_ROBUST = "SCALE_ROBUST"
+    SCALE_MINMAX = "SCALE_MINMAX"
+    NO_SCALE = "NO_SCALE"
+    ONEHOT = "ONEHOT"
+    TARGET_ENCODE = "TARGET_ENCODE"
+    FREQUENCY_ENCODE = "FREQUENCY_ENCODE"
+    ORDINAL = "ORDINAL"
+    BINARY_MAP = "BINARY_MAP"
+    DATE_FEATURES = "DATE_FEATURES"
+    TFIDF_SVD = "TFIDF_SVD"
+    MISSING_INDICATOR = "MISSING_INDICATOR"
+
+
+ACTION_RECOMMENDATION_STEP = {
+    "DROP": "type", "KEEP_NUMERIC": "distribution", "YEO_JOHNSON": "distribution",
+    "LOG1P": "distribution", "BOX_COX": "distribution", "SQRT": "distribution",
+    "DATE_FEATURES": "dates", "TFIDF_SVD": "text", "ONEHOT": "encoding",
+    "TARGET_ENCODE": "encoding", "FREQUENCY_ENCODE": "encoding", "ORDINAL": "encoding",
+    "BINARY_MAP": "encoding",
+}
+
+
+PREPROCESS_LABELS = {
+    "interface": {
+        "task": "Tâche", "data": "Données", "parameters": "Paramètres",
+        "result": "Résultat", "selection": "Sélection",
+    },
+    "steps": {
+        "nettoyage": ("Nettoyage général", "Résumé des corrections détectées."),
+        "clean_missing_tokens": ("Faux manquants", "Convertit certains marqueurs textuels en valeurs manquantes."),
+        "clean_variants": ("Variantes de modalités", "Fusionne les différences de casse, espaces et accents."),
+        "clean_numeric_text": ("Nombres écrits en texte", "Convertit les nombres importés comme chaînes."),
+        "clean_dates": ("Formats de dates", "Analyse les chaînes comme dates reconnues."),
+        "clean_impossible": ("Valeurs impossibles", "Traite les valeurs hors des bornes métier détectées."),
+        "duplicates": ("Lignes dupliquées", "Décide du traitement des lignes identiques."),
+        "type": ("Garder / Supprimer", "Conserve la colonne ou la retire des variables explicatives."),
+        "missing": ("Valeurs manquantes", "Impute les absences ou ajoute un indicateur."),
+        "outliers": ("Valeurs extrêmes", "Borne ou conserve les observations atypiques."),
+        "distribution": ("Distribution", "Transforme la forme de la distribution numérique."),
+        "scaling": ("Mise à l'échelle", "Met les variables numériques sur une échelle comparable."),
+        "encoding": ("Encodage", "Convertit les catégories en variables numériques."),
+        "dates": ("Dates", "Extrait des composantes calendaires."),
+        "text": ("Texte libre", "Vectorise et résume le contenu textuel."),
+        "target": ("Cible", "La cible est traitée séparément des features."),
+        "selection": ("Sélection finale", "Retire ou conserve les variables redondantes."),
+    },
+    "actions": {
+        "AUTO": ("Automatique", "Laisse la règle de détection choisir le traitement."),
+        "CLEAN_DEFAULT": ("Nettoyage automatique", "Applique les corrections détectées."),
+        "TO_NAN": ("Convertir en valeur manquante", "Reconnaît les marqueurs d'absence courants."),
+        "KEEP": ("Garder tel quel", "Préserve les valeurs originales."),
+        "SELECTED_TO_NAN": ("Convertir les valeurs choisies", "Ne remplace que les marqueurs sélectionnés."),
+        "MERGE": ("Fusionner les variantes", "Regroupe les libellés équivalents."),
+        "CONVERT": ("Convertir en numérique", "Extrait les nombres et retire les unités."),
+        "PARSE": ("Analyser comme date", "Convertit les chaînes en dates."),
+        "DROP_COLUMN": ("Supprimer la colonne", "Retire la colonne du dataset."),
+        "NAN": ("Remplacer par manquant", "Remplace les valeurs impossibles par une absence."),
+        "CLIP": ("Limiter aux bornes", "Ramène les valeurs aux limites autorisées."),
+        "DROP_ROWS": ("Supprimer les lignes", "Retire les observations contenant ces valeurs."),
+        "IGNORE": ("Ignorer", "Conserve les valeurs sans correction."),
+        "DROP": ("Supprimer", "Retire la colonne du modèle."),
+        "FORCE_NUMERIC": ("Forcer numérique", "Interprète la colonne comme une mesure numérique."),
+        "FORCE_CATEGORICAL": ("Forcer catégoriel", "Traite les valeurs comme des modalités."),
+        "FORCE_DATE": ("Forcer date", "Interprète les valeurs comme des dates."),
+        "FORCE_TEXT": ("Forcer texte", "Traite la colonne comme du texte libre."),
+        "KEEP_RAW": ("Garder brut", "Évite les corrections automatiques de contenu."),
+        "MEDIAN": ("Imputer par médiane", "Remplace les absences par la médiane."),
+        "MEAN": ("Imputer par moyenne", "Remplace les absences par la moyenne."),
+        "MODE": ("Imputer par mode", "Remplace les absences par la modalité la plus fréquente."),
+        "CONSTANT": ("Imputer par constante", "Remplace les absences par une valeur définie."),
+        "MISSING_CATEGORY": ("Modalité ‘manquant’", "Conserve l'absence comme modalité catégorielle."),
+        "MISSING_INDICATOR": ("Ajouter un indicateur", "Ajoute une variable signalant les absences."),
+        "WINSORIZE": ("Winsoriser", "Borne les extrêmes selon les quantiles."),
+        "IQR": ("Limiter par intervalle interquartile", "Borne les extrêmes selon l'IQR."),
+        "NONE": ("Aucun traitement", "Conserve les valeurs sans transformation supplémentaire."),
+        "LOG1P": ("Transformation logarithmique", "Compresse la queue droite de la distribution."),
+        "BOX_COX": ("Transformation Box-Cox", "Rend une variable positive plus symétrique."),
+        "YEO_JOHNSON": ("Transformation Yeo-Johnson", "Réduit l'asymétrie sans imposer des valeurs positives."),
+        "SQRT": ("Racine carrée", "Réduit modérément l'effet des grandes valeurs."),
+        "STANDARD": ("Standardiser", "Centre et réduit la variable."),
+        "SCALE_STANDARD": ("Standardiser", "Centre et réduit la variable."),
+        "ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
+        "SCALE_ROBUST": ("Échelle robuste", "Centre par médiane et réduit par IQR."),
+        "MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
+        "SCALE_MINMAX": ("Échelle Min-Max", "Ramène les valeurs dans une plage bornée."),
+        "MAXABS": ("Échelle valeur absolue maximale", "Préserve les zéros et réduit par maximum absolu."),
+        "NO_SCALE": ("Aucune mise à l'échelle", "Conserve les unités d'origine."),
+        "ONEHOT": ("Encodage One-Hot", "Crée une variable par modalité."),
+        "TARGET_ENCODE": ("Encodage supervisé", "Encode les modalités à partir de la cible hors pli."),
+        "FREQUENCY_ENCODE": ("Encodage par fréquence", "Remplace chaque modalité par sa fréquence."),
+        "ORDINAL": ("Encodage ordinal", "Associe un nombre selon l'ordre fourni."),
+        "BINARY_MAP": ("Mappage binaire", "Code les deux modalités en 0 et 1."),
+        "DATE_FEATURES": ("Extraire les dates", "Crée des variables calendaires."),
+        "TFIDF_SVD": ("Résumé TF-IDF", "Vectorise le texte puis le réduit en composantes."),
+        "KEEP_NUMERIC": ("Garder comme numérique", "Conserve les valeurs numériques."),
+        "NO_TARGET": ("Aucune cible", "Aucune relation supervisée n'est calculée."),
+        "TRANSFORM": ("Transformer la cible", "Transforme la cible de régression."),
+        "KEEP_SELECTION": ("Garder", "Conserve la variable dans la sélection finale."),
+    },
+    "types": {
+        "TARGET": "Cible", "DROP_ID": "Identifiant à supprimer", "DROP_CONSTANT": "Colonne constante",
+        "DROP_HIGH_MISSING": "Trop de valeurs manquantes", "DROP_DUPLICATE": "Colonne dupliquée",
+        "DROP_LEAKAGE": "Fuite de cible", "BINARY": "Binaire", "ORDINAL": "Ordinale",
+        "NUMERIC_CONTINUOUS": "Numérique continue", "NUMERIC_DISCRETE": "Numérique discrète",
+        "CATEGORICAL_LOW_CARD": "Catégorielle faible",
+        "CATEGORICAL_HIGH_CARD": "Catégorielle forte", "DATETIME": "Date / heure", "TEXT": "Texte libre",
+    },
+}
+
+
+def format_step_evidence(measure: str, threshold: str) -> str:
+    """Formateur unique des preuves d'une recommandation d'étape."""
+    return f"{str(measure).strip()} ; seuil : {str(threshold).strip()}"
+
+
+def format_step_reason(action: str, measure: str, threshold: str) -> str:
+    """Construit le résumé français depuis les champs de mesure et de seuil."""
+    label = PREPROCESS_LABELS["actions"].get(str(action), ("Automatique", ""))[0]
+    evidence = str(measure).strip()
+    limit = str(threshold).strip()
+    if action == "DROP":
+        return f"{evidence} ; seuil : {limit} ; {label}."
+    return f"{evidence} (seuil : {limit}) : {label}."
+
+
+def recommendation_step_name(action: Any) -> str:
+    """Renvoie l'étape à l'origine de l'action recommandée."""
+    value = getattr(action, "value", action)
+    return ACTION_RECOMMENDATION_STEP.get(str(value), "type")
+
+
+def _pipeline_distribution_values(values: pd.Series, config: PreprocessConfig) -> pd.Series:
+    """Reproduit le traitement des extrêmes et l'imputation avant la règle d'asymétrie."""
+    numeric = pd.to_numeric(values, errors="coerce").dropna().astype(float)
+    if numeric.empty:
+        return numeric
+    method = str(config.outlier_method).lower()
+    if method == "winsorize":
+        numeric = numeric.clip(numeric.quantile(config.outlier_lower_quantile),
+                                numeric.quantile(config.outlier_upper_quantile))
+    elif method == "iqr":
+        q1, q3 = numeric.quantile([.25, .75])
+        spread = q3 - q1
+        numeric = numeric.clip(q1 - config.outlier_iqr_multiplier * spread,
+                                q3 + config.outlier_iqr_multiplier * spread)
+    return numeric
+
+
+def _is_time_only_column(series: pd.Series) -> bool:
+    """Reconnaît une colonne contenant uniquement des heures, d'après ses valeurs."""
+    values = series.dropna().astype(str).str.strip()
+    if values.empty:
+        return False
+    pattern = r"\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
+    return bool(values.str.fullmatch(pattern).mean() >= 0.8)
+
+
+def _parse_datetime_values(series: pd.Series, time_only: bool = False) -> pd.Series:
+    """Parse des dates mixtes ou convertit les heures sur une époque stable."""
+    if time_only:
+        delta = pd.to_timedelta(series.astype(str).str.strip(), errors="coerce")
+        return pd.Timestamp("1900-01-01") + delta
+    return pd.to_datetime(series, errors="coerce", format="mixed")
+
+
+def _current_timestamp(tz=None) -> pd.Timestamp:
+    """Point d'injection testable pour les règles explicites de date future."""
+    return pd.Timestamp.now(tz=tz) if tz is not None else pd.Timestamp.now()
+
+
+# Source unique des sélecteurs visibles et des validations du fit.
+# Chaque action listée est prise en charge par le pipeline; les autres ne sont pas proposées.
+SUPPORTED_ACTIONS: Dict[str, Dict[str, List[str]]] = {
+    "clean_missing_tokens": {"any": ["TO_NAN", "KEEP", "SELECTED_TO_NAN"]},
+    "clean_variants": {"any": ["MERGE", "KEEP"]},
+    "clean_numeric_text": {"any": ["AUTO", "CONVERT", "KEEP"]},
+    "clean_dates": {"any": ["AUTO", "PARSE", "KEEP", "DROP_COLUMN"]},
+    "clean_impossible": {"any": ["AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"]},
+    "duplicates": {"any": ["DROP", "KEEP"]},
+    "nettoyage": {"any": ["AUTO"]},
+    "type": {"any": ["AUTO", "DROP", "FORCE_NUMERIC", "FORCE_CATEGORICAL", "FORCE_DATE", "FORCE_TEXT", "KEEP_RAW"]},
+    "missing": {
+        "any": ["AUTO"],
+        "numeric": ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR"],
+        "categorical_low": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
+        "categorical_high": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
+        "binary": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
+        "ordinal": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
+        "datetime": ["AUTO"], "text": ["AUTO"]},
+    "outliers": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "WINSORIZE", "IQR"],
+                 "binary": ["AUTO"], "ordinal": ["AUTO"], "categorical_low": ["AUTO"],
+                 "categorical_high": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
+    "distribution": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT"],
+                     "categorical": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
+    "scaling": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "STANDARD", "ROBUST", "MINMAX", "MAXABS"],
+                "categorical": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
+    "encoding": {"any": ["AUTO"], "binary": ["AUTO", "BINARY_MAP"], "ordinal": ["AUTO", "ORDINAL"],
+                 "categorical_low": ["AUTO", "ONEHOT", "ORDINAL", "FREQUENCY_ENCODE"],
+                 "categorical_high": ["AUTO", "ONEHOT", "ORDINAL", "TARGET_ENCODE", "FREQUENCY_ENCODE"]},
+    "dates": {"any": ["AUTO"], "datetime": ["AUTO", "DATE_FEATURES"]},
+    "text": {"any": ["AUTO"], "text": ["AUTO", "TFIDF_SVD"]},
+    "target": {"any": ["AUTO"]},
+    "selection": {"any": ["AUTO"]},
+}
+
+
+def _action_group(feature_type: Any) -> str:
+    """Retourne la famille utilisée par SUPPORTED_ACTIONS."""
+    kind = feature_type.value if isinstance(feature_type, FeatureType) else str(feature_type)
+    if kind.startswith("NUMERIC"):
+        return "numeric"
+    return {"BINARY": "binary", "ORDINAL": "ordinal", "CATEGORICAL_LOW_CARD": "categorical_low",
+            "CATEGORICAL_HIGH_CARD": "categorical_high", "DATETIME": "datetime", "TEXT": "text"}.get(kind, "any")
+
+
+def _action_supported(step: str, group: str, action: str) -> bool:
+    options = SUPPORTED_ACTIONS.get(step, {})
+    return action in options.get(group, options.get("any", []))
+
+
+def recommendation_confidence(sample_size: int, evidence_strength: float,
+                              p_value: Optional[float] = None) -> str:
+    """Classe la confiance selon l'effectif et la force statistique observée.
+
+    Règles statistiques pour les trois niveaux :
+    - Échantillon insuffisant (sample_size < 30) : toujours 'faible' (loi des petits nombres).
+    - Pour sample_size >= 30 :
+      * Si p_value est disponible :
+        - p_value < 0.001 renforce l'évidence (strength boosté à >= 0.90)
+        - p_value < 0.05 renforce l'évidence (strength boosté à >= 0.75)
+      * Niveau 'haute' : sample_size >= 100 ET strength >= 0.80 (effet net et grand échantillon)
+      * Niveau 'moyenne' : sample_size >= 30 ET strength >= 0.45
+      * Niveau 'faible' : sample_size < 30 OU strength < 0.45
+    """
+    if sample_size < 30:
+        return "faible"
+    strength = float(np.clip(evidence_strength, 0.0, 1.0))
+    if p_value is not None and np.isfinite(p_value):
+        if p_value < 0.001:
+            strength = max(strength, 0.90)
+        elif p_value < 0.05:
+            strength = max(strength, 0.75)
+    if sample_size >= 100 and strength >= 0.80:
+        return "haute"
+    if strength >= 0.45:
+        return "moyenne"
+    return "faible"
+
+
+def _recommend_scaler(values: pd.Series, config: Optional[PreprocessConfig] = None) -> Tuple[str, str, str]:
+    """Règle statistique unique de choix du scaler, appelée par analyze et fit."""
+    config = config or PreprocessConfig(verbose=0)
+    x = pd.to_numeric(values, errors="coerce").dropna()
+    if len(x) < 8:
+        return "STANDARD", f"observations disponibles : {len(x)}", "échantillon < 8; scaler standard par défaut"
+    q1, q3 = x.quantile(.25), x.quantile(.75)
+    spread = q3 - q1
+    iqr_pct = float(((x < q1 - config.outlier_iqr_multiplier * spread) | (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100)
+    mad = float(np.median(np.abs(x - np.median(x))))
+    mad_pct = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
+    kurt = float(x.kurt()) if len(x) > 3 else 0.0
+    try:
+        p_normal = float(stats.normaltest(x.sample(min(len(x), 5000), random_state=42)).pvalue)
+    except Exception:
+        p_normal = float("nan")
+    zero_pct = float((x == 0).mean() * 100)
+    if zero_pct >= config.scaler_zero_threshold * 100:
+        return "MAXABS", f"zéros : {zero_pct:.1f}%", f"zéros ≥ {config.scaler_zero_threshold:.1%}"
+    if x.min() >= config.scaler_bounded_min and x.max() <= config.scaler_bounded_max:
+        return "MINMAX", f"bornes observées : [{x.min():.3g}, {x.max():.3g}]", f"bornes incluses dans [{config.scaler_bounded_min:g}, {config.scaler_bounded_max:g}]"
+    if iqr_pct > config.scaler_outlier_threshold * 100 or mad_pct > config.scaler_outlier_threshold * 100 or abs(kurt) > config.scaler_kurtosis_threshold:
+        return "ROBUST", f"outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%, kurtosis : {kurt:.2f}", f"outliers > {config.scaler_outlier_threshold:.1%} ou |kurtosis| > {config.scaler_kurtosis_threshold:g}"
+    if pd.notna(p_normal) and p_normal > config.normality_p_threshold and iqr_pct <= config.scaler_outlier_threshold * 100 and mad_pct <= config.scaler_outlier_threshold * 100:
+        return "STANDARD", f"p normalité : {p_normal:.3g}; outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%", f"p > {config.normality_p_threshold:g} et outliers ≤ {config.scaler_outlier_threshold:.1%}"
+    return "STANDARD", f"p normalité : {p_normal:.3g}; outliers IQR : {iqr_pct:.2f}%, MAD : {mad_pct:.2f}%; kurtosis : {kurt:.2f}", "Standard par défaut faute de critère spécifique"
+
+
+@dataclass
+class ColumnOverride:
+    """Choix utilisateur pour une colonne; actions peut contenir une action ou une chaîne."""
+    actions: Union[Action, str, List[Union[Action, str]], Dict[str, Any]]
+    force_type: Optional[str] = None
+
+
+@dataclass
+class Recommendation:
+    action: Action
+    reason: str
+    confidence: str
+    alternatives: List[Action] = field(default_factory=list)
+
+
+@dataclass
+class StepRecommendation:
+    action: str
+    measure: str
+    threshold: str
+    explanation: str
+    confidence: str
+    choices: List[str] = field(default_factory=list)
+    rule: str = ""
+
+
+@dataclass
+class AnalysisResult:
+    columns: List[Dict[str, Any]]
+    sample_note: str = ""
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame(self.columns)
+
+    def to_text(self) -> str:
+        return self.to_dataframe().to_string(index=False)
+
+
 # Valeurs textuelles reconnues comme manquantes (exclut 'none' qui est fréquemment une modalité catégorielle légitime)
 DEFAULT_NA_VALUES = {
-    "?", "n/a", "na", "null", "", "-", "unknown",
+    "?", "n/a", "na", "null", "none", "", "-", "unknown",
     "nan", "nil", "undefined", "n.a.", "missing"
 }
 
@@ -126,6 +454,16 @@ class PreprocessConfig:
             autre colonne (une feature légitime très prédictive est entourée d'autres features prédictives).
         min_features_for_auto_drop: Sous ce nombre de colonnes, alerte seulement, jamais de suppression.
         min_features_for_collinearity: Sous ce nombre de features, pas de filtre de colinéarité.
+        noise_guard: Garde-fou contre les colonnes de bruit (DATETIME, CATEGORICAL_HIGH_CARD,
+            identifiants partiels). Valeurs autorisées : 'off' (désactivé),
+            'warn' (avertissement sans suppression, défaut), 'drop' (suppression si mesure stable).
+        noise_margin: Marge minimale d'AUC (classification) ou R² (régression) entre le score
+            réel et le score sur cible permutée pour qu'une colonne soit considérée informative.
+            Défaut 0.03.
+        min_rows_for_noise_guard: Nombre minimal de lignes et de positifs (classification) requis
+            pour activer le mode 'drop'. Sous ce seuil le mode retombe en 'warn'. Défaut 300.
+        keep_columns: Liste de colonnes à ne jamais supprimer par le garde-fou, même en mode
+            'drop' (ex: dates métier connues comme importantes). Défaut None.
         random_state: Graine aléatoire pour la reproductibilité.
         verbose: Niveau de verbosité (0=Quiet, 1=Info, 2=Debug).
     """
@@ -140,9 +478,20 @@ class PreprocessConfig:
     outlier_lower_quantile: float = 0.01
     outlier_upper_quantile: float = 0.99
     outlier_iqr_multiplier: float = 1.5
+    outlier_mad_threshold: float = 3.5
+    scaler_zero_threshold: float = 0.50
+    scaler_outlier_threshold: float = 0.05
+    scaler_kurtosis_threshold: float = 3.0
+    scaler_bounded_min: float = 0.0
+    scaler_bounded_max: float = 1.0
+    normality_p_threshold: float = 0.05
+    date_parse_threshold: float = 0.80
+    target_relation_p_threshold: float = 0.05
     missing_indicator_threshold: float = 0.05
     variance_threshold: float = 0.0
     constant_threshold: float = 0.99
+    identifier_unique_threshold: float = 0.90
+    value_bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = field(default_factory=dict)
     max_text_features: int = 15
     text_svd_components: int = 4
     ordinal_orders: Optional[Dict[str, List[Any]]] = None
@@ -159,8 +508,14 @@ class PreprocessConfig:
     min_features_for_auto_drop: int = 10
     min_features_for_collinearity: int = 10
     encode_discrete_as_categorical: bool = False
+    noise_guard: str = "warn"
+    noise_margin: float = 0.03
+    min_rows_for_noise_guard: int = 300
+    keep_columns: Optional[List[str]] = None
     random_state: int = 42
     verbose: int = 1
+    column_overrides: Dict[str, Any] = field(default_factory=dict)
+
 
 
 # =============================================================================
@@ -271,23 +626,27 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
         self.columns_: List[str] = []
         self.reference_dates_: Dict[str, pd.Timestamp] = {}
         self.has_hour_: Dict[str, bool] = {}
+        self.time_only_: Dict[str, bool] = {}
         self.output_feature_names_: List[str] = []
 
     def fit(self, X: pd.DataFrame, y=None) -> DateTimeFeatureExtractor:
         self.columns_ = list(X.columns)
         self.reference_dates_ = {}
         self.has_hour_ = {}
+        self.time_only_ = {}
         self.output_feature_names_ = []
 
         for col in self.columns_:
-            dt_series = pd.to_datetime(X[col], errors="coerce", format="mixed")
+            time_only = _is_time_only_column(X[col])
+            self.time_only_[col] = time_only
+            dt_series = _parse_datetime_values(X[col], time_only)
             valid_dt = dt_series.dropna()
             if len(valid_dt) > 0:
                 self.reference_dates_[col] = valid_dt.max()
                 # Vérifier si l'heure est informative (>0)
                 self.has_hour_[col] = bool((valid_dt.dt.hour > 0).any())
             else:
-                self.reference_dates_[col] = pd.Timestamp.now()
+                self.reference_dates_[col] = pd.Timestamp("1900-01-01")
                 self.has_hour_[col] = False
 
             base_names = [
@@ -316,11 +675,11 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
 
         for col in self.columns_:
             if col in X.columns:
-                dt_series = pd.to_datetime(X[col], errors="coerce", format="mixed")
+                dt_series = _parse_datetime_values(X[col], self.time_only_.get(col, False))
             else:
                 dt_series = pd.Series([pd.NaT] * len(X), index=X.index)
 
-            ref_date = self.reference_dates_.get(col, pd.Timestamp.now())
+            ref_date = self.reference_dates_.get(col, pd.Timestamp("1900-01-01"))
             has_hr = self.has_hour_.get(col, False)
 
             # Remplacement des NaT par la date de référence pour éviter NaN
@@ -424,8 +783,9 @@ class BinaryMapper(BaseEstimator, TransformerMixin):
 class RareCategoryGrouper(BaseEstimator, TransformerMixin):
     """Regroupement des catégories rares (< seuil) en '__RARE__' et gestion de '__MISSING__'."""
 
-    def __init__(self, threshold: float = 0.01):
+    def __init__(self, threshold: float = 0.01, column_thresholds: Optional[Dict[str, float]] = None):
         self.threshold = threshold
+        self.column_thresholds = column_thresholds
         self.frequent_categories_: Dict[str, set] = {}
         self.columns_: List[str] = []
 
@@ -439,7 +799,10 @@ class RareCategoryGrouper(BaseEstimator, TransformerMixin):
                 self.frequent_categories_[col] = set()
                 continue
             freqs = series.value_counts(normalize=True)
-            frequent = set(freqs[freqs >= self.threshold].index)
+            threshold = (self.column_thresholds or {}).get(col, self.threshold)
+            if not 0 <= float(threshold) <= 1:
+                raise ValueError(f"Seuil de rareté invalide pour {col!r}: {threshold}; attendu entre 0 et 1.")
+            frequent = set(freqs[freqs >= float(threshold)].index)
             self.frequent_categories_[col] = frequent
 
         return self
@@ -467,10 +830,12 @@ class RareCategoryGrouper(BaseEstimator, TransformerMixin):
 class RobustTextTransformer(BaseEstimator, TransformerMixin):
     """Extraction TF-IDF et réduction SVD pour colonnes de texte libre."""
 
-    def __init__(self, max_features: int = 15, svd_components: int = 4, random_state: int = 42):
+    def __init__(self, max_features: int = 15, svd_components: int = 4, random_state: int = 42,
+                 column_components: Optional[Dict[str, int]] = None):
         self.max_features = max_features
         self.svd_components = svd_components
         self.random_state = random_state
+        self.column_components = column_components
         self.columns_: List[str] = []
         self.vectorizers_: Dict[str, TfidfVectorizer] = {}
         self.svd_models_: Dict[str, Optional[TruncatedSVD]] = {}
@@ -498,11 +863,14 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
                 self.output_names_.append(f"{col}_text_0")
                 continue
 
-            if self.svd_components > 0 and n_features > self.svd_components:
-                svd = TruncatedSVD(n_components=self.svd_components, random_state=self.random_state)
+            components = int((self.column_components or {}).get(col, self.svd_components))
+            if components < 0:
+                raise ValueError(f"Nombre de composantes SVD négatif pour {col!r}.")
+            if components > 0 and n_features > components:
+                svd = TruncatedSVD(n_components=components, random_state=self.random_state)
                 svd.fit(tfidf_mat)
                 self.svd_models_[col] = svd
-                col_names = [f"{col}_svd_{i}" for i in range(self.svd_components)]
+                col_names = [f"{col}_svd_{i}" for i in range(components)]
             else:
                 self.svd_models_[col] = None
                 feature_names = vec.get_feature_names_out()
@@ -598,6 +966,23 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self.target_transformer_: Optional[Any] = None
         self.target_stats_: Dict[str, Any] = {}
         self.warnings_: List[str] = []
+        # F2 : colonnes détectées comme numériques textuelles au fit, avec format décimal
+        # {col: 'comma' | 'dot'}  - vide si parse_numeric_strings=False
+        self.numeric_string_cols_: Dict[str, str] = {}
+        # F1 : colonnes signalées / supprimées par le garde-fou noise_guard
+        self.noise_cols_detected_: List[str] = []  # colonnes identifiées comme bruit
+        self.noise_cols_dropped_: List[str] = []   # colonnes effectivement supprimées
+        self.user_override_notes_: Dict[str, str] = {}
+        self.column_scalers_: Dict[str, Any] = {}
+        self.column_distributions_: Dict[str, str] = {}
+        self.column_missing_: Dict[str, str] = {}
+        self.column_outliers_: Dict[str, str] = {}
+        self.column_override_params_: Dict[str, Dict[str, Any]] = {}
+        self._last_keep_positions_: Optional[np.ndarray] = None
+        self.cleaning_decisions_: Dict[str, Dict[str, Any]] = {}
+        self.dataset_cleaning_: Dict[str, Any] = {}
+        self.categorical_imputers_: Dict[str, Any] = {}
+        self.frequency_override_cols_: List[str] = []
 
         # Composants de transformation
         self.winsorizer_: Optional[Winsorizer] = None
@@ -675,18 +1060,99 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         df_out.columns = unique_cols
         return df_out
 
+    def _override_value(self, column: str, step: str) -> Tuple[str, Any]:
+        """Lit une action d'étape et ses paramètres depuis column_overrides."""
+        all_overrides = self.config.column_overrides or {}
+        raw = all_overrides.get(column)
+        if raw is None:
+            def normalized(name: Any) -> str:
+                value = re.sub(r"[^\w\s]", "", str(name).strip())
+                return re.sub(r"\s+", "_", value).lower()
+            raw = next((value for name, value in all_overrides.items() if normalized(name) == column), None)
+        if isinstance(raw, ColumnOverride):
+            raw = raw.actions
+        defaults = {"clean_missing_tokens": "TO_NAN", "clean_variants": "MERGE",
+                    "clean_numeric_text": "AUTO", "clean_dates": "AUTO",
+                    "clean_impossible": "AUTO", "type": "AUTO"}
+        if not isinstance(raw, dict):
+            return defaults.get(step, "AUTO"), None
+        value = raw.get(step, defaults.get(step, "AUTO"))
+        params = None
+        if isinstance(value, tuple) and len(value) == 2:
+            value, params = value
+        if isinstance(value, Action):
+            value = value.value
+        return str(value).upper(), params
+
+    def _add_override_note(self, col: str, text: str) -> None:
+        """Ajoute une note de choix utilisateur sans écraser celles déjà enregistrées pour la colonne."""
+        previous = self.user_override_notes_.get(col)
+        self.user_override_notes_[col] = f"{previous} ; {text}" if previous else text
+
+    def _dataset_duplicate_action(self) -> str:
+        actions = set()
+        for col, raw in (self.config.column_overrides or {}).items():
+            if isinstance(raw, ColumnOverride):
+                raw = raw.actions
+            if isinstance(raw, dict) and "duplicates" in raw:
+                value = raw["duplicates"]
+                if isinstance(value, tuple):
+                    value = value[0]
+                actions.add(str(value.value if isinstance(value, Action) else value).upper())
+        if len(actions) > 1:
+            raise ValueError("Le choix de suppression des doublons est global : toutes les colonnes doivent avoir le même choix.")
+        action = next(iter(actions), "DROP")
+        if not _action_supported("duplicates", "any", action):
+            raise ValueError(f"Action de doublons invalide : {action}; choix valides : {SUPPORTED_ACTIONS['duplicates']['any']}.")
+        return action
+
+    @staticmethod
+    def _canonical_variant(value: Any) -> str:
+        text = unicodedata.normalize("NFKD", str(value).strip().casefold())
+        return "".join(ch for ch in text if not unicodedata.combining(ch))
+
     def _clean_string_and_na(self, df: pd.DataFrame) -> pd.DataFrame:
         """Nettoie les chaînes, espaces et remplace les faux manquants par NaN."""
         if not self.config.clean_string_values:
-            return df
+            has_explicit = any(isinstance(v.actions if isinstance(v, ColumnOverride) else v, dict) and
+                               any(k in (v.actions if isinstance(v, ColumnOverride) else v) for k in
+                                   ("clean_missing_tokens", "clean_variants"))
+                               for v in (self.config.column_overrides or {}).values())
+            if not has_explicit:
+                return df
 
         df_out = df.copy()
         for col in df_out.columns:
             if pd.api.types.is_object_dtype(df_out[col]) or pd.api.types.is_string_dtype(df_out[col]):
+                if self._override_value(str(col), "type")[0] == "KEEP_RAW":
+                    continue
                 # Strip des chaînes
-                s = df_out[col].astype(str).str.strip()
+                missing_action, missing_params = self._override_value(str(col), "clean_missing_tokens")
+                variant_action, _ = self._override_value(str(col), "clean_variants")
+                original = df_out[col]
+                stripped = original.astype(str).str.strip()
+                s = stripped.map(self._canonical_variant) if variant_action == "MERGE" else original.astype(str)
                 # Détection des faux manquants
-                is_missing = s.str.lower().isin(DEFAULT_NA_VALUES) | df_out[col].isna()
+                if variant_action not in {"MERGE", "KEEP"}:
+                    raise ValueError(f"Action clean_variants invalide pour {col!r}: {variant_action}")
+                values = DEFAULT_NA_VALUES
+                if missing_action == "SELECTED_TO_NAN":
+                    selected = missing_params if missing_params is not None else []
+                    if isinstance(selected, dict):
+                        selected = selected.get("values", [])
+                    if isinstance(selected, str):
+                        selected = [selected]
+                    values = {str(v).strip().casefold() for v in selected}
+                elif missing_action not in {"TO_NAN", "KEEP"}:
+                    raise ValueError(f"Action clean_missing_tokens invalide pour {col!r}: {missing_action}")
+                is_missing = original.isna() if missing_action == "KEEP" else s.str.casefold().isin(values) | original.isna()
+                raw_variant_count = int(max(original.dropna().astype(str).nunique() - s.dropna().nunique(), 0))
+                self.cleaning_decisions_[str(col)] = {
+                    "faux_manquants_detectes": int((original.notna() & s.str.strip().str.casefold().isin(DEFAULT_NA_VALUES)).sum()),
+                    "faux_manquants_convertis": int((is_missing & original.notna()).sum()),
+                    "variantes_fusionnees": raw_variant_count if variant_action == "MERGE" else 0,
+                    "actions": {"clean_missing_tokens": missing_action, "clean_variants": variant_action},
+                }
                 df_out[col] = s.mask(is_missing, np.nan)
         return df_out
 
@@ -726,13 +1192,26 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             return np.nan
 
     def _parse_numeric_strings(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Détecte et convertit les nombres stockés sous forme de texte (1 200, 12,5, $300, 45%)."""
-        if not self.config.parse_numeric_strings:
-            return df
+        """Détecte et convertit les colonnes textuelles numériques lors du FIT uniquement (F2).
 
+        Mémorise dans ``self.numeric_string_cols_`` la liste des colonnes converties et
+        leur format décimal dominant ('comma' = virgule, 'dot' = point / autre).
+        NE DOIT Être appelé QUE dans fit() via _preprocess_raw_dataframe(is_fit=True).
+        Pour transform(), utiliser _apply_numeric_string_cols().
+        """
         df_out = df.copy()
+        self.numeric_string_cols_ = {}
         for col in df_out.columns:
             if pd.api.types.is_object_dtype(df_out[col]) or pd.api.types.is_string_dtype(df_out[col]):
+                if self._override_value(str(col), "type")[0] == "KEEP_RAW":
+                    continue
+                numeric_action, _ = self._override_value(str(col), "clean_numeric_text")
+                if numeric_action == "KEEP":
+                    continue
+                if numeric_action not in {"AUTO", "CONVERT"}:
+                    raise ValueError(f"Action clean_numeric_text invalide pour {col!r}: {numeric_action}")
+                if not self.config.parse_numeric_strings and numeric_action != "CONVERT":
+                    continue
                 non_null = df_out[col].dropna()
                 if len(non_null) == 0:
                     continue
@@ -740,11 +1219,43 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 # Test de conversion
                 converted_series = non_null.apply(self._clean_numeric_str_value)
                 success_rate = converted_series.notna().mean()
+                self.cleaning_decisions_.setdefault(str(col), {}).update({
+                    "nombres_texte_convertibles_pct": float(success_rate * 100),
+                    "nombres_texte_convertibles": int(converted_series.notna().sum()),
+                    "action_nombres_texte": numeric_action,
+                })
 
-                if success_rate >= self.config.numeric_string_threshold:
-                    logger.debug(f"Colonne '{col}' convertie de texte en numérique (succès={success_rate:.1%})")
+                if numeric_action == "CONVERT" or success_rate >= self.config.numeric_string_threshold:
+                    # Detecter le format decimal dominant pour traçabilite
+                    sample_str = non_null.astype(str).head(50)
+                    n_comma = int(sample_str.str.contains(r",\d{1,2}$", regex=True).sum())
+                    fmt = "comma" if n_comma > len(sample_str) / 3 else "dot"
+                    self.numeric_string_cols_[col] = fmt
+                    logger.debug(
+                        f"Colonne '{col}' convertie de texte en numerique au fit "
+                        f"(succes={success_rate:.1%}, format={fmt})"
+                    )
                     df_out[col] = df_out[col].apply(self._clean_numeric_str_value)
 
+        return df_out
+
+    def _apply_numeric_string_cols(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Applique strictement les colonnes numériques textuelles mémorisées au fit (F2).
+
+        Utilise uniquement ``self.numeric_string_cols_`` (défini pendant fit()).
+        Ne recalcule aucun seuil sur le nouveau DataFrame.
+        Valeurs non convertibles -> NaN (jamais d'exception).
+        Garantit la cohérence train / test.
+        """
+        if not self.numeric_string_cols_:
+            return df
+        df_out = df.copy()
+        for col in self.numeric_string_cols_:
+            if col not in df_out.columns:
+                continue
+            if pd.api.types.is_object_dtype(df_out[col]) or pd.api.types.is_string_dtype(df_out[col]):
+                df_out[col] = df_out[col].apply(self._clean_numeric_str_value)
+                logger.debug(f"Colonne '{col}' convertie via numeric_string_cols_ (transform, F2)")
         return df_out
 
     def _downcast_memory(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -759,13 +1270,108 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 df_out[col] = pd.to_numeric(df_out[col], downcast="integer")
         return df_out
 
-    def _preprocess_raw_dataframe(self, df: pd.DataFrame, target: Optional[str] = None) -> pd.DataFrame:
-        """Exécute l'étape 0 de nettoyage initial sur le DataFrame."""
+    def _preprocess_raw_dataframe(
+        self,
+        df: pd.DataFrame,
+        target: Optional[str] = None,
+        is_fit: bool = False,
+    ) -> pd.DataFrame:
+        """Exécute l'étape 0 de nettoyage initial sur le DataFrame.
+
+        Args:
+            df: DataFrame à nettoyer.
+            target: Nom de la colonne cible (à ne pas renommer).
+            is_fit: True pendant fit() -> _parse_numeric_strings (détection + mémorisation F2).
+                    False pendant transform() -> _apply_numeric_string_cols (application stricte F2).
+        """
+        self._last_keep_positions_ = np.ones(len(df), dtype=bool)
         df_clean = self._normalize_column_names(df, target=target)
         df_clean = self._clean_string_and_na(df_clean)
-        df_clean = self._parse_numeric_strings(df_clean)
+        if is_fit:
+            df_clean = self._parse_numeric_strings(df_clean)
+        else:
+            # F2 : appliquer uniquement les colonnes memorisees au fit, sans recalculer de seuil
+            df_clean = self._apply_numeric_string_cols(df_clean)
+        for col in list(df_clean.columns):
+            date_action, _ = self._override_value(str(col), "clean_dates")
+            type_action, _ = self._override_value(str(col), "type")
+            if type_action == "KEEP_RAW":
+                continue
+            if date_action == "DROP_COLUMN":
+                self.cleaning_decisions_.setdefault(str(col), {})["action_dates"] = date_action
+                df_clean = df_clean.drop(columns=[col])
+                continue
+            if date_action not in {"AUTO", "PARSE", "KEEP"}:
+                raise ValueError(f"Action clean_dates invalide pour {col!r}: {date_action}")
+            if type_action == "FORCE_NUMERIC":
+                df_clean[col] = pd.to_numeric(df_clean[col], errors="coerce")
+            elif type_action == "FORCE_CATEGORICAL":
+                df_clean[col] = df_clean[col].astype("string")
+            elif type_action == "FORCE_TEXT":
+                df_clean[col] = df_clean[col].astype("string")
+            elif type_action == "FORCE_DATE" or date_action == "PARSE":
+                raw_date = df_clean[col]
+                df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce", format="mixed")
+                self.cleaning_decisions_.setdefault(str(col), {}).update({
+                    "dates_parsables_pct": float(df_clean[col].notna().mean() * 100),
+                    "dates_non_parsables": int((raw_date.notna() & df_clean[col].isna()).sum()),
+                    "action_dates": date_action if date_action != "AUTO" else type_action,
+                })
+            elif type_action not in {"AUTO", "FORCE_NUMERIC", "FORCE_CATEGORICAL", "FORCE_DATE", "FORCE_TEXT", "KEEP_RAW", "DROP"}:
+                raise ValueError(f"Type forcé invalide pour {col!r}: {type_action}")
+        df_clean = self._apply_impossible_value_rules(df_clean)
         df_clean = self._downcast_memory(df_clean)
         return df_clean
+
+    def _apply_impossible_value_rules(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Applique les règles explicites d'impossibilité et mémorise les lignes retirées."""
+        out = frame.copy()
+        keep = np.ones(len(out), dtype=bool)
+        self.impossible_counts_ = {}
+        for col in out.columns:
+            type_action, _ = self._override_value(str(col), "type")
+            if type_action == "KEEP_RAW":
+                continue
+            action, _ = self._override_value(str(col), "clean_impossible")
+            if action not in {"AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"}:
+                raise ValueError(f"Action clean_impossible invalide pour {col!r}: {action}")
+            series = out[col]
+            lower = upper = None
+            configured_bounds = (self.config.value_bounds or {}).get(str(col))
+            if configured_bounds is not None:
+                lower, upper = configured_bounds
+            mask = pd.Series(False, index=out.index)
+            if lower is not None or upper is not None:
+                numeric = pd.to_numeric(series, errors="coerce")
+                if lower is not None:
+                    mask |= numeric < lower
+                if upper is not None:
+                    mask |= numeric > upper
+            if pd.api.types.is_datetime64_any_dtype(series) and not _is_time_only_column(series):
+                now = _current_timestamp(series.dt.tz).normalize()
+                mask |= series > now
+            count = int(mask.sum())
+            self.impossible_counts_[str(col)] = count
+            selected = "NAN" if action == "AUTO" and count else action
+            self.cleaning_decisions_.setdefault(str(col), {}).update({
+                "valeurs_impossibles": count, "action_valeurs_impossibles": selected,
+            })
+            if count == 0 or selected in {"AUTO", "IGNORE"}:
+                continue
+            if selected == "NAN":
+                out.loc[mask, col] = np.nan
+            elif selected == "CLIP":
+                if pd.api.types.is_datetime64_any_dtype(series):
+                    now = _current_timestamp(series.dt.tz).normalize()
+                    out.loc[mask, col] = now
+                else:
+                    out[col] = pd.to_numeric(out[col], errors="coerce").clip(lower=lower, upper=upper)
+            elif selected == "DROP_ROWS":
+                keep &= ~mask.to_numpy()
+        if not keep.all():
+            self._last_keep_positions_ = np.asarray(self._last_keep_positions_)[keep]
+            out = out.loc[keep]
+        return out
 
     # -------------------------------------------------------------------------
     # DÉTECTION ET TYPAGE DES COLONNES
@@ -845,6 +1451,27 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "action": "KEEP",
             }
 
+            forced_type, _ = self._override_value(str(col), "type")
+            if forced_type in {"FORCE_NUMERIC", "FORCE_CATEGORICAL", "FORCE_DATE", "FORCE_TEXT"}:
+                if forced_type == "FORCE_NUMERIC":
+                    meta["type"] = FeatureType.NUMERIC_CONTINUOUS
+                    meta["reason"] = "Type forcé par l'utilisateur : numérique."
+                    self.num_cols_.append(col)
+                elif forced_type == "FORCE_DATE":
+                    meta["type"] = FeatureType.DATETIME
+                    meta["reason"] = "Type forcé par l'utilisateur : date."
+                    self.date_cols_.append(col)
+                elif forced_type == "FORCE_TEXT":
+                    meta["type"] = FeatureType.TEXT
+                    meta["reason"] = "Type forcé par l'utilisateur : texte."
+                    self.text_cols_.append(col)
+                else:
+                    meta["type"] = FeatureType.CATEGORICAL_LOW_CARD if n_unique <= self.config.cardinality_threshold else FeatureType.CATEGORICAL_HIGH_CARD
+                    meta["reason"] = "Type forcé par l'utilisateur : catégoriel."
+                    (self.low_card_cols_ if n_unique <= self.config.cardinality_threshold else self.high_card_cols_).append(col)
+                self.column_metadata_[col] = meta
+                continue
+
             # 1. Colonne avec trop de valeurs manquantes
             if missing_rate >= self.config.missing_threshold:
                 meta["type"] = FeatureType.DROP_HIGH_MISSING
@@ -886,31 +1513,34 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             seen_contents[content_hash] = col
 
             # 4. Colonne d'identifiant (ID)
-            is_id_candidate = (
-                n_rows > 30
-                and n_unique >= (n_rows * 0.98)
-                and (
-                    pd.api.types.is_integer_dtype(series)
-                    or pd.api.types.is_object_dtype(series)
-                    or pd.api.types.is_string_dtype(series)
-                )
-            )
+            unique_ratio = n_unique / max(n_rows, 1)
+            textual_identifier = (pd.api.types.is_object_dtype(series) or
+                                  pd.api.types.is_string_dtype(series))
+            integer_sequence = False
+            if pd.api.types.is_integer_dtype(series) and unique_ratio > self.config.identifier_unique_threshold:
+                ordered_values = np.sort(pd.to_numeric(non_null, errors="coerce").dropna().unique())
+                diffs = np.diff(ordered_values)
+                integer_sequence = len(diffs) > 0 and bool(np.all(diffs == diffs[0]))
+            is_id_candidate = (n_rows > 30 and unique_ratio > self.config.identifier_unique_threshold
+                               and (textual_identifier or integer_sequence))
             # Vérifier si ce n'est pas un texte long
             # Une colonne date/heure quasi unique (horodatage) n'est pas un ID
-            if is_id_candidate and self._is_date_column(series):
+            date_clean_action, _ = self._override_value(str(col), "clean_dates")
+            if is_id_candidate and date_clean_action != "KEEP" and self._is_date_column(series):
                 is_id_candidate = False
             if is_id_candidate:
                 mean_str_len = non_null.astype(str).str.len().mean() if len(non_null) > 0 else 0
                 if mean_str_len < 30:
                     meta["type"] = FeatureType.DROP_ID
-                    meta["reason"] = f"Identifiant détecté : cardinalité ({n_unique}) proche du nombre de lignes ({n_rows})"
+                    meta["reason"] = (f"Profil d'identifiant : uniques/lignes = {unique_ratio:.1%} "
+                                       f"(seuil > {self.config.identifier_unique_threshold:.0%})")
                     meta["action"] = "DROP"
                     self.columns_to_drop_.append(col)
                     self.column_metadata_[col] = meta
                     continue
 
             # 5. Détection Datetime
-            if self._is_date_column(series):
+            if date_clean_action != "KEEP" and self._is_date_column(series):
                 meta["type"] = FeatureType.DATETIME
                 meta["reason"] = "Dates parsables avec succès ou format datetime natif"
                 self.date_cols_.append(col)
@@ -1095,8 +1725,185 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             meta["reason"] = f"Fuite de cible suspectée (score CV={score:.3f} vs meilleure autre={baseline:.3f})"
 
     # -------------------------------------------------------------------------
+    # GARDE-FOU CONTRE LES COLONNES DE BRUIT (F1)
+    # -------------------------------------------------------------------------
+
+    def _detect_noise_columns(self, X_work: pd.DataFrame, y_arr: np.ndarray) -> None:
+        """Teste le signal de chaque colonne candidate au bruit (DATETIME, CATEGORICAL_HIGH_CARD).
+
+        Algorithme (sans fuite) :
+        - Pour chaque colonne candidate, mesurer le score CV avec la vraie cible
+          (arbre de profondeur 4, meme plis que la detection de fuite).
+        - Mesurer le meme score avec la cible melangee (permutation) sur les memes plis.
+        - Une colonne est 'bruit' si son score reel n'est pas superieur au score permute
+          d'au moins ``noise_margin``.
+        - En mode 'warn' : entree dans warnings_ et noise_cols_detected_, rien de supprime.
+        - En mode 'drop' : suppression conditionnelle si les donnees sont suffisantes
+          (min_rows_for_noise_guard lignes, 30 positifs en classification).
+          En cas de donnees insuffisantes : retour en 'warn' avec message explicatif.
+        - Les colonnes listees dans keep_columns ne sont JAMAIS supprimees.
+
+        Les colonnes de dates et haute cardinalite sont candidates car ce sont elles
+        qui produisaient ~14 features de bruit sur le dataset fraude de reference.
+        """
+        from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+        from sklearn.pipeline import make_pipeline
+        from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+        mode = getattr(self.config, "noise_guard", "warn")
+        if mode == "off":
+            return
+
+        margin = getattr(self.config, "noise_margin", 0.03)
+        min_rows = getattr(self.config, "min_rows_for_noise_guard", 300)
+        keep_cols = set(getattr(self.config, "keep_columns", None) or [])
+
+        y_all = np.asarray(y_arr)
+        n_rows = len(y_all)
+        rs = self.config.random_state
+        is_clf = self.task_resolved_ == "classification"
+
+        # Verifier si les donnees sont suffisantes pour le mode 'drop'
+        can_drop = mode == "drop"
+        if can_drop:
+            minority_count = 0
+            if is_clf:
+                y_int = y_all.astype(int)
+                counts = np.bincount(y_int[y_int >= 0])
+                minority_count = int(counts.min()) if len(counts) >= 2 else 0
+            insufficient_reason = ""
+            if n_rows < min_rows:
+                insufficient_reason = (
+                    f"seulement {n_rows} lignes < {min_rows} (min_rows_for_noise_guard)"
+                )
+            elif is_clf and minority_count < 30:
+                insufficient_reason = (
+                    f"seulement {minority_count} exemples de la classe minoritaire < 30"
+                )
+            if insufficient_reason:
+                can_drop = False
+                msg = (
+                    f"noise_guard='drop' demande mais mesure instable "
+                    f"({insufficient_reason}) : retour en 'warn'."
+                )
+                self.warnings_.append(msg)
+                logger.warning(msg)
+
+        # Colonnes candidates : dates et haute cardinalite (generatrices de bruit connu)
+        candidates = list(set(self.date_cols_) | set(self.high_card_cols_))
+        candidates = [c for c in candidates if c not in self.columns_to_drop_]
+        if not candidates:
+            return
+
+        # CV commun aux deux mesures (reel et permute)
+        mask = ~pd.isna(y_all)
+        if mask.sum() < 30:
+            return
+        X_d = X_work.iloc[np.where(mask)[0]]
+        y_d = y_all[mask]
+
+        if is_clf:
+            y_d_int = y_d.astype(int)
+            counts = np.bincount(y_d_int)
+            counts = counts[counts > 0]
+            if len(counts) < 2 or counts.min() < 2:
+                return
+            scoring = "roc_auc" if len(counts) == 2 else "balanced_accuracy"
+            cv = StratifiedKFold(n_splits=int(min(5, counts.min())), shuffle=True, random_state=rs)
+        else:
+            scoring = "r2"
+            cv = KFold(n_splits=5, shuffle=True, random_state=rs)
+
+        rng_perm = np.random.RandomState(rs)
+        y_permuted = rng_perm.permutation(y_d)
+        if is_clf:
+            y_permuted = y_permuted.astype(int)
+
+        for col in candidates:
+            if col not in X_d.columns:
+                continue
+
+            s = X_d[col]
+            tree_real = (
+                DecisionTreeClassifier(max_depth=4, random_state=rs) if is_clf
+                else DecisionTreeRegressor(max_depth=4, random_state=rs)
+            )
+            tree_perm = (
+                DecisionTreeClassifier(max_depth=4, random_state=rs) if is_clf
+                else DecisionTreeRegressor(max_depth=4, random_state=rs)
+            )
+
+            try:
+                if pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s):
+                    v = s.astype(float)
+                    v = v.fillna(float(v.min()) - 1.0 if v.notna().any() else 0.0).to_numpy().reshape(-1, 1)
+                    est_real = tree_real
+                    est_perm = tree_perm
+                else:
+                    from sklearn.preprocessing import TargetEncoder as _TE
+                    v = s.astype(str).to_numpy().reshape(-1, 1)
+                    est_real = make_pipeline(_TE(smooth="auto", cv=5, random_state=rs), tree_real)
+                    est_perm = make_pipeline(_TE(smooth="auto", cv=5, random_state=rs), tree_perm)
+
+                score_real = float(cross_val_score(est_real, v, y_d if is_clf else y_d, cv=cv, scoring=scoring).mean())
+                score_perm = float(cross_val_score(est_perm, v, y_permuted, cv=cv, scoring=scoring).mean())
+            except Exception as exc:
+                logger.debug(f"Noise guard ignore pour '{col}' : {exc}")
+                continue
+
+            if np.isnan(score_real) or np.isnan(score_perm):
+                continue
+
+            is_noise = (score_real - score_perm) < margin
+            logger.debug(
+                f"Noise guard '{col}': score_reel={score_real:.3f} "
+                f"score_permute={score_perm:.3f} "
+                f"marge={score_real - score_perm:.3f} -> {'bruit' if is_noise else 'signal'}"
+            )
+
+            if not is_noise:
+                continue
+
+            # Colonne identifiee comme bruit
+            self.noise_cols_detected_.append(col)
+            msg = (
+                f"BRUIT SUSPECT : la colonne '{col}' n'apporte pas de signal "
+                f"(score_reel={score_real:.3f} vs permute={score_perm:.3f}, "
+                f"marge={score_real - score_perm:.3f} < {margin}). "
+                f"Mode noise_guard='{mode}'."
+            )
+            self.warnings_.append(msg)
+            logger.warning(msg)
+
+            if not can_drop:
+                continue
+
+            # Verifier keep_columns avant suppression
+            if col in keep_cols:
+                msg_keep = f"Colonne '{col}' protegee par keep_columns : conservee malgre le bruit."
+                self.warnings_.append(msg_keep)
+                logger.info(msg_keep)
+                continue
+
+            # Supprimer la colonne
+            self.noise_cols_dropped_.append(col)
+            for lst in (self.date_cols_, self.high_card_cols_):
+                if col in lst:
+                    lst.remove(col)
+            if col not in self.columns_to_drop_:
+                self.columns_to_drop_.append(col)
+            meta = self.column_metadata_.get(col, {})
+            meta["action"] = "DROP"
+            meta["reason"] = (
+                f"Bruit detecte par noise_guard (score={score_real:.3f} vs "
+                f"permute={score_perm:.3f}, marge={score_real - score_perm:.3f})"
+            )
+            logger.info(f"Colonne '{col}' supprimee par noise_guard (bruit confirme).")
+
+    # -------------------------------------------------------------------------
     # GESTION DE LA CIBLE
     # -------------------------------------------------------------------------
+
 
     def _resolve_task(self, y: Union[pd.Series, np.ndarray]) -> str:
         """Déduit automatiquement si la tâche est une classification ou régression."""
@@ -1200,6 +2007,664 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
     # FIT ET TRANSFORM
     # -------------------------------------------------------------------------
 
+    def analyze(self, df: pd.DataFrame, target: Optional[str] = None) -> AnalysisResult:
+        """Analyse les colonnes sans ajuster le préprocesseur ni modifier ``df``.
+
+        Au-delà de 200 000 lignes, les statistiques sont estimées sur un échantillon
+        déterministe de 200 000 lignes; le détecteur de fuite utilise le même détecteur
+        que le fit, sur cet échantillon.
+        """
+        if not isinstance(df, pd.DataFrame):
+            df = pd.DataFrame(df)
+        raw = df.copy(deep=True)
+        sample_note = ""
+        if len(raw) > 200_000:
+            raw = raw.sample(n=200_000, random_state=self.config.random_state)
+            sample_note = "Analyse statistique sur échantillon déterministe de 200 000 lignes."
+        prep = AutoPreprocessor(copy.deepcopy(self.config), task=self.task)
+        if target is not None and target not in raw.columns:
+            raise ValueError(f"La colonne cible '{target}' est absente du DataFrame.")
+        feature_raw = raw.drop(columns=[target]) if target else raw
+        clean = prep._preprocess_raw_dataframe(feature_raw, is_fit=True)
+        y_arr = None
+        if target is not None:
+            y_arr = prep._fit_target(raw[target])
+            keep_rows = np.asarray(prep._last_keep_positions_, dtype=bool)
+            if len(keep_rows) == len(y_arr) and not keep_rows.all():
+                y_arr = y_arr[keep_rows]
+        X = clean
+        prep._detect_types(X)
+        leakage = {}
+        if y_arr is not None:
+            # Réutilise la routine existante de détection; l'instance n'est pas ajustée.
+            prep._detect_leaky_columns(X.drop(columns=prep.columns_to_drop_, errors="ignore"), y_arr)
+            leakage = prep.leakage_scores_
+        rows = []
+        for col in df.columns:
+            if target is not None and col == target:
+                rows.append({"colonne": str(col), "type": "TARGET", "dtype": str(df[col].dtype),
+                             "manquants_pct": float(raw[col].isna().mean() * 100) if len(raw) else 0.0,
+                             "uniques": int(raw[col].nunique(dropna=True)), "exemples": raw[col].dropna().astype(str).head(5).tolist(),
+                             "relation_cible": np.nan, "score_fuite": np.nan, "action": "—",
+                             "raison": "Colonne cible : exclue des recommandations de transformation des features.",
+                             "confiance": "", "alternatives": [], "steps": {}, "est_cible": True})
+                continue
+            clean_name = col
+            if clean_name not in prep.column_metadata_:
+                clean_name = next((c for c in prep.column_metadata_ if str(c) == str(col)), col)
+            raw_s = raw[col]
+            s = clean[clean_name] if clean_name in clean.columns else raw_s
+            meta = prep.column_metadata_.get(clean_name, {})
+            kind = meta.get("type", FeatureType.CATEGORICAL_LOW_CARD)
+            kind_name = kind.value if isinstance(kind, FeatureType) else str(kind)
+            nonnull = s.dropna()
+            nunique = int(nonnull.nunique())
+            missing = float(s.isna().mean()) if len(s) else 0.0
+            examples = nonnull.astype(str).head(5).tolist()
+            text_values = raw_s.dropna().astype(str).str.strip()
+            false_missing = int(text_values.str.lower().isin(DEFAULT_NA_VALUES).sum())
+            normalized_values = text_values.str.casefold()
+            if len(text_values):
+                variant_frame = pd.DataFrame({"raw": text_values, "normalized": normalized_values})
+                variants = variant_frame.groupby("normalized")["raw"].nunique()
+                variant_count = int((variants - 1).clip(lower=0).sum())
+            else:
+                variant_count = 0
+            action, confidence = Action.ONEHOT, "moyenne"
+            alternatives: List[Action] = [Action.DROP]
+            reason = ""
+            stats_row: Dict[str, Any] = {}
+            step_recs: Dict[str, Dict[str, Any]] = {}
+            if kind_name.startswith("DROP"):
+                action, confidence = Action.DROP, "haute"
+                reason = meta.get("reason", "Colonne constante, identifiante ou trop manquante.")
+            elif kind_name == "DATETIME":
+                action = Action.DATE_FEATURES
+                alternatives = [Action.DROP]
+                time_only = _is_time_only_column(nonnull)
+                dates = _parse_datetime_values(nonnull, time_only)
+                parsed_dates = dates.dropna().sort_values()
+                gaps = parsed_dates.diff().dropna().dt.total_seconds()
+                median_gap = float(gaps.median()) if len(gaps) else np.nan
+                if pd.isna(median_gap):
+                    granularity = "indéterminée"
+                elif median_gap < 60:
+                    granularity = "seconde"
+                elif median_gap < 3600:
+                    granularity = "minute"
+                elif median_gap < 86400:
+                    granularity = "heure"
+                elif median_gap < 30 * 86400:
+                    granularity = "jour"
+                elif median_gap < 365 * 86400:
+                    granularity = "mois"
+                else:
+                    granularity = "année"
+                stats_row.update(date_min=dates.min(), date_max=dates.max(), uniques=nunique,
+                                 date_parse_rate=float(dates.notna().mean()) if len(dates) else 0.0,
+                                 date_granularity=granularity, time_only=time_only)
+                reason = f"{nunique} dates distinctes; extraction des composantes calendaires recommandée."
+            elif kind_name == "TEXT":
+                action = Action.TFIDF_SVD
+                alternatives = [Action.DROP, Action.ONEHOT]
+                reason = f"Texte libre détecté ({nunique} valeurs distinctes); TF-IDF/SVD convient aux textes longs."
+            elif kind_name == "BINARY":
+                action = Action.BINARY_MAP
+                alternatives = [Action.DROP, Action.ONEHOT]
+                reason = f"Deux modalités observées; un mappage binaire produit une seule variable."
+            elif kind_name == "ORDINAL":
+                action = Action.ORDINAL
+                alternatives = [Action.ONEHOT, Action.DROP]
+                reason = f"Ordre ordinal reconnu parmi {nunique} modalités; l'encodage conserve cet ordre."
+            elif kind_name.startswith("CATEGORICAL") or kind_name == "NUMERIC_DISCRETE":
+                action = (Action.TARGET_ENCODE if target else Action.FREQUENCY_ENCODE) if kind_name.endswith("HIGH_CARD") else Action.ONEHOT
+                alternatives = [Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.DROP]
+                top = nonnull.astype(str).value_counts().head(5).to_dict()
+                top_frequency = float(nonnull.astype(str).value_counts(normalize=True).iloc[0]) if len(nonnull) else np.nan
+                rare = float((nonnull.astype(str).value_counts(normalize=True) < self.config.rare_category_threshold).sum() / max(nunique, 1))
+                stats_row.update(top_categories=top, top_category_frequency=top_frequency,
+                                 rare_category_pct=rare * 100, cardinality=nunique)
+                probs = nonnull.astype(str).value_counts(normalize=True)
+                stats_row["entropy"] = float(-(probs * np.log2(probs.clip(lower=1e-15))).sum())
+                stats_row["natural_order"] = self._match_ordinal_pattern(nonnull.unique().tolist()) or []
+                reason = f"Cardinalité de {nunique}; encodage {'supervisé régularisé' if action == Action.TARGET_ENCODE else 'One-Hot'} adapté au type détecté."
+            else:
+                vals = pd.to_numeric(nonnull, errors="coerce").dropna()
+                skew = float(vals.skew()) if len(vals) > 2 else 0.0
+                distribution_values = _pipeline_distribution_values(s, self.config)
+                decision_skew = float(stats.skew(distribution_values)) if len(distribution_values) > 2 else 0.0
+                q1, q3 = vals.quantile(.25), vals.quantile(.75)
+                iqr = q3 - q1
+                outlier_pct = float((((vals < q1 - self.config.outlier_iqr_multiplier * iqr) | (vals > q3 + self.config.outlier_iqr_multiplier * iqr)).mean()) * 100) if len(vals) else 0.0
+                stats_row.update(min=vals.min() if len(vals) else np.nan, max=vals.max() if len(vals) else np.nan,
+                                 mean=vals.mean() if len(vals) else np.nan, median=vals.median() if len(vals) else np.nan,
+                                 std=vals.std() if len(vals) else np.nan, skew=skew,
+                                  kurtosis=float(vals.kurt()) if len(vals) > 3 else np.nan, outliers_pct=outlier_pct,
+                                  skew_after_outlier_treatment=decision_skew)
+                mad = float(np.median(np.abs(vals - np.median(vals)))) if len(vals) else 0.0
+                mad_rate = float((np.abs(vals - np.median(vals)) > self.config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
+                cv = float(vals.std() / abs(vals.mean())) if len(vals) and vals.mean() else np.nan
+                normality_p = np.nan
+                shapiro_p = np.nan
+                if len(vals) >= 8:
+                    try:
+                        norm_sample = vals.sample(min(5000, len(vals)), random_state=42)
+                        normality_p = float(stats.normaltest(norm_sample).pvalue)
+                        shapiro_p = float(stats.shapiro(norm_sample).pvalue)
+                    except Exception:
+                        pass
+                zero_pct = float((vals == 0).mean() * 100) if len(vals) else 0.0
+                stats_row.update(outliers_mad_pct=mad_rate, coefficient_variation=cv,
+                                 normality_p=normality_p, shapiro_p=shapiro_p, zero_pct=zero_pct)
+                action = Action.YEO_JOHNSON if abs(decision_skew) > self.config.skew_threshold else Action.KEEP_NUMERIC
+                alternatives = [Action.DROP, Action.YEO_JOHNSON, Action.LOG1P, Action.WINSORIZE,
+                                Action.SCALE_STANDARD, Action.SCALE_ROBUST, Action.SCALE_MINMAX, Action.NO_SCALE]
+                reason = (f"Asymétrie après bornage = {decision_skew:.2f}; Yeo-Johnson est activé par défaut au-dessus de "
+                          f"{self.config.skew_threshold:g}." if action == Action.YEO_JOHNSON else
+                          f"Asymétrie après bornage = {decision_skew:.2f}, sous le seuil {self.config.skew_threshold:g}; traitement numérique standard.")
+            # Les 11 étapes sont explicites. Les étapes non configurées reprennent le comportement du pipeline.
+            def rec(action_name: str, measure: str, threshold: str, explanation: str,
+                    choices: List[str], conf: str = "moyenne", rule: str = "") -> Dict[str, Any]:
+                return {"action": action_name, "measure": measure, "threshold": threshold,
+                        "explanation": explanation, "confidence": conf, "choices": choices,
+                        "rule": rule or "règle de décision basée sur les mesures de la colonne",
+                        "domain": kind_name}
+            step_recs["nettoyage"] = rec("CLEAN_DEFAULT", f"{missing:.1%} de valeurs manquantes", "règles de nettoyage du module",
+                "Nettoyage des sous-étapes sélectionnées.", ["AUTO"])
+            false_tokens = text_values.str.strip().str.casefold().isin(DEFAULT_NA_VALUES)
+            found_false_counts = text_values[false_tokens].value_counts().to_dict()
+            found_false = ", ".join(
+                f"{token} ({count})" for token, count in found_false_counts.items()
+            ) or "aucun"
+            raw_nonnull = raw_s.dropna()
+            numeric_converted = (raw_nonnull.map(self._clean_numeric_str_value)
+                                 if (pd.api.types.is_object_dtype(raw_s) or pd.api.types.is_string_dtype(raw_s))
+                                 else pd.Series(dtype=float))
+            numeric_text_ratio = float(numeric_converted.notna().mean()) if len(numeric_converted) else 0.0
+            convertible_values = raw_nonnull[numeric_converted.notna()] if len(numeric_converted) else pd.Series(dtype=object)
+            units = sorted(set(convertible_values.astype(str).str.extract(r"([A-Za-z%]{1,8})\s*$", expand=False).dropna().str.upper())) if len(convertible_values) else []
+            units_text = ", ".join(units) if units else "aucune"
+            date_parse_rate = 0.0
+            mixed_date_formats = 0
+            if len(nonnull) and kind_name == "DATETIME":
+                date_source = raw_s.dropna()
+                time_only = _is_time_only_column(date_source)
+                parsed_dates = _parse_datetime_values(date_source, time_only)
+                date_parse_rate = float(parsed_dates.notna().mean())
+                if not time_only:
+                    format_keys = date_source.astype(str).map(lambda v: "ymd" if re.match(r"^\d{4}[-/]", v) else "dmy" if re.match(r"^\d{1,2}[-/]\d{1,2}[-/]\d{4}", v) else "other")
+                    mixed_date_formats = max(format_keys.nunique() - 1, 0)
+            impossible_count = int(getattr(prep, "impossible_counts_", {}).get(str(col), 0))
+            duplicate_rows = int(raw.duplicated().sum())
+            step_recs["clean_missing_tokens"] = rec(
+                "TO_NAN", f"{int(false_tokens.sum())} cellules; marqueurs trouvés : {found_false}", "marqueurs de valeurs manquantes reconnus",
+                "Les marqueurs de manque reconnus deviennent des valeurs imputables; les conserver convient s'ils représentent une vraie modalité.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
+            step_recs["clean_variants"] = rec(
+                "MERGE", f"{variant_count} variantes fusionnables", "même texte après trim/casse/accents",
+                "La fusion normalise les espaces, la casse et les accents pour regrouper les modalités équivalentes.", ["MERGE", "KEEP"])
+            step_recs["clean_numeric_text"] = rec(
+                "CONVERT" if numeric_text_ratio >= self.config.numeric_string_threshold else "KEEP",
+                f"{numeric_text_ratio:.1%} de nombres convertibles; unités : {units_text}", f"conversion si ≥ {self.config.numeric_string_threshold:.0%}",
+                "La conversion transforme les chaînes numériques en mesures et retire leurs unités textuelles; garder le texte convient aux codes.", ["AUTO", "CONVERT", "KEEP"])
+            step_recs["clean_dates"] = rec(
+                "PARSE" if date_parse_rate >= self.config.date_parse_threshold and date_parse_rate > 0 else "KEEP",
+                f"{date_parse_rate:.1%} parsables; {1-date_parse_rate:.1%} non parsables; formats mélangés : {mixed_date_formats}", f"parser si ≥ {self.config.date_parse_threshold:.0%}",
+                "Le parsing convertit les dates reconnues pour permettre la création de variables calendaires; garder le texte évite une interprétation incertaine.", ["AUTO", "PARSE", "KEEP", "DROP_COLUMN"])
+            step_recs["clean_impossible"] = rec(
+                "NAN" if impossible_count else "IGNORE", f"cas impossibles : {impossible_count}",
+                "âge [0,120], pourcentage [0,100], montants/surfaces ≥ 0, dates ≤ aujourd'hui",
+                "Les valeurs hors bornes explicitement configurées sont traitées comme incohérentes; sans bornes configurées, elles restent inchangées.", ["AUTO", "NAN", "CLIP", "DROP_ROWS", "IGNORE"])
+            step_recs["duplicates"] = rec(
+                "DROP" if duplicate_rows else "KEEP", f"lignes dupliquées : {duplicate_rows}", "égalité exacte de toutes les cellules",
+                "La suppression des lignes strictement identiques évite de surpondérer les répétitions accidentelles.", ["DROP", "KEEP"])
+            step_recs["type"] = rec("DROP" if kind_name.startswith("DROP") else "AUTO", f"{nunique} valeurs uniques", f"identifiant si ratio > {self.config.identifier_unique_threshold:.1%}; suppression si manquants ≥ {self.config.missing_threshold:.1%}",
+                "La détection conserve les variables exploitables et écarte les profils vides, constants ou identifiants selon les seuils configurés.", ["AUTO", "DROP", "NUMERIC", "CATEGORICAL", "DATETIME", "TEXT"], confidence)
+            step_recs["missing"] = rec("MEDIAN" if kind_name.startswith("NUMERIC") else "AUTO",
+                f"{missing:.1%} de valeurs manquantes", f"indicateur si > {self.config.missing_indicator_threshold:.1%}",
+                "L'imputation est ajustée sur le jeu d'entraînement; un indicateur complémentaire peut préserver le signal porté par les absences.",
+                ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR"])
+            step_recs["outliers"] = rec("WINSORIZE" if kind_name.startswith("NUMERIC") else "AUTO",
+                f"outliers IQR : {stats_row.get('outliers_pct', 0):.2f}%; outliers MAD : {stats_row.get('outliers_mad_pct', 0):.2f}%",
+                f"IQR : {self.config.outlier_iqr_multiplier:g}; MAD robuste : {self.config.outlier_mad_threshold:g}",
+                "La méthode configurée borne les queues de distribution pour limiter l'influence des extrêmes; les conserver convient s'ils sont légitimes.",
+                ["AUTO", "NONE", "WINSORIZE", "IQR"])
+            normality_p = stats_row.get("normality_p", np.nan)
+            p_text = ("p < 0.001" if pd.notna(normality_p) and normality_p < .001 else
+                      f"p = {normality_p:.3g}" if pd.notna(normality_p) else "p-value indisponible")
+            normality_text = (f"normalité rejetée ({p_text})" if pd.notna(normality_p) and normality_p < self.config.normality_p_threshold else
+                              f"normalité non rejetée ({p_text})")
+            skew = float(stats_row.get("skew_after_outlier_treatment", stats_row.get("skew", np.nan)))
+            skew_reaches_threshold = abs(skew) > self.config.skew_threshold
+            distribution_explanation = (
+                "Yeo-Johnson réduit l'asymétrie et accepte les valeurs négatives, ce qui aide les modèles sensibles à la distribution."
+                if action == Action.YEO_JOHNSON else
+                "La distribution conserve son échelle d'origine; ce choix préserve les unités et convient aux méthodes peu sensibles à l'asymétrie."
+            )
+            step_recs["distribution"] = rec(action.value if action == Action.YEO_JOHNSON else "AUTO",
+                f"asymétrie après bornage = {skew:.2f}; {normality_text}",
+                f"seuil |skew| > {self.config.skew_threshold:g} {'atteint' if skew_reaches_threshold else 'non atteint'}", distribution_explanation,
+                ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT"])
+            scale_recommendation = "AUTO"
+            scale_measure = "type non numérique"
+            scale_threshold = "aucun"
+            scale_reason = "Aucune mise à l'échelle particulière n'est nécessaire pour ce type de colonne."
+            if kind_name.startswith("NUMERIC"):
+                scale_recommendation, scale_measure, scale_threshold = _recommend_scaler(s, self.config)
+                scale_reason = {
+                    "ROBUST": "L'échelle robuste centre par la médiane et réduit par l'IQR; elle limite l'effet des valeurs extrêmes.",
+                    "STANDARD": "La standardisation centre et réduit la variable; elle convient aux données proches d'une distribution régulière.",
+                    "MINMAX": "L'échelle Min-Max ramène la variable dans une plage bornée tout en préservant l'ordre.",
+                    "MAXABS": "L'échelle par maximum absolu préserve les zéros et convient aux données creuses.",
+                }.get(scale_recommendation, "Les unités d'origine sont conservées, ce qui convient aux méthodes peu sensibles à l'échelle.")
+            step_recs["scaling"] = rec(scale_recommendation, scale_measure, scale_threshold,
+                scale_reason, ["AUTO", "NONE", "STANDARD", "ROBUST", "MINMAX", "MAXABS"])
+            encoding_explanation = {
+                Action.ONEHOT: "One-Hot crée une variable par modalité et convient aux catégories sans ordre.",
+                Action.TARGET_ENCODE: "L'encodage supervisé résume les modalités par une statistique de cible calculée hors pli.",
+                Action.FREQUENCY_ENCODE: "L'encodage par fréquence remplace les modalités par leur fréquence d'apparition.",
+                Action.ORDINAL: "L'encodage ordinal associe des nombres aux modalités selon un ordre défini.",
+                Action.BINARY_MAP: "Le mappage binaire transforme deux modalités en indicateurs numériques.",
+            }.get(action, "Aucun encodage particulier n'est recommandé pour le type observé.")
+            step_recs["encoding"] = rec(action.value if action in (Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.ORDINAL, Action.BINARY_MAP) else "NONE",
+                f"{nunique} modalités", f"haute cardinalité > {self.config.cardinality_threshold} modalités", encoding_explanation,
+                ["AUTO", "ONEHOT", "ORDINAL", "TARGET_ENCODE", "FREQUENCY_ENCODE", "BINARY_MAP"])
+            step_recs["dates"] = rec("DATE_FEATURES" if kind_name == "DATETIME" else "AUTO", f"{nunique} valeurs uniques", "date parsable",
+                "Les composantes calendaires rendent les dates exploitables par les modèles numériques.", ["AUTO", "DATE_FEATURES"])
+            if kind_name == "DATETIME":
+                min_date = stats_row.get("date_min")
+                max_date = stats_row.get("date_max")
+                if stats_row.get("time_only") and pd.notna(min_date) and pd.notna(max_date):
+                    date_range = f"heures {min_date:%H:%M:%S} à {max_date:%H:%M:%S}, colonne horaire sans date"
+                else:
+                    date_range = (f"plage {min_date:%Y-%m-%d} à {max_date:%Y-%m-%d}"
+                              if pd.notna(min_date) and pd.notna(max_date) else "plage indisponible")
+                parse_pct = float(stats_row.get("date_parse_rate", 0.0)) * 100
+                granularity = stats_row.get("date_granularity", "indéterminée")
+                step_recs["dates"].update(
+                    measure=f"{date_range}; valeurs parsables {parse_pct:.1f}%; granularité {granularity}",
+                    threshold=f"date reconnue; parsing ≥ {self.config.date_parse_threshold:.0%}",
+                    explanation="La plage, le taux de parsing et la granularité justifient l'extraction des composantes calendaires.")
+            step_recs["text"] = rec("TFIDF_SVD" if kind_name == "TEXT" else "AUTO", f"{nunique} valeurs uniques", "profil de texte libre détecté selon les valeurs",
+                "TF-IDF suivi de SVD représente le vocabulaire en composantes numériques compactes.", ["AUTO", "TFIDF_SVD"])
+            step_recs["target"] = rec("AUTO" if target else "NONE", "cible fournie" if target else "aucune cible", "classification/régression",
+                "La cible est traitée séparément; les statistiques de features ne l'ajustent pas.", ["NONE", "AUTO", "TRANSFORM"])
+            step_recs["selection"] = rec("AUTO", f"{nunique} valeurs uniques", f"variance > {self.config.variance_threshold}",
+                "La sélection finale est ajustée exclusivement sur les données de train.", ["AUTO", "KEEP", "DROP"])
+            groups = _action_group(kind)
+            for step_name, groups_for_step in SUPPORTED_ACTIONS.items():
+                supported = groups_for_step.get(groups, groups_for_step.get("any", ["AUTO"]))
+                if step_name in step_recs:
+                    step_recs[step_name]["choices"] = list(supported)
+                    if step_recs[step_name]["action"] not in supported and "AUTO" in supported:
+                        step_recs[step_name]["action"] = "AUTO"
+            action_steps = {
+                "DROP": ("type", "DROP"), "KEEP_NUMERIC": ("type", "AUTO"),
+                "YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"),
+                "WINSORIZE": ("outliers", "WINSORIZE"), "SCALE_STANDARD": ("scaling", "STANDARD"),
+                "SCALE_ROBUST": ("scaling", "ROBUST"), "SCALE_MINMAX": ("scaling", "MINMAX"),
+                "NO_SCALE": ("scaling", "NONE"), "ONEHOT": ("encoding", "ONEHOT"),
+                "TARGET_ENCODE": ("encoding", "TARGET_ENCODE"), "FREQUENCY_ENCODE": ("encoding", "FREQUENCY_ENCODE"),
+                "ORDINAL": ("encoding", "ORDINAL"), "BINARY_MAP": ("encoding", "BINARY_MAP"),
+                "DATE_FEATURES": ("dates", "DATE_FEATURES"), "TFIDF_SVD": ("text", "TFIDF_SVD"),
+            }
+            alternatives = [candidate for candidate in alternatives
+                            if candidate.value in action_steps and
+                            _action_supported(action_steps[candidate.value][0], groups,
+                                              action_steps[candidate.value][1])]
+            score = leakage.get(clean_name, np.nan)
+            if clean_name in prep.suspected_leakage_cols_ and self.config.drop_leaky_columns:
+                action, confidence = Action.DROP, "haute"
+                reason = f"Fuite de cible suspectée (score {score:.3f}); suppression recommandée."
+                step_recs["type"]["action"] = "DROP"
+                step_recs["type"]["measure"] = f"score fuite CV : {score:.3f}"
+                step_recs["type"]["threshold"] = f"score ≥ {self.config.leakage_threshold:.3f} et écart ≥ {self.config.leakage_min_gap:.3f}"
+                step_recs["type"]["explanation"] = reason
+            elif clean_name in prep.suspected_leakage_cols_:
+                # Le défaut historique est un avertissement, pas une suppression.
+                # La recommandation doit refléter cette configuration pour que
+                # « Tout accepter » reproduise fit_transform sans override.
+                reason = (f"Fuite de cible possible (score {score:.3f}); la suppression automatique "
+                          "est désactivée dans la configuration, la colonne est conservée.")
+            elif confidence != "haute":
+                confidence = "moyenne" if nunique > 1 else "faible"
+            target_relation = np.nan
+            target_spearman = np.nan
+            target_cramer = np.nan
+            target_mi = np.nan
+            target_relation_method = ""
+            relation_unreliable_identifier = False
+            missing_target_p = np.nan
+            if target:
+                aligned = pd.DataFrame({"x": s, "target": raw[target].reindex(s.index)})
+                if len(aligned) >= 8:
+                    try:
+                        x_num = pd.to_numeric(aligned["x"], errors="coerce")
+                        y_num = pd.to_numeric(aligned["target"], errors="coerce")
+                        valid = x_num.notna() & y_num.notna()
+                        if valid.sum() >= 8:
+                            target_spearman = float(stats.spearmanr(x_num[valid], y_num[valid]).statistic)
+                    except (TypeError, ValueError):
+                        pass
+                    try:
+                        codes = pd.factorize(aligned["x"].fillna("__MISSING__").astype(str))[0].reshape(-1, 1)
+                        yy = pd.factorize(aligned["target"].astype(str))[0] if prep.task_resolved_ == "classification" else pd.to_numeric(aligned["target"], errors="coerce").fillna(0).to_numpy()
+                        mi_fn = mutual_info_classif if prep.task_resolved_ == "classification" else mutual_info_regression
+                        target_mi = float(mi_fn(codes, yy, discrete_features=True, random_state=self.config.random_state)[0])
+                    except (ValueError, TypeError):
+                        pass
+                    if prep.task_resolved_ == "classification":
+                        try:
+                            ct = pd.crosstab(aligned["x"].fillna("__MISSING__").astype(str), aligned["target"].astype(str))
+                            if ct.shape[0] > 1 and ct.shape[1] > 1:
+                                chi2 = float(stats.chi2_contingency(ct)[0])
+                                n_obs = ct.to_numpy().sum()
+                                min_dim = min(ct.shape[0] - 1, ct.shape[1] - 1)
+                                if min_dim > 0 and n_obs > 0:
+                                    target_cramer = float(np.sqrt(chi2 / (n_obs * min_dim)))
+                        except Exception:
+                            pass
+                    missing_mask = aligned["x"].isna()
+                    try:
+                        if missing_mask.nunique() == 2 and prep.task_resolved_ == "classification":
+                            table = pd.crosstab(missing_mask, aligned["target"])
+                            if table.shape[0] > 1 and table.shape[1] > 1:
+                                missing_target_p = float(stats.chi2_contingency(table)[1])
+                        elif missing_mask.any() and (~missing_mask).any():
+                            yvals = pd.to_numeric(aligned["target"], errors="coerce")
+                            left, right = yvals[missing_mask].dropna(), yvals[~missing_mask].dropna()
+                            if len(left) > 1 and len(right) > 1:
+                                missing_target_p = float(stats.ttest_ind(left, right, equal_var=False).pvalue)
+                    except (ValueError, TypeError):
+                        pass
+                if kind_name.startswith("NUMERIC"):
+                    target_relation = (target_spearman if pd.notna(target_spearman) else
+                                       target_mi if pd.notna(target_mi) else np.nan)
+                elif kind_name in (FeatureType.CATEGORICAL_LOW_CARD.value, FeatureType.CATEGORICAL_HIGH_CARD.value,
+                                   FeatureType.BINARY.value, FeatureType.ORDINAL.value) and prep.task_resolved_ == "classification":
+                    target_relation = (target_cramer if pd.notna(target_cramer) else
+                                       target_mi if pd.notna(target_mi) else np.nan)
+                else:
+                    target_relation = (target_mi if pd.notna(target_mi) else
+                                       target_spearman if pd.notna(target_spearman) else
+                                       target_cramer if pd.notna(target_cramer) else np.nan)
+                unique_ratio = nunique / max(len(raw), 1)
+                relation_unreliable_identifier = bool(
+                    (unique_ratio > self.config.identifier_unique_threshold
+                     and kind_name != FeatureType.DATETIME.value)
+                    or kind_name == FeatureType.DROP_ID.value
+                )
+                if relation_unreliable_identifier:
+                    target_relation = np.nan
+                    target_spearman = target_cramer = target_mi = np.nan
+                    target_relation_method = "non fiable (identifiant)"
+                elif pd.notna(target_spearman) and kind_name.startswith("NUMERIC"):
+                    target_relation_method = "Spearman (échelle [-1, 1])"
+                elif pd.notna(target_cramer):
+                    target_relation_method = "V de Cramér (échelle [0, 1])"
+                elif pd.notna(target_mi):
+                    target_relation_method = "information mutuelle (échelle [0, +∞[)"
+                elif pd.notna(target_spearman):
+                    target_relation_method = "Spearman (échelle [-1, 1])"
+            if pd.notna(missing_target_p) and missing_target_p < self.config.target_relation_p_threshold:
+                step_recs["missing"]["action"] = "MISSING_INDICATOR"
+                missing_p_text = "p < 0.001" if missing_target_p < .001 else f"p = {missing_target_p:.3g}"
+                step_recs["missing"]["measure"] += f"; {missing_p_text} pour le lien avec la cible"
+                step_recs["missing"]["threshold"] = f"p < {self.config.target_relation_p_threshold:g}"
+                step_recs["missing"]["explanation"] = (
+                    f"Le statut manquant est associé à la cible (p={missing_target_p:.3g} < 0,05); "
+                    "un indicateur de manquant est recommandé."
+                )
+            cleanup_total = false_missing + variant_count
+            if pd.api.types.is_object_dtype(raw_s) or pd.api.types.is_string_dtype(raw_s):
+                parsed_numeric = raw_s.dropna().map(self._clean_numeric_str_value)
+                numeric_text_count = int(parsed_numeric.notna().sum()) if len(parsed_numeric) else 0
+                numeric_text_ratio = numeric_text_count / max(len(nonnull), 1)
+                if numeric_text_ratio >= self.config.numeric_string_threshold:
+                    cleanup_total += numeric_text_count
+            else:
+                numeric_text_count = 0
+            date_format_count = 0
+            if kind_name == "DATETIME":
+                patterns = text_values.map(lambda value: (
+                    "ymd" if re.match(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}", value) else
+                    "dmy" if re.match(r"^\d{1,2}[-/]\d{1,2}[-/]\d{4}", value) else
+                    "other"))
+                date_format_count = int(max(patterns.nunique() - 1, 0))
+            cleanup_total += date_format_count
+            configured_bounds = (self.config.value_bounds or {}).get(str(col))
+            impossible_count = int(getattr(prep, "impossible_counts_", {}).get(str(col), 0))
+            cleanup_total += impossible_count
+            step_recs["nettoyage"]["measure"] = (
+                f"{false_missing} faux manquants; {variant_count} variantes; {numeric_text_count} nombres texte; "
+                f"{date_format_count} formats de date; {impossible_count} valeurs hors bornes configurées; "
+                f"{cleanup_total} cellules candidates"
+            )
+            step_recs["nettoyage"]["threshold"] = (
+                f"nombres texte ≥ {self.config.numeric_string_threshold:.0%}; faux manquants connus; variantes normalisées"
+            )
+            step_recs["nettoyage"]["explanation"] = (
+                "Les corrections automatiques normalisent les marqueurs de manque, les modalités et les formats numériques ou calendaires reconnus. "
+                "Les bornes métier ne sont vérifiées que lorsqu'elles sont explicitement configurées."
+            )
+            sample_n = len(nonnull)
+            if sample_n < 30 and confidence != "haute":
+                confidence = "faible"
+                for detail in step_recs.values():
+                    detail["confidence"] = "faible"
+                    detail["explanation"] += " Échantillon inférieur à 30 valeurs : interprétation prudente."
+            for step_name, detail in step_recs.items():
+                detail["rule"] = {
+                    "name": step_name,
+                    "measure": detail.get("measure", ""),
+                    "threshold": detail.get("threshold", ""),
+                    "domain": kind_name,
+                    "action": detail.get("action", "AUTO"),
+                }
+                strength = 0.60
+                p_evidence = None
+                if step_name == "distribution":
+                    if kind_name.startswith("NUMERIC"):
+                        ratio = abs(skew) / max(self.config.skew_threshold, 1e-9)
+                        if abs(skew) >= 2.0 or abs(skew) <= 0.20:
+                            strength = 0.85
+                        elif 0.85 <= ratio <= 1.15:
+                            strength = 0.35
+                        else:
+                            strength = 0.60
+                        p_evidence = normality_p if pd.notna(normality_p) else None
+                    else:
+                        strength = 0.60
+                elif step_name == "missing":
+                    if missing == 0:
+                        strength = 0.90
+                    elif 0.045 <= missing <= 0.055:
+                        strength = 0.35
+                    elif missing > 0.20:
+                        strength = 0.85
+                    else:
+                        strength = 0.60
+                    p_evidence = missing_target_p if pd.notna(missing_target_p) else None
+                elif step_name == "scaling" and kind_name.startswith("NUMERIC"):
+                    if zero_pct >= 50 or (stats_row.get("min", 0) >= 0 and stats_row.get("max", 1) <= 1) or outlier_pct > 10:
+                        strength = 0.90
+                    elif 4.5 <= outlier_pct <= 5.5:
+                        strength = 0.35
+                    elif outlier_pct <= 2.0 and pd.notna(normality_p) and normality_p > 0.05:
+                        strength = 0.85
+                    else:
+                        strength = 0.60
+                elif step_name == "clean_numeric_text":
+                    if numeric_text_ratio >= 0.98 or numeric_text_ratio == 0:
+                        strength = 0.90
+                    elif 0.85 <= numeric_text_ratio <= 0.95:
+                        strength = 0.35
+                    else:
+                        strength = 0.60
+                elif step_name == "clean_missing_tokens":
+                    strength = 0.90 if int(false_tokens.sum()) == 0 or int(false_tokens.sum()) > 5 else 0.60
+                elif step_name == "clean_variants":
+                    strength = 0.90 if variant_count == 0 or variant_count > 5 else 0.60
+                elif step_name == "clean_dates":
+                    strength = 0.90 if date_parse_rate >= 0.95 or date_parse_rate == 0 else (0.35 if 0.75 <= date_parse_rate <= 0.85 else 0.60)
+                elif step_name == "clean_impossible":
+                    strength = 0.90
+                elif step_name == "duplicates":
+                    strength = 0.90 if duplicate_rows == 0 or duplicate_rows > 10 else 0.60
+
+                if step_name == "type" and detail.get("action") == "DROP":
+                    detail["confidence"] = "haute"
+                else:
+                    detail["confidence"] = recommendation_confidence(sample_n, strength, p_evidence)
+
+            if action == Action.DROP and kind_name.startswith("DROP"):
+                overall_strength = 1.0
+            elif kind_name == FeatureType.BINARY.value:
+                overall_strength = 0.90
+            elif kind_name == FeatureType.CATEGORICAL_LOW_CARD.value:
+                card_th = max(self.config.cardinality_threshold, 2)
+                if nunique <= 4:
+                    overall_strength = 0.85
+                elif nunique >= card_th - 1:
+                    overall_strength = 0.35
+                else:
+                    overall_strength = 0.60
+            elif kind_name == FeatureType.CATEGORICAL_HIGH_CARD.value:
+                card_th = max(self.config.cardinality_threshold, 2)
+                if nunique >= 40:
+                    overall_strength = 0.90
+                elif nunique <= card_th + 2:
+                    overall_strength = 0.35
+                else:
+                    overall_strength = 0.60
+            elif kind_name == FeatureType.DATETIME.value:
+                overall_strength = 0.90 if date_parse_rate >= 0.95 else 0.60
+            elif kind_name == FeatureType.TEXT.value:
+                overall_strength = 0.85
+            elif kind_name.startswith("NUMERIC"):
+                ratio = abs(skew) / max(self.config.skew_threshold, 1e-9)
+                if abs(skew) >= 2.0 or abs(skew) <= 0.20:
+                    overall_strength = 0.85
+                elif 0.85 <= ratio <= 1.15:
+                    overall_strength = 0.35
+                else:
+                    overall_strength = 0.60
+            else:
+                overall_strength = 0.60
+
+            confidence = recommendation_confidence(
+                sample_n, overall_strength,
+                normality_p if kind_name.startswith("NUMERIC") and pd.notna(normality_p) else None)
+            if action == Action.DROP and kind_name.startswith("DROP"):
+                confidence = "haute"
+            rows.append({"colonne": str(col), "type": kind_name, "dtype": str(df[col].dtype),
+                         "manquants_pct": missing * 100, "uniques": nunique, "exemples": examples,
+                         "faux_manquants": false_missing, "variantes_casse_espaces": variant_count,
+                         "relation_cible": target_relation, "score_fuite": score,
+                         "relation_cible_methode": target_relation_method,
+                         "relation_cible_non_fiable_identifiant": relation_unreliable_identifier,
+                         "action": action.value, "raison": reason, "confiance": confidence,
+                         "alternatives": [a.value for a in alternatives], "steps": step_recs,
+                         "spearman_cible": target_spearman, "cramer_cible": target_cramer,
+                         "information_mutuelle_cible": target_mi,
+                         "p_manquants_cible": missing_target_p,
+                         "manquant_informatif": bool(pd.notna(missing_target_p) and missing_target_p < self.config.target_relation_p_threshold),
+                         "est_cible": False,
+                         **stats_row})
+        # Paires de features fortement corrélées; ordre d'entrée = règle explicite du préprocesseur.
+        numeric_df = clean.select_dtypes(include=[np.number]).drop(
+            columns=[target] + list(prep.columns_to_drop_) if target else list(prep.columns_to_drop_),
+            errors="ignore")
+        correlation_pairs = []
+        projected_feature_count = max(numeric_df.shape[1], len(clean.columns))
+        if numeric_df.shape[1] > 1 and projected_feature_count >= max(2, self.config.min_features_for_collinearity):
+            corr = numeric_df.corr().abs()
+            names = list(corr.columns)
+            for i, left in enumerate(names):
+                for right in names[i + 1:]:
+                    score_corr = corr.loc[left, right]
+                    if pd.notna(score_corr) and score_corr > self.config.correlation_threshold:
+                        correlation_pairs.append({"gauche": str(left), "droite": str(right), "correlation_abs": float(score_corr),
+                                                  "gardee_selon_ordre": str(left)})
+        row_by_name = {r["colonne"]: r for r in rows}
+        for pair in correlation_pairs:
+            for col, other in ((pair["gauche"], pair["droite"]), (pair["droite"], pair["gauche"])):
+                if col in row_by_name:
+                    rec_sel = row_by_name[col]["steps"]["selection"]
+                    rec_sel["measure"] += f"; corrélation avec {other} : |r|={pair['correlation_abs']:.3f}"
+                    rec_sel["threshold"] = f"|r| > {self.config.correlation_threshold:.3f}"
+                    rec_sel["explanation"] = (
+                        "Une variable redondante est écartée selon l'ordre stable des colonnes; le modèle garde la première représentation disponible."
+                    )
+                    if col == pair["droite"]:
+                        selected = row_by_name[col]
+                        selected["action"] = Action.DROP.value
+                        selected["recommendation_step"] = "selection"
+                        rec_sel["action"] = "DROP"
+                        rec_sel["rule"] = {
+                            "name": "selection_colinearite",
+                            "measure": rec_sel["measure"],
+                            "threshold": rec_sel["threshold"],
+                            "domain": selected.get("type", ""),
+                            "action": "DROP",
+                        }
+                        if "DROP" not in selected["alternatives"]:
+                            selected["alternatives"].append("DROP")
+        for row in rows:
+            row["paires_correlees"] = [p for p in correlation_pairs if row["colonne"] in (p["gauche"], p["droite"])]
+            if row.get("est_cible"):
+                row["alerte_identifiant"] = False
+                row["ratio_uniques_lignes"] = np.nan
+                continue
+            unique_ratio = row["uniques"] / max(len(raw), 1)
+            row["ratio_uniques_lignes"] = unique_ratio
+            row["seuil_identifiant_uniques"] = self.config.identifier_unique_threshold
+            if row["type"] == FeatureType.DROP_ID.value:
+                row["drop_preuve"] = f"uniques = {row['uniques']} / {len(raw)} lignes ({unique_ratio:.1%})"
+                row["drop_seuil"] = f"ratio uniques/lignes > {self.config.identifier_unique_threshold:.1%}"
+            elif row["type"] == FeatureType.DROP_HIGH_MISSING.value:
+                row["drop_preuve"] = f"manquants = {row['manquants_pct']:.1f}%"
+                row["drop_seuil"] = f">= {self.config.missing_threshold:.1%} des lignes"
+            elif row["type"] == FeatureType.DROP_CONSTANT.value:
+                if row["uniques"] <= 1:
+                    row["drop_preuve"] = f"valeurs uniques = {row['uniques']}"
+                    row["drop_seuil"] = "<= 1 valeur unique"
+                else:
+                    top_frequency = float(row.get("top_category_frequency", np.nan))
+                    row["drop_preuve"] = f"fréquence dominante = {top_frequency:.1%}"
+                    row["drop_seuil"] = f">= {self.config.constant_threshold:.1%}"
+            elif row["type"] == FeatureType.DROP_DUPLICATE.value:
+                row["drop_preuve"] = str(row.get("raison", "contenu identique"))
+                row["drop_seuil"] = "contenu strictement identique à une colonne précédente"
+            elif row["type"] == FeatureType.DROP_LEAKAGE.value:
+                row["drop_preuve"] = f"score fuite CV = {row.get('score_fuite', np.nan):.3f}"
+                row["drop_seuil"] = (f">= {self.config.leakage_threshold:.3f} et écart >= "
+                                     f"{self.config.leakage_min_gap:.3f}")
+            if str(row.get("action")) == Action.DROP.value and row.get("drop_preuve"):
+                type_recommendation = row.setdefault("steps", {}).setdefault("type", {})
+                type_recommendation.update(
+                    action="DROP", measure=row["drop_preuve"], threshold=row["drop_seuil"],
+                    rule={"name": row["type"], "measure": row["drop_preuve"],
+                          "threshold": row["drop_seuil"], "domain": row["type"],
+                          "action": "DROP"},
+                    explanation="La suppression est recommandée par la règle de détection correspondante.")
+            for recommendation in row.get("steps", {}).values():
+                recommendation["evidence"] = format_step_evidence(
+                    recommendation.get("measure", ""), recommendation.get("threshold", ""))
+            primary_step = row.get("recommendation_step") or recommendation_step_name(row.get("action", "AUTO"))
+            primary_recommendation = row.get("steps", {}).get(primary_step, {})
+            if primary_recommendation:
+                primary_recommendation["reason"] = format_step_reason(
+                    row.get("action", "AUTO"), primary_recommendation.get("measure", ""),
+                    primary_recommendation.get("threshold", ""))
+                row["raison"] = primary_recommendation["reason"]
+            row["alerte_identifiant"] = row["type"] == FeatureType.DROP_ID.value
+            row["relation_cible_non_fiable_identifiant"] = bool(row.get("relation_cible_non_fiable_identifiant") or row["alerte_identifiant"])
+            if row["alerte_identifiant"]:
+                row["relation_cible"] = np.nan
+                row["spearman_cible"] = row["cramer_cible"] = row["information_mutuelle_cible"] = np.nan
+                row["relation_cible_methode"] = "non fiable (identifiant)"
+        return AnalysisResult(rows, sample_note)
+
     def fit(self, X: pd.DataFrame, y: Optional[Union[pd.Series, np.ndarray]] = None) -> AutoPreprocessor:
         """Ajuste l'ensemble des transformateurs sur les données d'entraînement.
 
@@ -1211,22 +2676,159 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         self._set_logging_level()
         self.warnings_ = []
+        self.cleaning_decisions_ = {}
+        self.numeric_string_cols_ = {}  # F2 : reinitialiser a chaque fit
+        self.noise_cols_detected_ = []  # F1 : reinitialiser
+        self.noise_cols_dropped_ = []   # F1 : reinitialiser
         logger.info(f"Début du fit sur DataFrame de taille {X.shape}")
 
-        # Nettoyage préalable (Étape 0)
-        X_clean = self._preprocess_raw_dataframe(X)
+        # Nettoyage préalable (Étape 0) - is_fit=True pour mémoriser numeric_string_cols_ (F2)
+        X_clean = self._preprocess_raw_dataframe(X, is_fit=True)
         self.input_columns_ = list(X_clean.columns)
 
         # Ajustement de la cible si fournie
         y_arr = None
         if y is not None:
+            keep_positions = np.asarray(self._last_keep_positions_, dtype=bool)
+            if len(keep_positions) != len(y):
+                raise ValueError("Impossible d'aligner les lignes supprimées par clean_impossible avec la cible.")
+            if not keep_positions.all():
+                y = y.iloc[np.flatnonzero(keep_positions)] if isinstance(y, pd.Series) else np.asarray(y)[keep_positions]
             y_arr = self._fit_target(y)
 
         # Détection des types
         self._detect_types(X_clean)
 
+        # Application des choix explicites avant la construction des pipelines.
+        self.user_override_notes_ = {}
+        self.column_scalers_ = {}
+        self.column_distributions_ = {}
+        self.column_missing_ = {}
+        self.column_outliers_ = {}
+        self.column_override_params_ = {}
+        self.categorical_imputers_ = {}
+        self.frequency_override_cols_ = []
+        for raw_col, raw_override in (self.config.column_overrides or {}).items():
+            col = str(raw_col)
+            if col not in X_clean.columns:
+                col = re.sub(r"\s+", "_", re.sub(r"[^\w\s]", "", col.strip())).lower()
+            if col not in X_clean.columns:
+                continue
+            values = raw_override.actions if isinstance(raw_override, ColumnOverride) else raw_override
+            if isinstance(values, dict):
+                choices = {}
+                params = {}
+                for key, value in values.items():
+                    if isinstance(value, tuple) and len(value) == 2:
+                        selected, params[str(key).lower()] = value
+                    else:
+                        selected = value
+                    choices[str(key).lower()] = selected.value if isinstance(selected, Action) else str(selected)
+                self.column_override_params_[col] = params
+            else:
+                action = values.value if isinstance(values, Action) else str(values)
+                stage = {"DROP":"type", "YEO_JOHNSON":"distribution", "LOG1P":"distribution",
+                         "SCALE_STANDARD":"scaling", "SCALE_ROBUST":"scaling", "SCALE_MINMAX":"scaling",
+                         "NO_SCALE":"scaling", "ONEHOT":"encoding", "TARGET_ENCODE":"encoding",
+                         "FREQUENCY_ENCODE":"encoding", "ORDINAL":"encoding", "BINARY_MAP":"encoding",
+                         "KEEP_NUMERIC":"type", "DATE_FEATURES":"dates", "TFIDF_SVD":"text",
+                         "IMPUTE_MEDIAN":"missing", "MISSING_INDICATOR":"missing", "WINSORIZE":"outliers"}.get(action, "action")
+                normalized_action = {"KEEP_NUMERIC":"AUTO", "SCALE_STANDARD":"STANDARD", "SCALE_ROBUST":"ROBUST",
+                                     "SCALE_MINMAX":"MINMAX", "NO_SCALE":"NONE", "IMPUTE_MEDIAN":"MEDIAN"}.get(action, action)
+                choices = {stage: normalized_action}
+            meta_type = self.column_metadata_.get(col, {}).get("type")
+            kind = meta_type.value if isinstance(meta_type, FeatureType) else str(meta_type)
+            group = _action_group(meta_type)
+            for step_name, action_value in choices.items():
+                if not _action_supported(step_name, group, action_value.upper()):
+                    raise ValueError(
+                        f"Action incompatible ou non prise en charge : {action_value!r} pour l'étape {step_name!r} "
+                        f"et la colonne {col!r} (type {kind}). Choix disponibles : "
+                        f"{SUPPORTED_ACTIONS.get(step_name, {}).get(group, SUPPORTED_ACTIONS.get(step_name, {}).get('any', []))}."
+                    )
+            action = choices.get("action", "").upper()
+            if choices.get("type", choices.get("retention", "")).upper() == "DROP" or action == "DROP":
+                if col not in self.columns_to_drop_:
+                    self.columns_to_drop_.append(col)
+                for group in (self.num_cols_, self.binary_cols_, self.ordinal_cols_, self.low_card_cols_, self.high_card_cols_, self.date_cols_, self.text_cols_):
+                    if col in group:
+                        group.remove(col)
+                self.user_override_notes_[col] = "choix utilisateur : DROP"
+                continue
+            dist = choices.get("distribution", action).upper()
+            if dist in {"YEO_JOHNSON", "LOG1P", "BOX_COX", "SQRT"} and not kind.startswith("NUMERIC"):
+                raise ValueError(f"Override {dist} incompatible avec {col!r} (type détecté : {kind}); cette action exige une colonne numérique.")
+            if choices.get("encoding", "").upper() == "ONEHOT" and kind == "NUMERIC_CONTINUOUS":
+                raise ValueError(f"Override ONEHOT incompatible avec {col!r} (numérique continu).")
+            encoding = choices.get("encoding", "").upper()
+            if encoding == "ONEHOT" and col in self.high_card_cols_:
+                self.high_card_cols_.remove(col); self.low_card_cols_.append(col)
+            elif encoding == "ORDINAL" and col in self.low_card_cols_:
+                self.low_card_cols_.remove(col); self.ordinal_cols_.append(col)
+            elif encoding == "ORDINAL" and col in self.high_card_cols_:
+                self.high_card_cols_.remove(col); self.ordinal_cols_.append(col)
+            elif encoding == "FREQUENCY_ENCODE" and col in self.low_card_cols_:
+                self.low_card_cols_.remove(col); self.frequency_override_cols_.append(col)
+            elif encoding == "TARGET_ENCODE" and col in self.low_card_cols_:
+                self.low_card_cols_.remove(col); self.high_card_cols_.append(col)
+            elif encoding == "TARGET" and col in self.low_card_cols_:
+                self.low_card_cols_.remove(col); self.high_card_cols_.append(col)
+            if encoding == "FREQUENCY_ENCODE" and y_arr is not None:
+                raise ValueError(f"FREQUENCY_ENCODE sur {col!r} n'est disponible que sans cible; avec cible, utilisez TARGET_ENCODE.")
+            if encoding == "TARGET_ENCODE" and y_arr is None:
+                raise ValueError(f"TARGET_ENCODE sur {col!r} exige une cible; choisissez FREQUENCY_ENCODE.")
+            if encoding:
+                self.user_override_notes_[col] = f"choix utilisateur : {encoding}"
+            if dist == "BOX_COX" and pd.to_numeric(X_clean[col], errors="coerce").dropna().le(0).any():
+                raise ValueError(f"Box-Cox impossible sur {col!r} : les valeurs doivent être strictement positives.")
+            if dist in {"YEO_JOHNSON", "LOG1P", "BOX_COX", "SQRT", "NONE"}:
+                self.column_distributions_[col] = dist
+                self._add_override_note(col, f"choix utilisateur : {dist}")
+            missing_action = choices.get("missing", "").upper()
+            if missing_action in {"MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR", "MISSING_CATEGORY"}:
+                self.column_missing_[col] = missing_action
+                self._add_override_note(col, f"choix utilisateur : {missing_action} (valeurs manquantes)")
+            outlier_action = choices.get("outliers", "").upper()
+            if outlier_action in {"NONE", "WINSORIZE", "IQR"}:
+                self.column_outliers_[col] = outlier_action
+                self._add_override_note(col, f"choix utilisateur : {outlier_action} (valeurs extrêmes)")
+            scale = choices.get("scaling", action).upper()
+            if scale in {"STANDARD", "ROBUST", "MINMAX", "MAXABS", "NONE", "SCALE_STANDARD", "SCALE_ROBUST", "SCALE_MINMAX", "NO_SCALE"}:
+                self.column_scalers_[col] = scale.replace("SCALE_", "").replace("NO_SCALE", "NONE")
+                self._add_override_note(col, f"choix utilisateur : {scale}")
+            already_noted = {"action", "distribution", "scaling", "missing", "outliers"}
+            for step, val in choices.items():
+                if step in already_noted or not isinstance(val, str):
+                    continue
+                if val.upper() not in {"AUTO", "NONE"}:
+                    self._add_override_note(col, f"choix utilisateur : {val.upper()} (étape {step})")
+            for step, val in choices.items():
+                if step not in {"action", "distribution", "scaling"} and val.upper() not in {"AUTO", "NONE", "KEEP_RAW"}:
+                    self.user_override_notes_[col] = f"choix utilisateur : {val.upper()} (étape {step})"
+
+        # Un scaler statistique commun à analyze et fit: les seuils sont réestimés sur le train.
+        for col in self.num_cols_:
+            if col not in self.column_scalers_:
+                mode = (_recommend_scaler(X_clean[col], self.config)[0] if self.config.scaler_type == "standard"
+                        else self.config.scaler_type.upper())
+                self.column_scalers_[col] = mode
+
         # Filtrage des colonnes à exclure
         X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
+        for col, mode in self.column_missing_.items():
+            if col not in X_work.columns or col not in self.binary_cols_ + self.ordinal_cols_ + self.low_card_cols_ + self.high_card_cols_:
+                continue
+            if mode == "MODE":
+                modes = X_work[col].dropna().mode()
+                fill_value = modes.iloc[0] if len(modes) else "__MISSING__"
+            elif mode == "MISSING_CATEGORY":
+                fill_value = "__MISSING__"
+            elif mode == "CONSTANT":
+                fill_value = self.column_override_params_.get(col, {}).get("missing", "__CONSTANT__")
+            else:
+                continue
+            self.categorical_imputers_[col] = fill_value
+            X_work[col] = X_work[col].fillna(fill_value)
 
         # Détection de fuite de cible sur les colonnes brutes (avant tout encodage)
         self.suspected_leakage_cols_ = []
@@ -1234,6 +2836,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self._te_oof_ = None
         if y_arr is not None:
             self._detect_leaky_columns(X_work, y_arr)
+            X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
+            # F1 : garde-fou contre les colonnes de bruit (date / haute cardinalité sans signal)
+            self._detect_noise_columns(X_work, y_arr)
             X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
 
         # 1. Pipeline Numérique
@@ -1245,6 +2850,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 threshold=self.config.missing_indicator_threshold
             )
             self.missing_indicator_.fit(X_num)
+            for col, mode in self.column_missing_.items():
+                if mode == "MISSING_INDICATOR" and col in X_num.columns and col not in self.missing_indicator_.indicator_cols_:
+                    self.missing_indicator_.indicator_cols_.append(col)
 
             # Winsorisation / Outliers
             self.winsorizer_ = Winsorizer(
@@ -1254,13 +2862,43 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 iqr_multiplier=self.config.outlier_iqr_multiplier,
             )
             self.winsorizer_.fit(X_num)
+            for col, mode in self.column_outliers_.items():
+                if col not in X_num:
+                    continue
+                vals = X_num[col].dropna()
+                if mode == "NONE" or len(vals) == 0:
+                    self.winsorizer_.lower_bounds_[col] = -np.inf
+                    self.winsorizer_.upper_bounds_[col] = np.inf
+                elif mode == "IQR":
+                    q1, q3 = vals.quantile(.25), vals.quantile(.75)
+                    spread = q3 - q1
+                    self.winsorizer_.lower_bounds_[col] = float(q1 - self.config.outlier_iqr_multiplier * spread)
+                    self.winsorizer_.upper_bounds_[col] = float(q3 + self.config.outlier_iqr_multiplier * spread)
+                elif mode == "WINSORIZE":
+                    params = self.column_override_params_.get(col, {}).get("outliers", {})
+                    if isinstance(params, dict):
+                        lower = float(params.get("lower", self.config.outlier_lower_quantile))
+                        upper = float(params.get("upper", self.config.outlier_upper_quantile))
+                        self.winsorizer_.lower_bounds_[col] = float(vals.quantile(lower))
+                        self.winsorizer_.upper_bounds_[col] = float(vals.quantile(upper))
             X_num_wins = self.winsorizer_.transform(X_num)
 
             # Imputation médiane ou moyenne
-            if self.config.imputation_strategy == "mean":
-                self.num_imputer_ = {col: float(X_num_wins[col].mean()) for col in self.num_cols_}
-            else:
-                self.num_imputer_ = {col: float(X_num_wins[col].median()) for col in self.num_cols_}
+            self.num_imputer_ = {}
+            for col in self.num_cols_:
+                mode = self.column_missing_.get(col, self.config.imputation_strategy.upper())
+                if mode == "MEAN":
+                    value = X_num_wins[col].mean()
+                elif mode == "MODE":
+                    modes = X_num_wins[col].mode(dropna=True)
+                    value = modes.iloc[0] if len(modes) else 0.0
+                elif mode == "CONSTANT":
+                    value = self.column_override_params_.get(col, {}).get("missing", 0.0)
+                elif mode == "NONE":
+                    value = X_num_wins[col].median()
+                else:
+                    value = X_num_wins[col].median()
+                self.num_imputer_[col] = float(value) if pd.notna(value) else 0.0
 
             X_num_imp = X_num_wins.fillna(self.num_imputer_)
 
@@ -1269,12 +2907,28 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self.num_skewed_cols_ = []
             for col in self.num_cols_:
                 sk = float(stats.skew(X_num_imp[col].dropna()))
-                if abs(sk) > self.config.skew_threshold:
+                override_dist = self.column_distributions_.get(col)
+                if override_dist == "YEO_JOHNSON" or (override_dist not in {"NONE", "LOG1P", "SQRT", "BOX_COX"} and abs(sk) > self.config.skew_threshold):
                     pt = PowerTransformer(method="yeo-johnson")
                     pt.fit(X_num_imp[[col]])
                     self.num_power_transformer_[col] = pt
                     self.num_skewed_cols_.append(col)
                     X_num_imp[col] = pt.transform(X_num_imp[[col]]).ravel()
+                elif override_dist in {"LOG1P", "SQRT", "BOX_COX"}:
+                    if override_dist == "LOG1P" and X_num_imp[col].le(-1).any():
+                        raise ValueError(f"LOG1P impossible sur {col!r} : des valeurs sont inférieures ou égales à -1.")
+                    if override_dist == "SQRT" and X_num_imp[col].lt(0).any():
+                        raise ValueError(f"Racine carrée impossible sur {col!r} : valeurs négatives détectées.")
+                    if override_dist == "BOX_COX":
+                        pt = PowerTransformer(method="box-cox").fit(X_num_imp[[col]])
+                        self.num_power_transformer_[col] = pt
+                        X_num_imp[col] = pt.transform(X_num_imp[[col]]).ravel()
+                    else:
+                        self.num_power_transformer_[col] = override_dist
+                        if override_dist == "LOG1P":
+                            X_num_imp[col] = np.log1p(X_num_imp[col])
+                        elif override_dist == "SQRT":
+                            X_num_imp[col] = np.sqrt(X_num_imp[col].clip(lower=0))
 
             # Scaling
             if self.config.scaler_type == "robust":
@@ -1286,8 +2940,20 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             else:
                 self.num_scaler_ = None
 
-            if self.num_scaler_ is not None:
-                self.num_scaler_.fit(X_num_imp)
+            overridden = set(self.column_scalers_).intersection(self.num_cols_)
+            default_cols = [c for c in self.num_cols_ if c not in overridden]
+            if self.num_scaler_ is not None and default_cols:
+                self.num_scaler_.fit(X_num_imp[default_cols])
+            for col in overridden:
+                mode = self.column_scalers_[col]
+                if mode == "NONE":
+                    self.column_scalers_[col] = None
+                else:
+                    scaler_cls = {"STANDARD": StandardScaler, "ROBUST": RobustScaler,
+                                  "MINMAX": MinMaxScaler, "MAXABS": MaxAbsScaler}.get(mode)
+                    if scaler_cls is None:
+                        raise ValueError(f"Scaler inconnu pour {col!r}: {mode}")
+                    self.column_scalers_[col] = scaler_cls().fit(X_num_imp[[col]])
 
         # 2. Pipeline Binaire
         if self.binary_cols_:
@@ -1299,7 +2965,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self.ordinal_encoders_ = {}
             for col in self.ordinal_cols_:
                 custom_orders = self.config.ordinal_orders or {}
-                if col in custom_orders:
+                override_order = self.column_override_params_.get(col, {}).get("encoding", {})
+                if isinstance(override_order, dict) and "order" in override_order:
+                    order = list(override_order["order"])
+                elif col in custom_orders:
                     order = custom_orders[col]
                 else:
                     order = self._match_ordinal_pattern(X_work[col].unique())
@@ -1316,7 +2985,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 4. Pipeline Catégoriel Basse Cardinalité
         if self.low_card_cols_:
-            self.rare_grouper_ = RareCategoryGrouper(threshold=self.config.rare_category_threshold)
+            rare_thresholds = {}
+            for col in self.low_card_cols_:
+                params = self.column_override_params_.get(col, {}).get("encoding", {})
+                if isinstance(params, dict) and "rare_threshold" in params:
+                    rare_thresholds[col] = float(params["rare_threshold"])
+            self.rare_grouper_ = RareCategoryGrouper(threshold=self.config.rare_category_threshold,
+                                                     column_thresholds=rare_thresholds)
             self.rare_grouper_.fit(X_work[self.low_card_cols_])
             X_low_grouped = self.rare_grouper_.transform(X_work[self.low_card_cols_])
 
@@ -1348,6 +3023,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     freqs = X_work[col].astype(str).value_counts(normalize=True).to_dict()
                     self.freq_encoding_maps_[col] = freqs
 
+        for col in self.frequency_override_cols_:
+            if col in X_work.columns:
+                self.freq_encoding_maps_[col] = X_work[col].astype(str).value_counts(normalize=True).to_dict()
+
         # 6. Pipeline Dates
         if self.date_cols_:
             self.datetime_extractor_ = DateTimeFeatureExtractor()
@@ -1355,10 +3034,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 7. Pipeline Texte
         if self.text_cols_:
+            text_components = {}
+            for col in self.text_cols_:
+                params = self.column_override_params_.get(col, {}).get("text", {})
+                if isinstance(params, dict) and "components" in params:
+                    text_components[col] = int(params["components"])
             self.text_transformer_ = RobustTextTransformer(
                 max_features=self.config.max_text_features,
                 svd_components=self.config.text_svd_components,
                 random_state=self.config.random_state,
+                column_components=text_components,
             )
             self.text_transformer_.fit(X_work[self.text_cols_])
 
@@ -1371,6 +3056,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         return self
 
     def _transform_components(self, X_clean: pd.DataFrame) -> pd.DataFrame:
+        X_clean = X_clean.copy()
+        for col, value in self.categorical_imputers_.items():
+            if col in X_clean.columns:
+                X_clean[col] = X_clean[col].fillna(value)
         """Applique les composants de transformation individuels et concatène le résultat."""
         parts = []
 
@@ -1397,14 +3086,30 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             if self.num_power_transformer_:
                 for c, pt in self.num_power_transformer_.items():
                     if c in X_num_imp.columns:
-                        X_num_imp[c] = pt.transform(X_num_imp[[c]]).ravel()
+                        if isinstance(pt, str) and pt == "LOG1P":
+                            X_num_imp[c] = np.log1p(X_num_imp[c])
+                        elif isinstance(pt, str) and pt == "SQRT":
+                            X_num_imp[c] = np.sqrt(X_num_imp[c].clip(lower=0))
+                        else:
+                            X_num_imp[c] = pt.transform(X_num_imp[[c]]).ravel()
 
             # Scaling
-            if self.num_scaler_ is not None:
-                scaled_arr = self.num_scaler_.transform(X_num_imp)
-                df_num_scaled = pd.DataFrame(scaled_arr, index=X_clean.index, columns=self.num_cols_)
+            overridden = set(self.column_scalers_).intersection(self.num_cols_)
+            if not overridden:
+                if self.num_scaler_ is not None:
+                    scaled_arr = self.num_scaler_.transform(X_num_imp)
+                    df_num_scaled = pd.DataFrame(scaled_arr, index=X_clean.index, columns=self.num_cols_)
+                else:
+                    df_num_scaled = X_num_imp
             else:
-                df_num_scaled = X_num_imp
+                default_cols = [c for c in self.num_cols_ if c not in overridden]
+                df_num_scaled = X_num_imp.astype(float)
+                if self.num_scaler_ is not None and default_cols:
+                    df_num_scaled.loc[:, default_cols] = self.num_scaler_.transform(X_num_imp[default_cols])
+                for col in overridden:
+                    scaler = self.column_scalers_[col]
+                    if scaler is not None:
+                        df_num_scaled[col] = scaler.transform(X_num_imp[[col]]).ravel()
 
             parts.append(df_num_scaled)
 
@@ -1451,6 +3156,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 df_fe = pd.DataFrame(fe_dict, index=X_clean.index)
                 parts.append(df_fe)
 
+        if self.frequency_override_cols_:
+            freq_data = {}
+            for col in self.frequency_override_cols_:
+                fmap = self.freq_encoding_maps_.get(col, {})
+                if col in X_clean.columns:
+                    freq_data[f"{col}_freq"] = X_clean[col].astype(str).map(fmap).fillna(0.0)
+                else:
+                    freq_data[f"{col}_freq"] = np.zeros(len(X_clean))
+            parts.append(pd.DataFrame(freq_data, index=X_clean.index))
+
         # 6. Dates
         if self.date_cols_ and self.datetime_extractor_ is not None:
             df_dt = self.datetime_extractor_.transform(X_clean[self.date_cols_])
@@ -1494,20 +3209,6 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             corr_mat = X_curr.corr().abs()
             to_drop_collinear = set()
 
-            # Corrélation avec y si disponible
-            target_corrs = {}
-            if y is not None:
-                for col in retained_after_var:
-                    try:
-                        valid_mask = ~np.isnan(X_curr[col]) & ~np.isnan(y)
-                        if valid_mask.sum() > 2:
-                            r, _ = stats.pearsonr(X_curr[col][valid_mask], y[valid_mask])
-                            target_corrs[col] = abs(r) if not np.isnan(r) else 0.0
-                        else:
-                            target_corrs[col] = 0.0
-                    except Exception:
-                        target_corrs[col] = 0.0
-
             for i in range(len(retained_after_var)):
                 c1 = retained_after_var[i]
                 if c1 in to_drop_collinear:
@@ -1518,10 +3219,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         continue
                     r_val = corr_mat.loc[c1, c2]
                     if not np.isnan(r_val) and r_val > self.config.correlation_threshold:
-                        # Garder celle la plus corrélée à y ou à plus forte variance
-                        score1 = target_corrs.get(c1, variances.get(c1, 0))
-                        score2 = target_corrs.get(c2, variances.get(c2, 0))
-                        drop_col = c2 if score1 >= score2 else c1
+                        # Une règle stable indépendante de la cible: garder la première
+                        # représentation selon l'ordre d'entrée et retirer la suivante.
+                        drop_col = c2
                         to_drop_collinear.add(drop_col)
                         logger.debug(
                             f"Colinéarité détectée entre {c1} et {c2} (|r|={r_val:.3f}) -> suppression de {drop_col}"
@@ -1540,8 +3240,23 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         (cross-fitting), sinon le modèle verrait des encodages calculés avec ses propres labels
         et surapprendrait (fuite sur le train).
         """
-        self.fit(X, y)
-        X_out = self.transform(X)
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X)
+        duplicate_action = self._dataset_duplicate_action()
+        duplicate_mask = X.duplicated(keep="first")
+        duplicate_count = int(duplicate_mask.sum())
+        self.dataset_cleaning_ = {"doublons_detectes": duplicate_count, "action_doublons": duplicate_action}
+        if duplicate_action == "DROP" and duplicate_count:
+            keep = ~duplicate_mask
+            X_fit = X.loc[keep]
+            if y is not None:
+                y_fit = y.iloc[np.flatnonzero(keep.to_numpy())] if isinstance(y, pd.Series) and len(y) == len(X) else np.asarray(y)[keep.to_numpy()]
+            else:
+                y_fit = None
+        else:
+            X_fit, y_fit = X, y
+        self.fit(X_fit, y_fit)
+        X_out = self.transform(X_fit)
         if self._te_oof_ is not None and self.target_cat_encoder_ is not None and len(X_out) == len(self._te_oof_):
             te_cols = list(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
             for j, c in enumerate(te_cols):
@@ -1563,6 +3278,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X = pd.DataFrame(X)
 
         # Nettoyage préalable (Étape 0)
+        if self._dataset_duplicate_action() == "DROP":
+            X = X.loc[~X.duplicated(keep="first")]
         X_clean = self._preprocess_raw_dataframe(X)
 
         # Transformation par composant
@@ -1612,9 +3329,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Étape 0 : Nettoyage des chaînes et faux manquants
         df_work = self._clean_string_and_na(df_work)
 
-        # Suppression des doublons exacts
+        # Les doublons suivent le choix partagé avec fit_transform.
+        duplicate_action = self._dataset_duplicate_action()
         n_before = len(df_work)
-        df_work = df_work.drop_duplicates()
+        if duplicate_action == "DROP":
+            df_work = df_work.drop_duplicates()
         n_dup = n_before - len(df_work)
         if n_dup > 0:
             logger.info(f"{n_dup} lignes en doublon exact supprimées du jeu d'entraînement.")
@@ -1634,6 +3353,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Ajustement et transformation
         self.target_col_ = target
         X_trans = self.fit_transform(X_raw, y_raw)
+        self.dataset_cleaning_["doublons_detectes"] = n_dup
+        self.dataset_cleaning_["action_doublons"] = duplicate_action
+        if len(X_trans) != len(y_raw):
+            y_raw = y_raw.loc[X_trans.index]
         y_trans = self.transform_target(y_raw)
 
         return X_trans, y_trans
@@ -1650,6 +3373,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X_raw = df.drop(columns=[target_name])
             y_raw = df[target_name]
             X_trans = self.transform(X_raw)
+            if len(X_trans) != len(y_raw):
+                y_raw = y_raw.loc[X_trans.index]
             y_trans = self.transform_target(y_raw)
             return X_trans, y_trans
         else:
@@ -1666,6 +3391,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
     def report(self) -> Dict[str, Any]:
         """Génère un rapport exhaustif et explicable de toutes les décisions prises."""
         columns_summary = []
+        analyzed = {str(row.get("colonne")): row for row in
+                    getattr(getattr(self, "analysis_result_", None), "columns", [])}
 
         for col, meta in self.column_metadata_.items():
             status = "GARDÉE"
@@ -1678,6 +3405,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
             # Identifier les features créées
             created_features = [f for f in self.final_feature_names_ if f == col or f.startswith(f"{col}_")]
+            recommendation = analyzed.get(str(col), {})
+            primary_step = (recommendation.get("recommendation_step") or
+                            recommendation_step_name(recommendation.get("action", "AUTO"))) if recommendation else ""
+            recommendation_detail = recommendation.get("steps", {}).get(primary_step, {})
 
             columns_summary.append({
                 "Colonne": col,
@@ -1687,8 +3418,25 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "Justification": meta["reason"],
                 "Statut": status,
                 "Nb features créées": len(created_features),
+                "Choix utilisateur": self.user_override_notes_.get(col, "recommandation suivie"),
+                "Action appliquée": self._reported_action(col, meta),
+                "Raison recommandée": recommendation.get("raison", ""),
+                "Preuve recommandée": recommendation_detail.get("evidence", ""),
+                "Explication recommandée": recommendation_detail.get("explanation", ""),
+                "Détails nettoyage": self.cleaning_decisions_.get(col, {}),
             })
 
+        df_report = pd.DataFrame(columns_summary)
+        cleaned_dropped = [col for col, detail in self.cleaning_decisions_.items()
+                           if detail.get("action_dates") == "DROP_COLUMN"]
+        for col in cleaned_dropped:
+            columns_summary.append({
+                "Colonne": col, "Type détecté": "DATETIME",
+                "Manquants (%)": "", "Cardinalité": "", "Justification": "Colonne retirée par l'étape dates.",
+                "Statut": "SUPPRIMÉE (choix utilisateur : DROP_COLUMN)", "Nb features créées": 0,
+                "Choix utilisateur": "choix utilisateur : DROP_COLUMN",
+                "Détails nettoyage": self.cleaning_decisions_.get(col, {}),
+            })
         df_report = pd.DataFrame(columns_summary)
 
         summary = {
@@ -1699,15 +3447,45 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             "analyse_cible": self.target_stats_,
             "colonnes_supprimees": {
                 "pre_filtrage": self.columns_to_drop_,
+                "nettoyage": cleaned_dropped,
                 "variance_nulle": self.dropped_variance_cols_,
                 "colinearite": self.dropped_collinear_cols_,
                 "fuites_cible": [c for c in self.suspected_leakage_cols_ if c in self.columns_to_drop_],
             },
             "fuites_suspectees": self.suspected_leakage_cols_,
             "scores_fuite_par_colonne": self.leakage_scores_,
+            "nettoyage_dataset": self.dataset_cleaning_,
             "avertissements": self.warnings_,
         }
         return summary
+
+    def _reported_action(self, col: str, meta: Dict[str, Any]) -> str:
+        """Retourne l'action principale effectivement appliquée à une colonne."""
+        if col in self.columns_to_drop_ or col in self.dropped_variance_cols_ or col in self.dropped_collinear_cols_:
+            return "DROP"
+        preferred_steps = ("type", "distribution", "outliers", "scaling", "encoding", "dates", "text")
+        for step in preferred_steps:
+            action, _ = self._override_value(col, step)
+            if action != "AUTO":
+                return action
+        kind = meta["type"].value if isinstance(meta["type"], FeatureType) else str(meta["type"])
+        if kind == "DATETIME":
+            return "DATE_FEATURES"
+        if kind == "TEXT":
+            return "TFIDF_SVD"
+        if kind == "BINARY":
+            return "BINARY_MAP"
+        if kind in {"CATEGORICAL_LOW", "CATEGORICAL_LOW_CARD"}:
+            return "ONEHOT"
+        if kind in {"CATEGORICAL_HIGH", "CATEGORICAL_HIGH_CARD"}:
+            if self.target_stats_ and self.target_stats_.get("present"):
+                return "TARGET_ENCODE"
+            return "FREQUENCY_ENCODE"
+        if col in self.column_distributions_:
+            return self.column_distributions_[col]
+        if col in self.num_skewed_cols_:
+            return "YEO_JOHNSON"
+        return "KEEP_NUMERIC"
 
     def summary(self) -> str:
         """Affichage synthétique et formaté du rapport dans la console."""
@@ -1761,12 +3539,36 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
     @classmethod
     def load(cls, path: str) -> AutoPreprocessor:
-        """Charge une instance d'AutoPreprocessor sauvegardée via joblib."""
+        """Charge une instance d'AutoPreprocessor sauvegardée via joblib.
+
+        Compatibilité ascendante (F2) : un fichier sauvegardé avant l'ajout de F2
+        (sans attribut ``numeric_string_cols_``) se charge sans erreur avec un
+        avertissement explicatif.
+        """
         payload = joblib.load(path)
         if isinstance(payload, dict) and "model" in payload:
             logger.info(f"AutoPreprocessor version {payload.get('version')} chargé depuis '{path}'")
-            return payload["model"]
+            obj = payload["model"]
         elif isinstance(payload, AutoPreprocessor):
-            return payload
+            obj = payload
         else:
             raise TypeError(f"Le fichier '{path}' ne contient pas d'objet AutoPreprocessor valide.")
+        # F2 : compatibilite ascendante - attributs absents dans anciens fichiers joblib
+        if not hasattr(obj, "numeric_string_cols_"):
+            obj.numeric_string_cols_ = {}
+            msg = (
+                "Fichier joblib ancien charge (avant F2) : numeric_string_cols_ absent. "
+                "Comportement pre-F2 : le parsing numerique sera recalcule a chaque "
+                "transform(). Refaire un fit() pour obtenir la coherence F2."
+            )
+            logger.warning(msg)
+            if hasattr(obj, "warnings_"):
+                obj.warnings_.append(msg)
+        # F1 : attributs optionnels absents dans anciens fichiers
+        for _attr, _default in [
+            ("noise_cols_detected_", []),
+            ("noise_cols_dropped_", []),
+        ]:
+            if not hasattr(obj, _attr):
+                setattr(obj, _attr, _default)
+        return obj

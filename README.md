@@ -1,52 +1,67 @@
 # AutoPreprocessor : nettoyage et transformation automatiques
 
-Prend n'importe quel jeu de données tabulaire supervisé (classification ou
-régression) et le transforme en matrice 100 % numérique, sans fuite de données
-(le préprocesseur est ajusté sur le train uniquement).
+Prend n'importe quel jeu de données tabulaire supervisé (classification ou régression) et le transforme en matrice 100 % numérique, sans fuite de données (le préprocesseur est ajusté sur le train uniquement). Une étape d'**analyse et de recommandations** décrit chaque colonne, recommande le nettoyage et la transformation adaptés (mesure, seuil, explication) et laisse l'utilisateur choisir, colonne par colonne, ce qui sera appliqué.
 
 ## Installation (Windows / PowerShell)
 
-```powershell
+```
 py -m pip install -r requirements.txt
 ```
 
-`requirements.txt` regroupe tout. `openpyxl` n'est nécessaire que pour lire les fichiers Excel, `matplotlib`
-que pour le graphique du benchmark.
+`requirements.txt` regroupe tout. `openpyxl` n'est nécessaire que pour lire les fichiers Excel, `matplotlib` que pour le graphique du benchmark.
 
 ## Fichiers
 
-| Fichier | Rôle |
-|---|---|
-| `auto_preprocessor.py` | Le module (classe `AutoPreprocessor`, compatible scikit-learn) |
-| `app_preprocess.py` | Application Tkinter (interface graphique) |
-| `test_auto_preprocessor.py` | 16 tests automatiques |
-| `signal_check.py` | Vérifie si un dataset contient du signal et si AutoPreprocessor aide (AUC, PR-AUC, cible mélangée) |
-| `benchmark_multi.py` | Benchmark sur plusieurs datasets (naïf, sklearn standard, AutoPreprocessor) |
-| `credit_g_check.py` | Analyse des variantes d'options sur le dataset credit_g |
-| `ablation_credit_g.py` | Ablation option par option sur credit_g, tests statistiques appariés (étape 3) |
-| `build_exe.bat` | Construit `dist\AutoPreprocessor.exe` (PyInstaller, Windows) |
-| `data/` | Datasets de démonstration (synthétiques, voir plus bas) |
-| `requirements.txt` | Dépendances |
-| `.gitignore` | Exclut `__pycache__`, `build/`, `dist/`, `resultats/`, `*.joblib`, `*.spec` |
+| Fichier                     | Rôle                                                                                               |
+|-----------------------------|----------------------------------------------------------------------------------------------------|
+| `auto_preprocessor.py`      | Le module (classe `AutoPreprocessor`, compatible scikit-learn, `analyze()`, `column_overrides`)    |
+| `app_preprocess.py`         | Application Tkinter (interface graphique, onglet Analyse)                                          |
+| `test_auto_preprocessor.py` | 54 tests automatiques                                                                              |
+| `signal_check.py`           | Vérifie si un dataset contient du signal et si AutoPreprocessor aide (AUC, PR-AUC, cible mélangée) |
+| `benchmark_multi.py`        | Benchmark sur plusieurs datasets (naïf, sklearn standard, AutoPreprocessor)                        |
+| `credit_g_check.py`         | Analyse des variantes d'options sur le dataset credit_g                                            |
+| `ablation_credit_g.py`      | Ablation option par option sur credit_g, tests statistiques appariés (étape 3)                     |
+| `build_exe.bat`             | Construit `dist\AutoPreprocessor.exe` (PyInstaller, Windows)                                       |
+| `data/`                     | Datasets de démonstration (synthétiques, voir plus bas)                                            |
+| `requirements.txt`          | Dépendances                                                                                        |
+| `.gitignore`                | Exclut `__pycache__`, `build/`, `dist/`, `resultats/`, `*.joblib`, `*.spec`                        |
 
 ## Utilisation
 
 ### 1. Application graphique
 
-```powershell
+```
 py app_preprocess.py
 ```
 
 1. **Ouvrir un fichier** (CSV, Excel, JSON).
-2. Onglet **Paramètres** : choisir la colonne cible, la part du test (20 % par défaut), puis **Lancer le prétraitement**.
-3. Onglet **Rapport** : colonnes supprimées, types détectés, avertissements (fuites, déséquilibre de classes).
-4. Onglet **Résultat** : exporter `train_transforme.csv`, `test_transforme.csv`, `detail_colonnes.csv`, `rapport_pretraitement.txt` et `preprocesseur.joblib`.
+2. Onglet **Analyse** (facultatif mais recommandé) : choisir la cible, analyser, consulter les recommandations et modifier les choix (voir plus bas).
+3. Onglet **Paramètres** : choisir la colonne cible, la part du test (20 % par défaut), puis **Lancer le prétraitement**.
+4. Onglet **Rapport** : colonnes supprimées, types détectés, avertissements (fuites, déséquilibre de classes), choix utilisateur.
+5. Onglet **Résultat** : exporter `train_transforme.csv`, `test_transforme.csv`, `detail_colonnes.csv`, `rapport_pretraitement.txt` et `preprocesseur.joblib`.
 
-### 2. En Python
+### 2. Analyse & Recommandations (onglet « 2. Analyse »)
 
-```python
+Avant le prétraitement, l'application analyse chaque colonne et recommande, étape par étape, le nettoyage et la transformation adaptés, avec la mesure observée, le seuil de décision et une explication.
+
+1. Charger le fichier, puis choisir la **colonne cible** et le type de tâche dans l'onglet « 2. Analyse ». Sans cible, un avertissement indique que les relations avec la cible, les fuites et l'encodage supervisé sont indisponibles.
+2. **Analyser le dataset** : le tableau affiche, par colonne, type, manquants (%), uniques, skew, outliers (%), relation avec la cible, choix final, raison, état du choix et confiance.
+3. Sélectionner une colonne : le panneau de détail montre les statistiques, la preuve chiffrée, l'explication et la liste des choix possibles pour chaque étape. Un choix différent de la recommandation est marqué « ✎ modifié ».
+4. **Tout accepter**, **Tout réinitialiser**, ou **Exporter / Importer** les choix (`choix_utilisateur.json`) pour rejouer les mêmes décisions sur un autre fichier de même structure.
+5. Lancer le prétraitement : les choix sont transmis à `PreprocessConfig.column_overrides` et le rapport indique ce qui vient d'un choix utilisateur.
+6. Exports : `analyse_colonnes.csv` (statistiques, recommandations, raisons, preuves, explications par étape, choix final) et `choix_utilisateur.json`.
+
+L'analyse est descriptive : rien n'est ajusté, les transformateurs sont ajustés ensuite sur le train uniquement.
+
+Étapes recommandées : nettoyage (faux manquants, variantes de casse, nombres en texte, dates, valeurs impossibles, doublons), type, valeurs manquantes, outliers, distribution, échelle, encodage, dates, texte, cible, sélection finale. Seules les actions réellement appliquées par `fit_transform` sont proposées (table unique `SUPPORTED_ACTIONS`).
+
+Règle de confiance : **faible** si moins de 30 observations non manquantes ou si la mesure est proche du seuil de décision ; **moyenne** si l'effectif est suffisant et la preuve modérée ; **haute** si l'effectif est ≥ 100 et la preuve nette (identifiant à plus de 98 % d'uniques, binaire net, asymétrie forte, p < 0,001).
+
+### 3. En Python
+
+```
 import pandas as pd
-from auto_preprocessor import AutoPreprocessor
+from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
 df = pd.read_csv("mon_fichier.csv")
 y = df.pop("ma_cible")
@@ -60,25 +75,39 @@ print(prep.report())
 
 Toujours utiliser `fit_transform` sur le train et `transform` sur le test.
 
+Analyse et choix par colonne :
+
+```
+analyse = prep.analyze(df_avec_cible, target="ma_cible")   # ne modifie ni ne fit rien
+print(analyse.to_text())
+table = analyse.to_dataframe()
+
+config = PreprocessConfig(column_overrides={"ma_colonne": {"scaler": "robust"}})
+prep = AutoPreprocessor(task="classification", config=config)
+```
+
+Les noms exacts des étapes et des actions acceptées sont dans `SUPPORTED_ACTIONS` (`auto_preprocessor.py`). Un choix incompatible avec le type de la colonne lève une erreur explicite.
+
 ## Ce que fait le module
 
-- **Nettoyage** : valeurs manquantes déguisées, nombres écrits en texte, doublons.
+- **Nettoyage** : valeurs manquantes déguisées, nombres écrits en texte, doublons, variantes de casse, valeurs hors bornes.
 - **Détection des types** : identifiant, constante, binaire, ordinale, numérique, catégorielle (faible / forte cardinalité), date/heure, texte.
 - **Transformations** : winsorisation, Yeo-Johnson si asymétrie, mise à l'échelle, indicateurs de valeurs manquantes, regroupement des catégories rares, One-Hot, Target Encoding (out-of-fold), extraction de features temporelles (cycliques), TF-IDF + SVD pour le texte.
 - **Filtres** : variance nulle (colonnes constantes), colinéarité.
 - **Détection de fuites** : chaque colonne est testée seule contre la cible ; alerte (ou suppression si `drop_leaky_columns=True`) si une colonne prédit la cible bien mieux que toutes les autres.
+- **Analyse statistique** (`analyze`) : manquants, asymétrie, kurtosis, normalité (D'Agostino-Pearson, Shapiro sur échantillon), outliers IQR et MAD, zéros, entropie, modalités rares, faux manquants, variantes de casse, Spearman, information mutuelle, V de Cramér, manquants informatifs, paires corrélées. Échantillonnage déterministe au-delà de 200 000 lignes.
 
 ## Tests
 
-```powershell
+```
 py -m pytest
 ```
 
-Résultat attendu : `16 passed`.
+Résultat attendu : `54 passed`.
 
 ## Vérifier si un dataset contient du signal
 
-```powershell
+```
 py signal_check.py data\churn_telecom_demo.csv churn --sep ";"
 ```
 
@@ -91,11 +120,11 @@ Compare en validation croisée (5 plis, préprocesseur refit à chaque pli) un p
 
 Tous synthétiques, générés pour tester le projet ; ils ne représentent pas de vraies données.
 
-| Fichier | Tâche | Cible | Particularités |
-|---|---|---|---|
-| `churn_telecom_demo.csv` (`;`) | classification | `churn` | ID, date, montants en texte (`"67,50 MAD"`), `?`, doublons, NaN |
-| `immobilier_demo.csv` | régression | `prix_dh` | cible asymétrique (skew ~7.8), outliers, NaN |
-| `fraud_signal_demo.csv` | classification | `is_fraud` | 5 % de fraudes, signal faible injecté (`montant`, `canal`, `score_risque_client`) |
+| Fichier                        | Tâche          | Cible      | Particularités                                                                    |
+|--------------------------------|----------------|------------|-----------------------------------------------------------------------------------|
+| `churn_telecom_demo.csv` (`;`) | classification | `churn`    | ID, date, montants en texte (`"67,50 MAD"`), `?`, doublons, NaN                   |
+| `immobilier_demo.csv`          | régression     | `prix_dh`  | cible asymétrique (skew ~7.8), outliers, NaN                                      |
+| `fraud_signal_demo.csv`        | classification | `is_fraud` | 5 % de fraudes, signal faible injecté (`montant`, `canal`, `score_risque_client`) |
 
 ## Créer l'exécutable Windows
 
@@ -104,7 +133,7 @@ Tous synthétiques, générés pour tester le projet ; ils ne représentent pas 
 1. **Copier le projet hors d'OneDrive** (par exemple `C:\AutoPre`). OneDrive synchronise les gros fichiers pendant la construction et peut produire un `.exe` tronqué (symptôme observé : fichier de ~590 octets et message « This app can't run on your PC »).
 2. Double-clic sur `build_exe.bat`, ou en PowerShell :
 
-```powershell
+```
 cd C:\AutoPre
 py -m pip install --upgrade pyinstaller openpyxl
 py -m PyInstaller --noconfirm --clean --onefile --windowed --name AutoPreprocessor --hidden-import sklearn.utils._typedefs --hidden-import sklearn.neighbors._partition_nodes --collect-submodules sklearn --collect-submodules scipy app_preprocess.py
@@ -115,7 +144,7 @@ py -m PyInstaller --noconfirm --clean --onefile --windowed --name AutoPreprocess
 
 **Si l'exécutable ne s'ouvre pas** : construire une version avec console, qui affiche les erreurs.
 
-```powershell
+```
 py -m PyInstaller --noconfirm --onefile --console --name AutoPreprocessor_debug --hidden-import sklearn.utils._typedefs --hidden-import sklearn.neighbors._partition_nodes --collect-submodules sklearn --collect-submodules scipy --exclude-module torch --exclude-module IPython --exclude-module matplotlib app_preprocess.py
 $t = Get-Date; .\dist\AutoPreprocessor_debug.exe; "code: $LASTEXITCODE | durée: $([int]((Get-Date)-$t).TotalSeconds) s"
 ```
@@ -131,20 +160,32 @@ L'exécutable n'est pas versionné dans Git (voir `.gitignore`) : le publier dan
 - Sur un petit dataset avec peu de positifs (ex. 43 fraudes), les colonnes de type date, identifiant ou haute cardinalité sans lien avec la cible ajoutent des features de bruit et peuvent faire baisser l'AUC d'un RandomForest par rapport à un pipeline simple (observé : 0.56 contre 0.63). Retirer ces colonnes avant le prétraitement si elles n'ont pas de sens métier.
 - Une tâche « regression » demandée sur une cible textuelle (« Oui »/« Non ») est automatiquement convertie en classification, avec avertissement.
 - Sur les modèles à base d'arbres (Random Forest), le gain par rapport à un pipeline sklearn standard est faible ; il est net pour les modèles linéaires avec outliers et asymétrie.
+- L'onglet Analyse a été validé par tests de la logique (fonctions pures) et par essai manuel ; il n'y a pas de test d'interface automatisé.
+- Non disponibles pour l'instant (masqués dans l'interface) : histogramme en `Canvas`, variantes de dates cycliques / ancienneté et de texte (longueur, nombre de mots), clipping MAD, hashing, transformation manuelle de la cible, sélection finale manuelle, boutons monter / descendre pour l'ordre ordinal (la liste ordinale s'édite en texte).
+- Les valeurs hors bornes reposent sur des règles métier codées (âge, pourcentage, montants positifs, date future) : vérifier qu'elles ne s'appliquent pas à une colonne de même nom mais d'échelle différente.
+- Les dates sont lues avec `format="mixed"` : une date ambiguë (`03/04/2024`) peut être lue jour/mois dans le mauvais ordre.
 
 ## Journal des changements
 
-| Étape | Changement |
-|---|---|
-| Détection de fuite | Chaque colonne brute est testée seule (arbre de profondeur 4, validation croisée) ; alerte si le score dépasse 0.95 **et** dépasse la meilleure autre colonne de 0.10 (ou ≥ 0.995). Suppression automatique seulement si `drop_leaky_columns` et au moins 10 colonnes. |
-| Target Encoding | `fit_transform()` remplace les colonnes encodées du train par des valeurs out-of-fold (pas de fuite de la cible dans le train). |
-| credit_g | `"none"` n'est plus un faux manquant ; les entiers discrets restent numériques (`encode_discrete_as_categorical=False`). |
-| Colonnes date/heure | Une colonne horodatage quasi unique (`heure`) n'est plus classée identifiant : elle produit des features cycliques. |
-| Variance | Les colonnes constantes ou de variance < 1e-12 sont supprimées (bug de comparaison flottante). |
-| Nombres en texte | `"67,50 MAD"`, `"12 kg"`, `"MAD 67"` deviennent numériques ; `"C1004"` et `"2024-01-05"` restent non numériques. |
-| Tâche régression | Une cible textuelle (`Oui`/`Non`) avec tâche « regression » passe en classification avec avertissement ; l'application remet « Type de tâche » sur `auto` à chaque fichier chargé. |
-| Outils | `signal_check.py`, datasets de démonstration, `build_exe.bat` avec vérification de taille, exécutable Windows testé. |
-| Tests | 16 tests (`py -m pytest`). |
+| Étape               | Changement                                                                                                                                                                                                                                                             |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Détection de fuite  | Chaque colonne brute est testée seule (arbre de profondeur 4, validation croisée) ; alerte si le score dépasse 0.95 **et** dépasse la meilleure autre colonne de 0.10 (ou ≥ 0.995). Suppression automatique seulement si `drop_leaky_columns` et au moins 10 colonnes. |
+| Target Encoding     | `fit_transform()` remplace les colonnes encodées du train par des valeurs out-of-fold (pas de fuite de la cible dans le train).                                                                                                                                        |
+| credit_g            | `"none"` n'est plus un faux manquant ; les entiers discrets restent numériques (`encode_discrete_as_categorical=False`).                                                                                                                                               |
+| Colonnes date/heure | Une colonne horodatage quasi unique (`heure`) n'est plus classée identifiant : elle produit des features cycliques.                                                                                                                                                    |
+| Variance            | Les colonnes constantes ou de variance < 1e-12 sont supprimées (bug de comparaison flottante).                                                                                                                                                                         |
+| Nombres en texte    | `"67,50 MAD"`, `"12 kg"`, `"MAD 67"` deviennent numériques ; `"C1004"` et `"2024-01-05"` restent non numériques.                                                                                                                                                       |
+| Tâche régression    | Une cible textuelle (`Oui`/`Non`) avec tâche « regression » passe en classification avec avertissement ; l'application remet « Type de tâche » sur `auto` à chaque fichier chargé.                                                                                     |
+| Outils              | `signal_check.py`, datasets de démonstration, `build_exe.bat` avec vérification de taille, exécutable Windows testé.                                                                                                                                                   |
+| Analyse (`analyze`) | `analyze(df, target)` décrit chaque colonne sans rien ajuster : manquants, skew, kurtosis, normalité, outliers IQR et MAD, zéros, entropie, modalités rares, faux manquants, variantes de casse, Spearman, information mutuelle, V de Cramér, manquants informatifs, paires corrélées. Statistiques calculées sur la colonne telle que le pipeline la voit (après conversion nombre-en-texte). |
+| Recommandations     | Une recommandation par colonne et par étape (mesure, seuil, explication, confiance, choix possibles). Le scaler recommandé est choisi par la même fonction statistique dans `analyze` et `fit_transform`.                                                              |
+| `SUPPORTED_ACTIONS` | Table unique des actions supportées, utilisée par l'analyse, l'interface et la validation : aucun choix affiché n'est ignoré en silence ; un override incompatible lève une erreur explicite.                                                                           |
+| `column_overrides`  | Choix utilisateur par colonne et par étape, appliqués par `fit_transform`, consignés dans le rapport (« choix utilisateur ») et conservés dans le `.joblib` et le JSON. Test de non-régression : « tout accepter » donne exactement le même résultat que sans overrides.  |
+| Nettoyage au choix  | Faux manquants, variantes de modalités, nombres en texte, dates, valeurs impossibles, doublons, type forcé : détection chiffrée et choix par colonne.                                                                                                                  |
+| Identifiants        | `client_id` (94,7 % de valeurs uniques) est recommandée `DROP` avec confiance haute ; `heure` (date) n'est pas prise pour un identifiant.                                                                                                                              |
+| Confiance           | Niveau haute / moyenne / faible calculé selon l'effectif non manquant, la distance de la mesure au seuil et la p-value.                                                                                                                                                |
+| Interface Analyse   | Onglet « 2. Analyse » : thread de calcul, sélecteur de cible, tableau triable (« — » en fin de tri, unités dans les en-têtes), infobulle sur la raison, panneau de détail redimensionnable, export `analyse_colonnes.csv` et `choix_utilisateur.json`.                  |
+| Tests               | 54 tests (`py -m pytest`).                                                                                                                                                                                                                                             |
 
 ## Historique des prompts utilisés pour construire ce projet
 
@@ -153,14 +194,14 @@ Le projet a été construit en plusieurs étapes, chacune guidée par un prompt.
 ### Étape 0 : demande initiale (en darija)
 
 > Je veux la transformation d'un dataset en tenant compte des différents types de features dans le cas d'un projet ML qui consiste à prendre n'importe quel dataset structuré supervisé et faire la transformation en numérique.
->
+> 
 > Je ne veux pas une transformation pour un seul dataset, je veux la faire sur plusieurs datasets.
 
 ### Étape 1a : prompt de génération du module (première version)
 
 À coller dans une conversation vide. Il produit `auto_preprocessor.py`, les tests et une démo.
 
-````text
+```
 # RÔLE
 Tu es un Data Scientist / ML Engineer senior, expert en prétraitement de données tabulaires, en scikit-learn et en code Python de production.
 
@@ -218,13 +259,13 @@ Je construis un projet de Machine Learning supervisé (classification ou régres
 
 # FORMAT DE RÉPONSE
 Réponds en français. Commence par un court plan, puis le code, puis les résultats du test, puis les limites connues et les pistes d'amélioration.
-````
+```
 
 ### Étape 1b : prompt de génération du module (version améliorée, en français)
 
 Version finale utilisée : ajoute la gestion des cas limites, de la fuite de cible, du déséquilibre de classes, des dates, etc.
 
-````text
+```
 # RÔLE
 Tu es un Data Scientist / ML Engineer senior (10+ ans d'expérience), expert en prétraitement de données tabulaires, en scikit-learn et en code Python de production. Tu privilégies la robustesse, l'absence de fuite de données et la reproductibilité.
 
@@ -323,13 +364,13 @@ Cible :
 
 # FORMAT DE RÉPONSE
 Réponds en français. Structure : (1) bref plan, (2) code complet, (3) résultats réels des tests et de l'exemple, (4) limites connues, (5) pistes d'amélioration (ex. sélection de features, AutoML, détection d'anomalies, support Spark/Polars).
-````
+```
 
 ### Étape 2 : prompt de benchmark multi-datasets
 
 À utiliser avec `auto_preprocessor.py` attaché. Il produit `benchmark_multi.py` (comparaison naïf / sklearn standard / AutoPreprocessor, test de la cible mélangée).
 
-````text
+```
 # RÔLE
 Tu es un Data Scientist / ML Engineer senior, expert en benchmarking rigoureux, en prétraitement de données tabulaires et en scikit-learn. Tu privilégies l'honnêteté des comparaisons et la détection des fuites de données.
 
@@ -397,13 +438,13 @@ Sur chaque dataset, vérifier par assertions :
 
 # FORMAT DE RÉPONSE
 Réponds en français. Structure : (1) bref plan, (2) code complet, (3) résultats réels de l'exécution, (4) verdict, (5) bugs trouvés et corrections, (6) limites et pistes d'amélioration.
-````
+```
 
 ### Étape 3 : prompt d'analyse approfondie (volets A, B, C)
 
 À utiliser avec `auto_preprocessor.py` et `benchmark_multi.py` attachés. A : ablation sur credit_g. B : tests statistiques appariés et modèles à régularisation CV. C : verdict tenant compte des fuites. Il produit `ablation_credit_g.py`.
 
-````text
+```
 # RÔLE
 Tu es un Data Scientist / ML Engineer senior, expert en benchmarking rigoureux, scikit-learn et statistiques appliquées au ML. Tu privilégies l'honnêteté des conclusions : tu ne présentes jamais un écart comme un gain s'il est dans le bruit.
 
@@ -465,13 +506,13 @@ Dans `benchmark_multi.py` :
 
 # FORMAT DE RÉPONSE
 Réponds en français. Structure : (1) plan en quelques lignes, (2) pour chaque volet : fichiers livrés complets, résultats réels de l'exécution, conclusion, (3) tableau récapitulatif final "où AutoPreprocessor aide, est neutre ou dégrade", (4) limites connues et commandes PowerShell exactes pour tout relancer chez moi.
-````
+```
 
 ### Étape 4 : prompt de l'application graphique (Tkinter)
 
 À utiliser avec `auto_preprocessor.py` attaché. Il produit `app_preprocess.py`.
 
-````text
+```
 # RÔLE
 Tu es un développeur Python senior, expert en interfaces Tkinter/ttk, en pandas et en scikit-learn. Tu écris du code robuste, lisible et testé, qui ne fige jamais l'interface.
 
@@ -512,7 +553,7 @@ J'ai un module `auto_preprocessor.py` (classe `AutoPreprocessor`, dataclass `Pre
 
 # FORMAT DE RÉPONSE
 Réponds en français. Plan en quelques lignes, puis le fichier complet `app_preprocess.py`, puis les résultats réels des tests, puis les limites connues et la commande PowerShell pour lancer l'application.
-````
+```
 
 ### Étape 5 : prompts de correction et d'extension
 
@@ -520,39 +561,175 @@ Ces prompts ont été utilisés (en dialogue, avec le résultat réel du rapport
 
 **5a. Colonne `heure` supprimée à tort**
 
-````text
+```
 Voici le rapport d'AutoPreprocessor sur un dataset de transactions bancaires : la colonne `heure` (valeurs « 22:38:02 », 798 valeurs uniques sur 800 lignes) est supprimée comme DROP_ID. C'est faux : c'est une heure, pas un identifiant. Corrige la détection pour qu'une colonne date/heure quasi unique ne soit jamais classée ID, puis vérifie que `heure` produit des features d'heure (sinus/cosinus). Ajoute ou ajuste un test, relance les tests existants et donne le diff exact.
-````
+```
 
 **5b. Colonnes constantes non supprimées**
 
-````text
+```
 Dans le fichier exporté, trois colonnes (`heure_month_sin`, `heure_dow_sin`, `heure_dow_cos`) ont un écart-type de 0 mais n'ont pas été supprimées par le filtre de variance. Trouve pourquoi (probablement une comparaison flottante) et corrige : une colonne constante, ou de variance inférieure à 1e-12, doit être retirée. Relance les tests et mesure le nombre de features avant/après sur ce dataset.
-````
+```
 
 **5c. Nombres avec unité détectés comme catégories**
 
-````text
+```
 Dans `churn_telecom_demo.csv`, la colonne `facture_mensuelle` (« 67,50 MAD ») est détectée comme catégorielle à haute cardinalité (1865 valeurs) au lieu de numérique. Étends le parseur de nombres écrits en texte pour gérer une unité en suffixe (MAD, DH, kg...) et un code devise en préfixe (« MAD 67 »), sans jamais transformer un identifiant comme « C1004 » ou « T000012 » en nombre. Ajoute un test avec ces cas (y compris une date « 2024-01-05 » qui doit rester non numérique) et vérifie sur le dataset que la colonne devient NUMERIC_CONTINUOUS.
-````
+```
 
 **5d. Tâche « régression » sur une cible textuelle**
 
-````text
+```
 Dans l'application, j'ai laissé « Type de tâche » sur « regression » après avoir chargé un autre fichier, puis ouvert un dataset dont la cible contient « Oui »/« Non ». Erreur : « could not convert string to float: 'Non' ». Corrige à deux endroits : (1) dans le module, si la tâche demandée est « regression » et que la cible contient du texte non convertible, repasser en classification avec un avertissement dans le rapport ; (2) dans l'application, remettre « Type de tâche » sur « auto » à chaque chargement de fichier. Vérifie avec le dataset, puis relance les tests.
-````
+```
 
 **5e. Script de vérification du signal**
 
-````text
+```
 Écris `signal_check.py <fichier.csv> <cible> [--sep ;]` qui dit si un dataset contient du signal et si AutoPreprocessor aide. Validation croisée stratifiée à 5 plis, préprocesseur refit à chaque pli ; comparer un pipeline sklearn standard (imputation + One-Hot + scaler) et AutoPreprocessor, avec RandomForest (class_weight balanced) et LogisticRegression ; ajouter une ligne « cible mélangée » avec AutoPreprocessor. Afficher AUC (± écart-type) et PR-AUC, plus la valeur du hasard. Termine par une phrase d'interprétation. Teste-le sur un dataset sans signal et sur un dataset avec signal injecté, et dis honnêtement si AutoPreprocessor est meilleur, égal ou moins bon.
-````
+```
 
 **5f. Exécutable Windows**
 
-````text
+```
 Écris `build_exe.bat` qui installe PyInstaller et construit `dist\AutoPreprocessor.exe` à partir de `app_preprocess.py` (un seul fichier, sans console, avec les sous-modules scikit-learn et scipy nécessaires). Le script doit : vérifier que `app_preprocess.py` et `auto_preprocessor.py` sont présents, supprimer `build` et `dist` avant de construire, s'arrêter avec un message clair si une étape échoue, et vérifier la taille finale (moins de 20 Mo = construction incomplète). Précise les pannes probables : fichier de quelques centaines d'octets (construction dans OneDrive : recommencer dans `C:\AutoPre`), fenêtre qui ne s'ouvre pas (construire une version `--console` et afficher le code de sortie et la durée), antivirus, taille de l'exécutable.
-````
+```
+
+### Étape 6 : Analyse & Recommandations (prompt principal)
+
+À utiliser avec `auto_preprocessor.py`, `app_preprocess.py` et `test_auto_preprocessor.py` attachés. Il ajoute l'analyse statistique par colonne, les recommandations par étape et les choix utilisateur appliqués par `fit_transform`.
+
+```
+# RÔLE
+Tu es un Data Scientist / développeur Python senior, expert en statistique appliquée au ML, en prétraitement de données tabulaires, scikit-learn, pandas et Tkinter/ttk. Tu privilégies la rigueur : aucune recommandation sans preuve chiffrée, aucune fuite de données.
+
+# CONTEXTE
+Je te joins `auto_preprocessor.py` (classe `AutoPreprocessor`, dataclass `PreprocessConfig`, `fit_transform`, `transform`, `report()`, `summary()`, `save()/load()`) et `app_preprocess.py` (application Tkinter : fonctions pures `read_table`, `build_config`, `run_preprocessing`, `apply_to_new_data`, `report_text`, `export_result`, dataclasses `Options` et `RunResult`, classe `App`). Environnement : Windows, Python 3.13 (`py`), pandas, numpy, scikit-learn, scipy, joblib, pytest. Aucune dépendance supplémentaire obligatoire. Les 16 tests de `test_auto_preprocessor.py` passent aujourd'hui et doivent rester verts.
+
+# OBJECTIF
+Ajouter une étape « Analyse & Recommandations » AVANT le prétraitement. Après chargement d'un dataset, l'application réalise une étude statistique de CHAQUE colonne, puis recommande, pour chaque colonne, les opérations de NETTOYAGE et de TRANSFORMATION adaptées, chacune avec sa justification chiffrée. Pour chaque opération, l'utilisateur voit tous les choix possibles et peut sélectionner celui qu'il veut appliquer, colonne par colonne, avant de lancer le prétraitement.
+
+# PRINCIPE CLÉ
+Chaque recommandation DOIT être déduite des statistiques et des caractéristiques de la colonne, jamais d'une règle arbitraire. Chaque recommandation affiche : la mesure observée, le seuil de décision, la conclusion. Exemple : « asymétrie = 7.8 (seuil |skew| > 1) ; test de normalité D'Agostino p < 0.001 → distribution non normale très asymétrique → Yeo-Johnson recommandé ; alternatives : log1p, aucune. »
+
+# PARTIE 1 : ÉTUDE STATISTIQUE PAR COLONNE (`analyze(df, target=None) -> AnalysisResult`)
+`analyze` ne fait aucun fit et ne modifie pas le DataFrame. Calculer, pour chaque colonne :
+
+Profil général : dtype brut, type détecté par le module, % de manquants, nombre et ratio de valeurs uniques, doublons de colonnes, exemples de valeurs.
+
+Qualité / nettoyage (détection) :
+- faux manquants (`?`, `N/A`, `null`, `none`, `-`, chaîne vide) : nombre et valeurs trouvées ;
+- espaces parasites, casse incohérente, variantes d'une même modalité (ex. « Casa », « casa », « CASA ») ;
+- nombres écrits en texte (`"67,50 MAD"`, `"12 kg"`, `"45%"`) : % convertible, unité détectée ;
+- types mélangés dans une colonne ; dates dans plusieurs formats ;
+- valeurs impossibles ou aberrantes (négatifs sur une colonne strictement positive, âges > 120, dates futures) ;
+- colonne constante / quasi constante (> 99 % même valeur), identifiant (ratio d'uniques ≈ 1), doublons de colonnes ;
+- lignes dupliquées (niveau dataset).
+
+Numériques : min, max, moyenne, médiane, écart-type, coefficient de variation, asymétrie (skew), kurtosis, test de normalité (D'Agostino-Pearson ou Shapiro sur échantillon), % d'outliers par IQR et par z-score robuste (MAD), présence de zéros en excès, échelle (ordre de grandeur). Les statistiques sont calculées sur la colonne telle que le pipeline la voit (après nettoyage et conversion nombre-en-texte).
+
+Catégorielles : cardinalité, top 5 modalités avec fréquences, % de modalités rares (< seuil), entropie, déséquilibre entre modalités ; détection d'un ordre naturel (low/medium/high, S/M/L, niveaux d'études).
+
+Dates : plage, granularité (jour, heure), saisonnalité apparente, % de valeurs non parsables.
+
+Texte libre : longueur moyenne, vocabulaire, % de valeurs uniques.
+
+Mécanisme des manquants (si > 0 % de NaN) : corrélation entre « est manquant » et la cible (test du khi-deux ou t-test selon la tâche) ; si p < 0.05, l'absence est informative → indicateur de valeur manquante recommandé.
+
+Relation avec la cible (si fournie) : corrélation de Spearman (numériques), information mutuelle (toutes), ANOVA / khi-deux / V de Cramér selon les types, score de fuite (réutiliser la détection de fuite existante, sans la dupliquer).
+
+Relations entre features : paires fortement corrélées (|r| > seuil), colonnes redondantes, VIF approximatif pour les numériques si le temps de calcul le permet.
+
+Niveau dataset : taille, déséquilibre de classes (classification), asymétrie de la cible (régression), ratio colonnes/lignes, avertissements.
+
+# PARTIE 2 : RECOMMANDATIONS PAR ÉTAPE, AVEC CHOIX POSSIBLES
+Pour chaque colonne, produire une recommandation PAR ÉTAPE du pipeline, dans cet ordre. Chaque étape = (recommandation, preuve chiffrée, explication en français 1 à 2 phrases, confiance haute/moyenne/faible, liste complète des choix valides pour ce type de colonne, y compris « ne rien faire »).
+
+1. Nettoyage de base : remplacer les faux manquants par NaN ; strip et normalisation de casse ; fusion des variantes de modalités ; conversion nombre-en-texte → numérique ; parsing de dates ; correction des valeurs impossibles (mettre en NaN / clip / supprimer la ligne) ; suppression des doublons.
+2. Décision sur la colonne : garder, supprimer (ID, constante, > seuil de manquants, fuite, redondante) ; choix : garder / supprimer / forcer le type.
+3. Valeurs manquantes : choix = médiane, moyenne, mode, catégorie « __MISSING__ », constante choisie par l'utilisateur, KNN, itérative, interpolation (dates triées), supprimer les lignes ; + indicateur de manquant (oui/non). Recommandation basée sur : % de manquants, skew (médiane si |skew| > 1, sinon moyenne), type, informativité de l'absence.
+4. Outliers : choix = aucun, winsorisation (percentiles configurables), clipping IQR, clipping z-score robuste, mise en NaN puis imputation, suppression des lignes. Recommandation basée sur : % d'outliers, kurtosis, taille de l'échantillon, plausibilité métier (valeurs impossibles vs extrêmes réels).
+5. Distribution : choix = aucune, log1p (valeurs ≥ 0), Box-Cox (valeurs > 0), Yeo-Johnson, racine carrée, binning (quantiles/égal largeur). Recommandation basée sur : skew, test de normalité, signe des valeurs, zéros.
+6. Mise à l'échelle : choix = aucune, StandardScaler, RobustScaler, MinMaxScaler, MaxAbsScaler. Recommandation basée sur : présence d'outliers après étape 4, normalité, échelle ; note : inutile pour les modèles à base d'arbres.
+7. Encodage des catégorielles : choix = One-Hot, Ordinal (avec ordre éditable), Target Encoding (out-of-fold, lissage configurable), Frequency Encoding, Binary/Hashing, regroupement des modalités rares puis encodage. Recommandation basée sur : cardinalité, % de rares, ordre naturel, taille de l'échantillon, lien avec la cible, risque de fuite du target encoding sur petit dataset.
+8. Dates : choix = features calendaires (année, mois, jour, jour de semaine, trimestre, week-end), encodage cyclique sin/cos, ancienneté depuis une date de référence, supprimer. Recommandation basée sur : granularité et plage.
+9. Texte : choix = TF-IDF + SVD (nb de composantes éditable), longueur/nb de mots seulement, supprimer.
+10. Cible : classification = encodage des classes + recommandation sur le déséquilibre (class_weight, SMOTE à appliquer en dehors du module) ; régression = transformation de la cible si asymétrique (log1p / Yeo-Johnson) avec `inverse_transform_target`.
+11. Sélection finale : variance nulle, colinéarité (en gardant la colonne la plus liée à la cible), colonnes à supprimer.
+
+Règles de décision : toutes les règles et tous les seuils vivent dans un seul endroit (`PreprocessConfig` + une table de règles documentée), utilisés à la fois par `analyze` ET par `fit_transform`, pour qu'il n'y ait jamais de divergence entre ce qui est recommandé et ce qui est appliqué.
+
+# PARTIE 3 : MODULE (`auto_preprocessor.py`)
+- Dataclasses : `ColumnStats`, `StepRecommendation` (étape, action recommandée, preuve, explication, confiance, choix possibles), `ColumnAnalysis`, `AnalysisResult` avec `to_dataframe()` et `to_text()`.
+- Enum fermé des actions par étape avec table de compatibilité action ↔ type de colonne.
+- `PreprocessConfig.column_overrides: dict[str, dict[étape, action | (action, paramètres)]]` ; `fit_transform` applique les overrides, valide la compatibilité (erreur explicite si, par exemple, Box-Cox sur des valeurs négatives ou One-Hot sur une colonne numérique continue), et les consigne dans `report()` avec la mention « choix utilisateur » à côté de la recommandation d'origine.
+- Si l'utilisateur accepte toutes les recommandations, le résultat doit être EXACTEMENT identique à l'exécution actuelle du module (test de non-régression obligatoire). Si une règle de recommandation diffère du comportement actuel, signale-le et propose de mettre à jour le comportement par défaut plutôt que de laisser les deux diverger.
+- Les overrides sont sauvegardés dans le `.joblib` et rechargés à l'identique.
+- Aucune fuite : `analyze` ne fait que décrire ; tous les paramètres (percentiles de winsorisation, lambda de Yeo-Johnson, moyennes, encodages) sont appris sur le train uniquement lors de `fit_transform`.
+
+# PARTIE 4 : APPLICATION (`app_preprocess.py`)
+1. Nouvel onglet « 2. Analyse » entre « Données » et « Paramètres » (renumérote les autres). Bouton « Analyser le dataset » ; calcul dans un thread (`queue.Queue` + `after()`), barre de progression, jamais de gel.
+2. Vue d'ensemble (Treeview triable) : une ligne par colonne avec type, % manquants, uniques, skew, % outliers, lien avec la cible, nombre de problèmes de qualité, action principale recommandée, confiance. Étiquettes de risque : fuite, > 50 % manquants, identifiant, constante, redondante.
+3. Vue détaillée d'une colonne : statistiques complètes, mini-histogramme ou top des modalités (barres dessinées avec `Canvas`, sans matplotlib obligatoire), puis les étapes sous forme de lignes : [étape | recommandation | preuve chiffrée | explication | liste déroulante des choix possibles]. Un choix différent de la recommandation est marqué « ✎ modifié ». Les paramètres éditables (percentiles, seuil de rareté, nombre de composantes SVD, ordre ordinal, constante d'imputation) apparaissent selon l'action choisie.
+4. Actions globales : « Tout accepter », « Réinitialiser la colonne », « Tout réinitialiser », application d'un choix à plusieurs colonnes sélectionnées.
+5. Résumé avant lancement : nombre de colonnes avec choix utilisateur, avertissements (ex. « vous avez désactivé le traitement des outliers sur 3 colonnes à fort kurtosis »).
+6. « Lancer le prétraitement » transmet les choix à `build_config` → `column_overrides`. Le rapport indique, pour chaque colonne et chaque étape, ce qui a suivi la recommandation et ce qui vient d'un choix utilisateur.
+7. Export : `analyse_colonnes.csv` (statistiques + recommandations + choix final), `choix_utilisateur.json` (ré-importable pour rejouer les mêmes choix sur un autre fichier de même structure ; colonnes manquantes signalées, jamais d'erreur silencieuse).
+8. Séparation stricte logique / interface : toute la logique (construction des tables d'analyse, validation des choix, conversion vers `column_overrides`, import/export JSON) dans des fonctions pures testables sans Tkinter.
+
+# CONTRAINTES
+- Interface en français, redimensionnable, utilisable en 1280x720 ; noms de fichiers avec accents et espaces sous Windows.
+- Gros datasets : l'analyse travaille sur un échantillon documenté au-delà de 200 000 lignes (tests de normalité sur échantillon de 5000 max) et l'interface l'indique.
+- Gérer sans erreur : colonne entièrement vide, constante, noms de colonnes dupliqués, une seule colonne, cible absente, tailles très petites (statistiques non fiables signalées avec une confiance « faible »).
+- Erreurs : messagebox claire avec cause probable ; détail dans un journal.
+- Type hints, docstrings, PEP8, fonctions courtes, logging (pas de print). Pas de nouvelle dépendance obligatoire (scipy et scikit-learn suffisent).
+
+# TESTS À EXÉCUTER AVANT LIVRAISON
+- Les 16 tests existants restent verts.
+- Nouveaux tests pytest : (a) accepter toutes les recommandations donne exactement le même X que l'exécution actuelle ; (b) chaque étape : un override valide change bien la transformation ; (c) un override incompatible lève une erreur explicite ; (d) les overrides survivent à `save/load` ; (e) `analyze` ne modifie pas le DataFrame ; (f) chaque recommandation contient mesure, seuil et explication non vides ; (g) datasets synthétiques construits pour déclencher chaque règle ; (h) cas limites listés plus haut.
+- Valider sur `data/churn_telecom_demo.csv` (`;`), `immobilier_demo.csv` et `fraud_signal_demo.csv` : `heure` → features cycliques, `facture_mensuelle` détectée numérique avec unité « MAD », `prix_dh` (skew ~7.8) → correction d'asymétrie ; afficher les tableaux d'analyse réels.
+- Si Tkinter n'est pas disponible dans ton environnement, teste le câblage avec des stubs et dis-le clairement ; ne prétends pas avoir vu la fenêtre.
+
+# CRITÈRES DE QUALITÉ
+- Chaque recommandation est traçable : mesure + seuil + conclusion.
+- Recommandé = appliqué : aucune divergence entre `analyze` et `fit_transform`.
+- Si une statistique n'est pas fiable (petit échantillon), dis-le dans l'explication et baisse la confiance au lieu d'affirmer.
+- Code exécuté avant livraison ; si un test échoue, corrige avant de répondre.
+
+# FORMAT DE RÉPONSE
+Réponds en français. (1) Plan en quelques lignes, (2) fichiers COMPLETS et prêts à coller, (3) résultats réels des tests et tableaux d'analyse, (4) tableau récapitulatif des règles (étape | condition statistique | seuil | action recommandée | choix alternatifs), (5) limites connues et commandes PowerShell.
+```
+
+### Étape 6b : prompts de correction (cumulés)
+
+Le premier jet livrait une analyse partielle (une seule recommandation par colonne, choix affichés mais non appliqués). Il a été complété en dialogue, en collant à chaque fois le rapport de l'agent et en demandant : (1) que les choix soient appliqués par `fit_transform`, (2) que l'interface n'affiche aucun choix non pris en charge (table `SUPPORTED_ACTIONS`), (3) des recommandations de nettoyage avec choix, (4) des paramètres éditables, (5) des explications visibles dans l'interface. Dernier prompt de correction, après un essai manuel de l'interface :
+
+```
+# CONTEXTE
+Version actuelle : 49 tests verts, explications visibles (colonne « raison », panneau de détail, export CSV enrichi). Ne casse aucun test existant. Avant de commencer, vérifie dans le code et par une exécution réelle l'état de chacun des points ci-dessous : ne refais pas ce qui fonctionne déjà, corrige ce qui manque, et dis pour chaque point « déjà fait / corrigé / non fait ».
+
+# 1. CIBLE DANS L'ONGLET « 2. ANALYSE »
+Sélecteur de colonne cible et de type de tâche, synchronisé avec « 3. Paramètres ». Sans cible : avertissement visible. La cible apparaît dans le tableau avec l'état « cible » (grisée), sans recommandation. Sur churn_telecom_demo.csv (cible `churn`), relation_cible rempli pour toutes les features (Spearman, information mutuelle ou V de Cramér). Test obligatoire.
+
+# 2. STATISTIQUES DE facture_mensuelle
+Skew et outliers calculés sur la colonne telle que le pipeline la voit (après conversion « 67,50 MAD » → numérique). Comparer avec un calcul pandas indépendant ; test avec une colonne texte-numérique asymétrique.
+
+# 3. AFFICHAGE DU TABLEAU
+Décimales à 2 (pourcentages à 1), `nan` remplacé par « — », unités dans les en-têtes (« manquants (%) », « outliers (%) »), colonnes assez larges, défilement horizontal, tri numérique avec « — » toujours en dernier.
+
+# 4. CONFIANCE RÉELLE
+Haute / moyenne / faible selon l'effectif non manquant, l'écart mesure-seuil et la p-value. Règle documentée, trois niveaux testés.
+
+# 5. EXPLICATIONS
+1 à 2 phrases avec mesure ET seuil ; aide pour les choix non recommandés ; infobulle sur la raison ; panneau de détail toujours visible, première colonne sélectionnée automatiquement.
+
+# LIVRAISON
+Fichiers COMPLETS, nombre exact de tests, tableau « point | état », liste de ce qui reste, et dis si la fenêtre Tkinter n'a pas été vérifiée visuellement.
+```
+
+### Étape 6 : points de vigilance
+
+Un agent qui écrit du code sans écran ne voit pas l'interface : toujours ouvrir l'application soi-même (`py app_preprocess.py`), charger un CSV de démonstration, vérifier que la cible est reconnue, que `relation cible` est renseigné, que les choix changent bien le résultat dans le rapport, puis exporter et réimporter le JSON.
 
 ### Remarque
 

@@ -1084,6 +1084,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             value = value.value
         return str(value).upper(), params
 
+    def _add_override_note(self, col: str, text: str) -> None:
+        """Ajoute une note de choix utilisateur sans écraser celles déjà enregistrées pour la colonne."""
+        previous = self.user_override_notes_.get(col)
+        self.user_override_notes_[col] = f"{previous} ; {text}" if previous else text
+
     def _dataset_duplicate_action(self) -> str:
         actions = set()
         for col, raw in (self.config.column_overrides or {}).items():
@@ -2778,19 +2783,25 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 raise ValueError(f"Box-Cox impossible sur {col!r} : les valeurs doivent être strictement positives.")
             if dist in {"YEO_JOHNSON", "LOG1P", "BOX_COX", "SQRT", "NONE"}:
                 self.column_distributions_[col] = dist
-                self.user_override_notes_[col] = f"choix utilisateur : {dist}"
+                self._add_override_note(col, f"choix utilisateur : {dist}")
             missing_action = choices.get("missing", "").upper()
             if missing_action in {"MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR", "MISSING_CATEGORY"}:
                 self.column_missing_[col] = missing_action
-                self.user_override_notes_[col] = f"choix utilisateur : {missing_action} (valeurs manquantes)"
+                self._add_override_note(col, f"choix utilisateur : {missing_action} (valeurs manquantes)")
             outlier_action = choices.get("outliers", "").upper()
             if outlier_action in {"NONE", "WINSORIZE", "IQR"}:
                 self.column_outliers_[col] = outlier_action
-                self.user_override_notes_[col] = f"choix utilisateur : {outlier_action} (valeurs extrêmes)"
+                self._add_override_note(col, f"choix utilisateur : {outlier_action} (valeurs extrêmes)")
             scale = choices.get("scaling", action).upper()
             if scale in {"STANDARD", "ROBUST", "MINMAX", "MAXABS", "NONE", "SCALE_STANDARD", "SCALE_ROBUST", "SCALE_MINMAX", "NO_SCALE"}:
                 self.column_scalers_[col] = scale.replace("SCALE_", "").replace("NO_SCALE", "NONE")
-                self.user_override_notes_[col] = f"choix utilisateur : {scale}"
+                self._add_override_note(col, f"choix utilisateur : {scale}")
+            already_noted = {"action", "distribution", "scaling", "missing", "outliers"}
+            for step, val in choices.items():
+                if step in already_noted or not isinstance(val, str):
+                    continue
+                if val.upper() not in {"AUTO", "NONE"}:
+                    self._add_override_note(col, f"choix utilisateur : {val.upper()} (étape {step})")
             for step, val in choices.items():
                 if step not in {"action", "distribution", "scaling"} and val.upper() not in {"AUTO", "NONE", "KEEP_RAW"}:
                     self.user_override_notes_[col] = f"choix utilisateur : {val.upper()} (étape {step})"

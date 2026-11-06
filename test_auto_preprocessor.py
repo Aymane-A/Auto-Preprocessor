@@ -1598,3 +1598,20 @@ def test_invariant_c4_task_label_keeps_circumflex():
 
     source = (Path(__file__).parent / "app_preprocess.py").read_text(encoding="utf-8")
     assert "Tâche" in source
+    
+
+def test_invariant_every_applied_override_is_noted_without_overwrite():
+    # pyrefly: ignore[missing-import]
+    import pandas as pd, numpy as np
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"num": rng.normal(size=80)})
+    df.loc[::9, "num"] = np.nan
+    y = pd.Series(rng.integers(0, 2, 80))
+    cfg = PreprocessConfig(column_overrides={"num": {"missing": "MEDIAN", "outliers": "WINSORIZE", "scaling": "ROBUST"}})
+    pre = AutoPreprocessor(cfg)
+    pre.fit_transform(df, y)
+    note = pre.user_override_notes_["num"]
+    for expected in ("MEDIAN", "WINSORIZE", "ROBUST"):
+        assert expected in note, f"override {expected} non consigné : {note}"
+    assert note.count("MEDIAN") == 1, f"doublon dans la note : {note}"

@@ -31,7 +31,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from auto_preprocessor import (Action, AnalysisResult, AutoPreprocessor, ColumnOverride,
-                               PreprocessConfig, PREPROCESS_LABELS, format_step_evidence,
+                               PreprocessConfig, PREPROCESS_LABELS, preview_column, format_step_evidence,
                                format_step_reason, recommendation_step_name,
                                recommendation_confidence)
 
@@ -201,6 +201,13 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("distribution", "YEO_JOHNSON"): "Yeo-Johnson réduit l'asymétrie sans exiger des valeurs positives; cela aide les modèles linéaires, tandis que les arbres y sont moins sensibles.",
         ("distribution", "LOG1P"): "Log1p compresse la longue queue droite et convient aux valeurs positives très asymétriques; elle ne convient pas aux valeurs inférieures à -1.",
         ("distribution", "BOX_COX"): "Box-Cox rapproche une variable positive d'une distribution symétrique; elle exige des valeurs strictement positives.",
+        ("distribution", "CBRT"): "La racine cubique réduit l'asymétrie sur tous les réels (négatifs et zéros inclus); l'effet est plus doux que le logarithme.",
+        ("distribution", "QUANTILE"): "La transformation par quantiles impose une forme proche de la loi normale en gardant l'ordre; elle écrase les distances entre valeurs et peut masquer des écarts réels.",
+        ("distribution", "RANK"): "Les rangs (0 à 1) rendent la variable insensible aux extrêmes; seule l'information d'ordre est conservée.",
+        ("encoding", "COUNT_ENCODE"): "Le comptage remplace chaque modalité par son nombre d'occurrences; il compacte les catégories, mais confond celles de même effectif.",
+        ("encoding", "BINARY_ENCODE"): "Le code binaire utilise log2(K) colonnes pour K modalités; il limite l'explosion de colonnes du One-Hot, mais crée des proximités artificielles entre modalités.",
+        ("encoding", "LOO_ENCODE"): "Leave-One-Out remplace chaque modalité par la moyenne de la cible des autres lignes de cette modalité; il compacte les catégories fortes en une colonne, mais exige une cible binaire ou continue et, sur le train, la valeur encodée dépend de la cible de la ligne (risque de surapprentissage : un bruit sigma peut l'atténuer).",
+        ("encoding", "HASH_ENCODE"): "Le hachage projette les modalités dans un nombre fixe de colonnes; il gère les modalités inconnues, mais des collisions mélangent certaines modalités.",
         ("distribution", "SQRT"): "La racine carrée réduit modérément l'effet des grandes valeurs; elle convient aux comptes positifs et change l'échelle des coefficients.",
         ("distribution", "NONE"): "Aucune transformation conserve l'échelle observée; c'est adapté si la forme n'est pas assez éloignée du seuil, mais les modèles linéaires restent sensibles à l'asymétrie.",
         ("scaling", "ROBUST"): "RobustScaler centre par médiane et échelle par IQR; il convient aux outliers, mais ne rend pas la distribution normale.",
@@ -210,11 +217,17 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("scaling", "NONE"): "Aucune mise à l'échelle garde les unités; c'est utile pour les arbres et rend les grandeurs incomparables pour certains modèles.",
         ("missing", "MEDIAN"): "La médiane remplace les manquants par une valeur centrale robuste; elle convient aux variables asymétriques, mais réduit leur dispersion.",
         ("missing", "MEAN"): "La moyenne remplace les manquants par le centre arithmétique; elle convient aux données symétriques, mais est sensible aux outliers.",
+        ("missing", "KNN"): "KNN estime la valeur absente avec les lignes les plus proches sur les autres colonnes numériques; il capte les relations non linéaires, mais coûte plus cher et dépend de l'échelle.",
+        ("missing", "ITERATIVE"): "L'imputation itérative prédit la valeur absente par régression sur les autres colonnes; elle exploite les relations linéaires, mais suppose que les absences dépendent des colonnes observées.",
         ("missing", "MODE"): "Le mode remplace les manquants par la valeur la plus fréquente; il préserve une modalité existante, mais peut renforcer son déséquilibre.",
         ("missing", "MISSING_CATEGORY"): "Une modalité dédiée conserve l'information qu'une valeur manque; elle convient aux catégories, mais crée une modalité supplémentaire.",
         ("missing", "CONSTANT"): "Une constante explicite rend les manquants visibles; elle est utile si sa valeur a un sens métier, mais peut créer un point artificiel.",
         ("outliers", "WINSORIZE"): "La winsorisation borne les queues selon les quantiles; elle limite l'influence des extrêmes, mais écrase leurs différences.",
         ("outliers", "IQR"): "Le clipping IQR borne les valeurs au seuil de 1,5 IQR; il réduit l'effet des extrêmes, mais peut couper des valeurs rares légitimes.",
+        ("outliers", "ZSCORE"): "Le Z-score borne au-delà de moyenne ± 3 écarts-types; il convient aux distributions proches de la normale, mais la moyenne et l'écart-type sont eux-mêmes tirés par les extrêmes.",
+        ("outliers", "MODIFIED_ZSCORE"): "Le Z-score modifié utilise médiane et MAD; il reste fiable quand les extrêmes sont nombreux, mais ne détecte rien si plus de la moitié des valeurs sont identiques.",
+        ("outliers", "REPLACE_MEDIAN"): "Remplacer par la médiane neutralise les extrêmes jugés erronés; il écrase la variance et crée un pic de valeurs identiques.",
+        ("outliers", "OUTLIER_TO_NAN"): "Convertir en manquant traite les extrêmes comme des erreurs puis les impute; c'est cohérent avec une erreur de mesure, mais perd l'information si les extrêmes sont réels.",
         ("outliers", "NONE"): "Aucun traitement conserve les extrêmes; c'est préférable s'ils sont réels, mais ils peuvent dominer les modèles sensibles à l'échelle.",
         ("encoding", "ONEHOT"): "One-Hot crée une variable par modalité; il convient aux catégories sans ordre, mais augmente la dimension quand la cardinalité est forte.",
         ("encoding", "TARGET_ENCODE"): "Target encoding remplace chaque modalité par une statistique de cible calculée hors pli; il réduit la dimension, mais exige une cible et un contrôle du surapprentissage.",
@@ -222,6 +235,9 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("encoding", "ORDINAL"): "L'encodage ordinal associe un nombre selon l'ordre fourni; il convient aux niveaux ordonnés, mais invente un ordre s'il est mal défini.",
         ("encoding", "BINARY_MAP"): "Le mappage binaire code les deux modalités en 0/1; il est compact, mais le sens des codes doit rester stable.",
         ("dates", "DATE_FEATURES"): "Les composantes calendaires extraient année, mois et jour; elles rendent la date exploitable, mais n'expriment pas seules la saisonnalité cyclique.",
+        ("text", "TFIDF_NGRAMS"): "TF-IDF avec n-grammes pondère les mots et les suites de mots (par exemple « mauvaise qualité »); il capte un peu de contexte, mais le nombre de termes grandit vite et les colonnes restent clairsemées.",
+        ("text", "COUNT_VECTORIZER"): "Le comptage de mots donne le nombre d'occurrences des termes (et n-grammes) les plus fréquents du train; il est simple à interpréter, mais favorise les textes longs et les mots très courants.",
+        ("text", "HASH_TEXT"): "Le hachage de texte projette mots et n-grammes dans un nombre fixe de colonnes sans vocabulaire; il gère les mots inconnus et reste léger, mais des collisions mélangent des termes et les colonnes ne s'interprètent pas.",
         ("text", "TFIDF_SVD"): "TF-IDF suivi de SVD résume le vocabulaire en composantes numériques; c'est utile pour le texte libre, mais les composantes sont moins interprétables.",
         ("type", "DROP"): "La suppression retire cette colonne des features; elle convient aux identifiants ou fuites détectés, mais élimine toute information qu'elle portait.",
         ("type", "AUTO"): "Le type détecté conserve le traitement automatique adapté au profil observé; cela évite une conversion manuelle, mais dépend des heuristiques de détection.",
@@ -331,7 +347,7 @@ def _explanation_without_proof(step: str, action: str, measure: str,
     return pedagogical_explanation(step, action, measure, threshold, column_type)
 
 
-def build_analysis_detail(result: AnalysisResult, column: Optional[str],
+def _build_analysis_detail_core(result: AnalysisResult, column: Optional[str],
                           choices: Optional[Dict[str, Any]] = None,
                           show_all: bool = False) -> Dict[str, Any]:
     """Construit l'en-tête et les lignes de détail d'analyse, sans Tkinter."""
@@ -352,13 +368,14 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
     header = f"{column} | type={label_type(row.get('type'))} | " + " | ".join(stats)
     selected = (choices or {}).get(column, {})
     if not isinstance(selected, dict):
-        legacy_map = {"YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"),
+        legacy_map = {"YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"), "SQRT": ("distribution", "SQRT"), "CBRT": ("distribution", "CBRT"), "QUANTILE": ("distribution", "QUANTILE"), "RANK": ("distribution", "RANK"),
                       "WINSORIZE": ("outliers", "WINSORIZE"), "SCALE_STANDARD": ("scaling", "STANDARD"),
                       "SCALE_ROBUST": ("scaling", "ROBUST"), "SCALE_MINMAX": ("scaling", "MINMAX"),
                       "NO_SCALE": ("scaling", "NONE"), "ONEHOT": ("encoding", "ONEHOT"),
-                      "TARGET_ENCODE": ("encoding", "TARGET_ENCODE"), "FREQUENCY_ENCODE": ("encoding", "FREQUENCY_ENCODE"),
+                      "TARGET_ENCODE": ("encoding", "TARGET_ENCODE"), "FREQUENCY_ENCODE": ("encoding", "FREQUENCY_ENCODE"), "LOO_ENCODE": ("encoding", "LOO_ENCODE"),
                       "ORDINAL": ("encoding", "ORDINAL"), "BINARY_MAP": ("encoding", "BINARY_MAP"),
                       "DATE_FEATURES": ("dates", "DATE_FEATURES"), "TFIDF_SVD": ("text", "TFIDF_SVD"),
+                      "TFIDF_NGRAMS": ("text", "TFIDF_NGRAMS"), "COUNT_VECTORIZER": ("text", "COUNT_VECTORIZER"), "HASH_TEXT": ("text", "HASH_TEXT"),
                       "DROP": ("type", "DROP")}
         selected = {}
         mapped = legacy_map.get(str((choices or {}).get(column, "")).upper())
@@ -418,6 +435,16 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
                             "aide_choix": _explanation_without_proof(step, action, measure, threshold, row.get("type", "")),
                             "detail_analyse": row})
     return {"header": header, "rows": detail_rows, "masked_count": masked_count}
+
+
+def build_analysis_detail(result: AnalysisResult, column: Optional[str],
+                          choices: Optional[Dict[str, Any]] = None,
+                          show_all: bool = False) -> Dict[str, Any]:
+    """Détail d'analyse d'une colonne, avec le diagnostic indicatif du mécanisme de manque (MCAR / MAR / MNAR)."""
+    detail = _build_analysis_detail_core(result, column, choices, show_all)
+    row = next((item for item in result.columns if item["colonne"] == column), None) if column else None
+    detail["diagnostic_manquants"] = str((row or {}).get("diagnostic_manquants_texte") or "")
+    return detail
 
 
 def format_analysis_value(column: str, value: Any) -> str:
@@ -480,7 +507,7 @@ def export_analysis_csv(result: AnalysisResult, path: str,
         "colonne", "type", "dtype", "manquants_pct", "uniques", "exemples", "min", "max",
         "mean", "median", "std", "skew", "kurtosis", "outliers_pct", "outliers_mad_pct",
         "rare_category_pct", "cardinality", "relation_cible", "action", "choix_final",
-        "état_choix", "confiance", "raison", "preuve", "explication") if column in source]
+        "état_choix", "confiance", "raison", "preuve", "explication", "diagnostic_manquants_texte") if column in source]
     exported = source[safe_columns].copy()
     exported["type"] = exported["type"].map(label_type)
     exported["action"] = exported["action"].map(label_action)
@@ -496,7 +523,7 @@ def export_analysis_csv(result: AnalysisResult, path: str,
         "relation_cible": "Relation cible", "action": "Action recommandée",
         "choix_final": "Choix final", "état_choix": "État du choix",
         "confiance": "Confiance", "raison": "Raison", "preuve": "Preuve",
-        "explication": "Explication"})
+        "explication": "Explication", "diagnostic_manquants_texte": "Diagnostic des manquants"})
     for row_index, row in enumerate(result.columns):
         for step, detail in row.get("steps", {}).items():
             step_label = label_step(step)
@@ -580,6 +607,41 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
         if not 0 <= threshold <= 1:
             raise ValueError("Le seuil de catégories rares doit être compris entre 0 et 1.")
         return {"rare_threshold": threshold}
+    if step == "encoding" and action == "HASH_ENCODE" and value:
+        try:
+            n_components = int(value)
+        except ValueError as exc:
+            raise ValueError("Le nombre de colonnes de hachage doit être un entier ≥ 1.") from exc
+        if n_components < 1:
+            raise ValueError("Le nombre de colonnes de hachage doit être ≥ 1.")
+        return {"n_components": n_components}
+    if step == "encoding" and action == "LOO_ENCODE" and value:
+        try:
+            sigma = float(value)
+        except ValueError as exc:
+            raise ValueError("sigma doit être un nombre ≥ 0 (0 = aucun bruit).") from exc
+        if sigma < 0:
+            raise ValueError("sigma doit être ≥ 0 (0 = aucun bruit).")
+        return {"sigma": sigma}
+    if step == "text" and action in {"TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"}:
+        if not value:
+            return None
+        parts = [part.strip() for part in value.split(",")]
+        if len(parts) not in (2, 3):
+            raise ValueError("Saisissez « min, max » pour les n-grammes, puis éventuellement la taille : par exemple 1, 2, 15.")
+        try:
+            low, high = int(parts[0]), int(parts[1])
+            size = int(parts[2]) if len(parts) == 3 else None
+        except ValueError as exc:
+            raise ValueError("Les n-grammes et la taille doivent être des entiers.") from exc
+        if not 1 <= low <= high <= 5:
+            raise ValueError("Les n-grammes doivent vérifier 1 ≤ min ≤ max ≤ 5.")
+        if size is not None and size < 1:
+            raise ValueError("La taille (termes ou colonnes) doit être ≥ 1.")
+        result = {"ngram_range": [low, high]}
+        if size is not None:
+            result["n_features" if action == "HASH_TEXT" else "max_features"] = size
+        return result
     if step == "text" and action == "TFIDF_SVD":
         try:
             components = int(value)
@@ -599,7 +661,12 @@ def step_parameter_visible(step: str, action: str) -> bool:
         ("outliers", "WINSORIZE"),
         ("encoding", "ORDINAL"),
         ("encoding", "ONEHOT"),
+        ("encoding", "HASH_ENCODE"),
+        ("encoding", "LOO_ENCODE"),
         ("text", "TFIDF_SVD"),
+        ("text", "TFIDF_NGRAMS"),
+        ("text", "COUNT_VECTORIZER"),
+        ("text", "HASH_TEXT"),
     }
 
 
@@ -615,6 +682,110 @@ def choices_to_overrides(result: AnalysisResult, choices: Dict[str, str]) -> Dic
         else:
             out[col] = ColumnOverride(validate_column_choice(result, col, action))
     return out
+
+
+# ---------------------------------------------------------------------------------------------
+# Aperçu avant / après (logique pure : aucune dépendance à Tkinter)
+# ---------------------------------------------------------------------------------------------
+PREVIEW_STAT_ROWS = (
+    ("count", "Observations"), ("missing_pct", "Manquants (%)"), ("mean", "Moyenne"), ("median", "Médiane"),
+    ("std", "Écart-type"), ("skew", "Asymétrie"), ("kurtosis", "Kurtosis"), ("min", "Minimum"),
+    ("max", "Maximum"), ("outlier_pct", "Extrêmes IQR (%)"), ("zero_pct", "Zéros (%)"),
+    ("normality_p", "p normalité"),
+)
+
+
+def _preview_number(value: Any) -> str:
+    if value is None or (isinstance(value, float) and not np.isfinite(value)):
+        return "—"
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    value = float(value)
+    return f"{value:.3g}" if abs(value) < 1e-3 and value != 0 else f"{value:.4g}"
+
+
+def build_preview_table(preview: Dict[str, Any]) -> pd.DataFrame:
+    """Tableau comparatif avant / après (numérique) ou résumé des modalités et colonnes de sortie (catégoriel)."""
+    if preview.get("status") != "ok":
+        return pd.DataFrame({"information": [note for note in preview.get("notes", [])[1:]] or ["Aucune sortie."]})
+    if "after_scaled" in preview:
+        rows = [{"statistique": label, "avant": _preview_number(preview["before"].get(key)),
+                 "après traitement": _preview_number(preview["after"].get(key)),
+                 "après échelle": _preview_number(preview["after_scaled"].get(key))}
+                for key, label in PREVIEW_STAT_ROWS]
+        affected = preview["affected"]
+        rows += [{"statistique": "Valeurs manquantes imputées", "avant": "", "après traitement": str(affected["missing_filled"]), "après échelle": ""},
+                 {"statistique": "Valeurs hors bornes traitées", "avant": "", "après traitement": str(affected["outside_bounds"]), "après échelle": ""},
+                 {"statistique": "Lignes modifiées", "avant": "",
+                  "après traitement": f"{affected['rows_changed']} ({affected['rows_changed_pct']:.1f}%)", "après échelle": ""}]
+        return pd.DataFrame(rows)
+    before, after = preview["before"], preview["after"]
+    rows = [{"statistique": "Modalités", "avant": str(before["n_categories"]), "après": ""},
+            {"statistique": "Manquants (%)", "avant": _preview_number(before["missing_pct"]), "après": ""},
+            {"statistique": "Entropie (bits)", "avant": _preview_number(before["entropy"]), "après": ""},
+            {"statistique": "Colonnes de sortie", "avant": "1", "après": str(after["n_columns"])}]
+    rows += [{"statistique": f"Fréquence « {name} » (%)", "avant": _preview_number(freq), "après": ""} for name, freq in before["top"][:5]]
+    rows += [{"statistique": f"Sortie {name}", "avant": "",
+              "après": f"moy. {_preview_number(prof['mean'])}, min {_preview_number(prof['min'])}, max {_preview_number(prof['max'])}"}
+             for name, prof in list(after["columns"].items())[:6]]
+    return pd.DataFrame(rows)
+
+
+def build_preview_figure(preview: Dict[str, Any]):
+    """Figure matplotlib (sans pyplot) : histogrammes et boîtes avant/après, ou fréquences des modalités."""
+    # pyrefly: ignore[missing-import]
+    from matplotlib.figure import Figure
+    if preview.get("status") != "ok":
+        fig = Figure(figsize=(7, 2.4), dpi=100)
+        fig.add_subplot(111).text(0.5, 0.5, "\n".join(preview.get("notes", [])[1:2]) or "Aucune sortie", ha="center", va="center", wrap=True)
+        return fig
+    data = preview["data"]
+    if "after_scaled" in preview:
+        fig = Figure(figsize=(8, 5), dpi=100)
+        axes = fig.subplots(2, 2)
+        before, after = data["before"], data["after"]
+        for ax, values, title in ((axes[0][0], before, "Avant"), (axes[0][1], after, "Après traitement")):
+            if len(values):
+                ax.hist(values, bins=30, color="#4c78a8" if title == "Avant" else "#59a14f", edgecolor="white")
+            ax.set_title(title, fontsize=10); ax.set_ylabel("effectif")
+        box_ax = axes[1][0]
+        series = [v for v in (before, after) if len(v)]
+        if series:
+            try:
+                box_ax.boxplot(series, orientation="horizontal", showfliers=True)
+            except (TypeError, ValueError):   # matplotlib plus ancien : paramètre ``vert``
+                box_ax.boxplot(series, vert=False, showfliers=True)
+            box_ax.set_yticklabels(["Avant", "Après"][:len(series)])
+        box_ax.set_title("Boîtes à moustaches", fontsize=10)
+        stat_ax = axes[1][1]
+        stat_ax.axis("off")
+        stat_ax.text(0.0, 0.9, f"Asymétrie : {_preview_number(preview['before']['skew'])} → {_preview_number(preview['after']['skew'])}\n"
+                               f"Extrêmes IQR : {_preview_number(preview['before']['outlier_pct'])}% → {_preview_number(preview['after']['outlier_pct'])}%\n"
+                               f"Manquants : {_preview_number(preview['before']['missing_pct'])}% → {_preview_number(preview['after']['missing_pct'])}%",
+                     va="top", fontsize=10)
+        fig.suptitle(f"{preview['column']}", fontsize=11)
+        fig.tight_layout()
+        return fig
+    fig = Figure(figsize=(8, 3.5), dpi=100)
+    ax = fig.add_subplot(111)
+    freqs = data.get("before_frequencies", {})
+    ax.barh(list(freqs)[::-1], list(freqs.values())[::-1], color="#4c78a8")
+    ax.set_xlabel("fréquence (%)"); ax.set_title(f"{preview['column']} : modalités les plus fréquentes", fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+def export_preview_png(preview: Dict[str, Any], path: str) -> None:
+    """Enregistre le graphique d'aperçu au format PNG."""
+    build_preview_figure(preview).savefig(path, dpi=150)
+
+
+def preview_for_choice(df: pd.DataFrame, result: AnalysisResult, column: str, choices: Dict[str, Any],
+                       config: PreprocessConfig, target: Optional[str] = None, task: str = "auto") -> Dict[str, Any]:
+    """Aperçu d'une colonne avec le choix courant de l'utilisateur (recommandation si aucun choix)."""
+    override = choices_to_overrides(result, {column: choices[column]}).get(column) if column in choices else None
+    return preview_column(df, column, override, config, target=target, task=task)
+
 
 
 def build_preprocess_summary(result: AnalysisResult, choices: Dict[str, Any]) -> Dict[str, Any]:
@@ -1032,6 +1203,9 @@ class App:
             text="Sélectionnez une colonne pour voir ses statistiques et les explications.",
             wraplength=1180, justify="left", padding=6)
         self.detail_header.pack(fill="x")
+        self.detail_missing = ttk.Label(detail_panel, text="", wraplength=1180, justify="left",
+                                        padding=(6, 0, 6, 4), foreground="#245b83")
+        self.detail_missing.pack(fill="x")
         detail_options = ttk.Frame(detail_panel)
         detail_options.pack(fill="x", padx=5)
         ttk.Label(detail_options, textvariable=self.v_masked_steps).pack(side="left")
@@ -1054,6 +1228,7 @@ class App:
         self.cb_analysis_action.pack(side="left")
         ttk.Button(edit, text="Appliquer aux colonnes cochées / sélectionnées", command=self._apply_analysis_choice).pack(side="left", padx=5)
         ttk.Button(edit, text="Réinitialiser la colonne", command=self._reset_analysis_selection).pack(side="left")
+        ttk.Button(edit, text="Aperçu avant / après", command=self._show_preview).pack(side="left", padx=5)
 
     def _analysis_selection(self, _event=None) -> None:
         if self.analysis is None:
@@ -1085,6 +1260,8 @@ class App:
         detail = build_analysis_detail(self.analysis, column, self.choices,
                                        show_all=bool(self.v_show_all_steps.get()))
         self.detail_header.configure(text=detail["header"])
+        diagnostic = detail.get("diagnostic_manquants", "")
+        self.detail_missing.configure(text=f"Diagnostic des manquants : {diagnostic}" if diagnostic else "")
         count = detail.get("masked_count", 0)
         self.v_masked_steps.set(f"{count} étape(s) masquée(s)" if count else "Aucune étape masquée")
         for child in self.detail_rows_frame.winfo_children():
@@ -1273,6 +1450,18 @@ class App:
         if step == "encoding" and action == "ONEHOT":
             p = params if isinstance(params, dict) else {}
             return str(p.get("rare_threshold", 0.01))
+        if step == "encoding" and action == "HASH_ENCODE":
+            p = params if isinstance(params, dict) else {}
+            return str(p.get("n_components", 8))
+        if step == "encoding" and action == "LOO_ENCODE":
+            p = params if isinstance(params, dict) else {}
+            return str(p.get("sigma", 0.0))
+        if step == "text" and action in {"TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"}:
+            p = params if isinstance(params, dict) else {}
+            low, high = p.get("ngram_range", (1, 2))
+            default_size = 16 if action == "HASH_TEXT" else 15
+            size = p.get("n_features" if action == "HASH_TEXT" else "max_features", default_size)
+            return f"{low}, {high}, {size}"
         if step == "text" and action == "TFIDF_SVD":
             p = params if isinstance(params, dict) else {}
             return str(p.get("components", 4))
@@ -1354,6 +1543,56 @@ class App:
         self._refresh_analysis_tree()
         if self.tree_analysis.selection():
             self._analysis_selection()
+
+    def _show_preview(self) -> None:
+        """Ouvre une fenêtre comparant la colonne sélectionnée avant et après son traitement choisi."""
+        if self.analysis is None or self.df is None:
+            self.messagebox.showinfo("Analyse requise", "Analysez d'abord le dataset."); return
+        selected = self.tree_analysis.selection()
+        if not selected:
+            self.messagebox.showinfo("Colonne requise", "Sélectionnez une colonne."); return
+        column = self.tree_analysis.set(selected[0], "colonne")
+        target = self.v_target.get(); target = None if target == NO_TARGET_LABEL else target
+        if column == target:
+            self.messagebox.showinfo("Cible", "L'aperçu ne s'applique pas à la colonne cible."); return
+        options = self._read_options()
+        try:
+            self._set_status(f"Aperçu de {column}...")
+            self.root.update_idletasks()
+            preview = preview_for_choice(self.df, self.analysis, column, self.choices,
+                                         build_config(options), target=target, task=options.task)
+        except Exception as exc:
+            self.messagebox.showerror("Aperçu impossible", str(exc)); return
+        finally:
+            self._set_status("Prêt")
+        ttk = self.ttk
+        win = self.tk.Toplevel(self.root)
+        win.title(f"Aperçu avant / après : {column}")
+        win.geometry("980x720")
+        table = build_preview_table(preview)
+        tree = ttk.Treeview(win, columns=list(table.columns), show="headings", height=min(len(table), 12))
+        for name in table.columns:
+            tree.heading(name, text=name); tree.column(name, width=180, anchor="w")
+        for _, row in table.iterrows():
+            tree.insert("", "end", values=[row[c] for c in table.columns])
+        tree.pack(fill="x", padx=6, pady=6)
+        try:
+            # pyrefly: ignore[missing-import]
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            canvas = FigureCanvasTkAgg(build_preview_figure(preview), master=win)
+            canvas.draw(); canvas.get_tk_widget().pack(fill="both", expand=True, padx=6)
+        except Exception as exc:  # matplotlib absent : le tableau reste disponible
+            ttk.Label(win, text=f"Graphiques indisponibles ({exc}).").pack()
+        ttk.Label(win, text="\n".join(preview.get("notes", [])), wraplength=940, justify="left").pack(fill="x", padx=6, pady=6)
+        def save_png() -> None:
+            path = self.filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG", "*.png")],
+                                                     initialfile=f"apercu_{column}.png")
+            if path:
+                try:
+                    export_preview_png(preview, path)
+                except Exception as exc:
+                    self.messagebox.showerror("Export impossible", str(exc))
+        ttk.Button(win, text="Enregistrer le graphique (PNG)", command=save_png).pack(pady=(0, 8))
 
     def _import_analysis_choices(self) -> None:
         if self.analysis is None:
@@ -1636,6 +1875,7 @@ class App:
         for item in self.tree_analysis.get_children(""):
             self.tree_analysis.delete(item)
         self.detail_header.configure(text="Sélectionnez une colonne pour voir ses statistiques et les explications.")
+        self.detail_missing.configure(text="")
         self.v_masked_steps.set("")
         self.v_file.set(os.path.basename(path))
         target_values = [NO_TARGET_LABEL] + [str(c) for c in df.columns]

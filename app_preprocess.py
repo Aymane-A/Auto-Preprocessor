@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 AutoPreprocessor GUI : nettoyage et transformation automatiques de n'importe quel dataset (Tkinter).
 
@@ -18,11 +19,12 @@ import datetime
 import json
 import os
 import queue
+import re
 import threading
 import traceback
 import zipfile
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 # pyrefly: ignore[missing-import]
 import numpy as np
@@ -30,7 +32,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from auto_preprocessor import (Action, AnalysisResult, AutoPreprocessor, ColumnOverride,
-                               PreprocessConfig, recommendation_confidence)
+                               PreprocessConfig, PREPROCESS_LABELS, preview_column, format_step_evidence,
+                               format_step_reason, recommendation_step_name,
+                               recommendation_confidence)
 
 NO_TARGET_LABEL = "(aucune : sans cible)"
 MODEL_FAMILIES = {
@@ -49,6 +53,32 @@ def _check_local_file(path: str, limit: int) -> None:
         raise ValueError("Sélectionnez un fichier local ordinaire.")
     if os.path.getsize(path) > limit:
         raise ValueError(f"Fichier trop volumineux (limite de {limit // 1024 ** 2} Mio).")
+
+# Libellés visibles dans l'interface. Les clés techniques restent utilisées dans
+# la configuration, les validations et le JSON exporté.
+LABELS = PREPROCESS_LABELS
+
+
+def label_action(action: Any) -> str:
+    """Retourne le libellé français d'une action technique."""
+    code = getattr(action, "value", action)
+    return LABELS["actions"].get(str(code), (str(code), ""))[0]
+
+
+def label_step(step: str) -> str:
+    """Retourne le libellé français d'une étape technique."""
+    return LABELS["steps"].get(step, (step, ""))[0]
+
+
+def label_type(value: Any) -> str:
+    """Retourne le libellé français du type détecté."""
+    code = getattr(value, "value", value)
+    return LABELS["types"].get(str(code), str(code))
+
+
+def localize_display_text(text: Any) -> str:
+    """Retourne le texte déjà formaté sans modifier les noms ou valeurs utilisateur."""
+    return str(text)
 
 
 # =============================================================================
@@ -142,7 +172,17 @@ def build_analysis_table(result: AnalysisResult, choices: Optional[Dict[str, str
     choices = choices or {}
     def display(col: str, recommended: str) -> str:
         value = choices.get(col, recommended)
-        return "; ".join(f"{k}={v[0] if isinstance(v, (tuple, list)) else v}" for k, v in value.items()) if isinstance(value, dict) else str(value)
+        if isinstance(value, dict):
+            labels = []
+            for step, selected in value.items():
+                action = selected[0] if isinstance(selected, (tuple, list)) else selected
+                params = selected[1] if isinstance(selected, (tuple, list)) and len(selected) == 2 else None
+                rendered = label_action(action)
+                if params not in (None, {}, ""):
+                    rendered += f" ({params})"
+                labels.append(rendered)
+            return "; ".join(labels) if labels else "Aucune"
+        return label_action(value)
     table["choix_final"] = ["cible" if row.get("est_cible") else display(row["colonne"], row["action"])
                             for row in result.columns]
     table["état_choix"] = ["cible" if row.get("est_cible") else
@@ -155,11 +195,22 @@ def build_analysis_table(result: AnalysisResult, choices: Optional[Dict[str, str
     for index, row in enumerate(result.columns):
         for step, detail in row.get("steps", {}).items():
             table.loc[index, f"recommandation_{step}"] = detail["action"]
-            table.loc[index, f"preuve_{step}"] = f"{detail.get('measure', '')} ; seuil : {detail.get('threshold', '')}"
-            table.loc[index, f"explication_{step}"] = pedagogical_explanation(
-                step, detail.get("action", "AUTO"), detail.get("measure", ""),
-                detail.get("threshold", ""), row.get("type", ""))
+            table.loc[index, f"preuve_{step}"] = detail.get("evidence") or format_step_evidence(
+                detail.get("measure", ""), detail.get("threshold", ""))
+            table.loc[index, f"explication_{step}"] = detail.get("explanation", "")
     return table
+
+
+ANALYSIS_TABLE_COLUMN_ORDER = ["cocher", "colonne", "type", "choix_final", "raison", "confiance",
+                               "manquants_pct", "uniques", "skew", "outliers_pct", "relation_cible",
+                               "état_choix"]
+
+
+def analysis_table_column_order(available: Iterable[str]) -> List[str]:
+    """Retourne l'ordre stable des colonnes du tableau principal, sans dépendre de Tkinter."""
+    present = set(available)
+    return [column for column in ANALYSIS_TABLE_COLUMN_ORDER
+            if column == "cocher" or column in present]
 
 
 ANALYSIS_STEP_ORDER = ["nettoyage", "clean_missing_tokens", "clean_variants", "clean_numeric_text",
@@ -175,6 +226,13 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("distribution", "YEO_JOHNSON"): "Yeo-Johnson réduit l'asymétrie sans exiger des valeurs positives; cela aide les modèles linéaires, tandis que les arbres y sont moins sensibles.",
         ("distribution", "LOG1P"): "Log1p compresse la longue queue droite et convient aux valeurs positives très asymétriques; elle ne convient pas aux valeurs inférieures à -1.",
         ("distribution", "BOX_COX"): "Box-Cox rapproche une variable positive d'une distribution symétrique; elle exige des valeurs strictement positives.",
+        ("distribution", "CBRT"): "La racine cubique réduit l'asymétrie sur tous les réels (négatifs et zéros inclus); l'effet est plus doux que le logarithme.",
+        ("distribution", "QUANTILE"): "La transformation par quantiles impose une forme proche de la loi normale en gardant l'ordre; elle écrase les distances entre valeurs et peut masquer des écarts réels.",
+        ("distribution", "RANK"): "Les rangs (0 à 1) rendent la variable insensible aux extrêmes; seule l'information d'ordre est conservée.",
+        ("encoding", "COUNT_ENCODE"): "Le comptage remplace chaque modalité par son nombre d'occurrences; il compacte les catégories, mais confond celles de même effectif.",
+        ("encoding", "BINARY_ENCODE"): "Le code binaire utilise log2(K) colonnes pour K modalités; il limite l'explosion de colonnes du One-Hot, mais crée des proximités artificielles entre modalités.",
+        ("encoding", "LOO_ENCODE"): "Leave-One-Out remplace chaque modalité par la moyenne de la cible des autres lignes de cette modalité; il compacte les catégories fortes en une colonne, mais exige une cible binaire ou continue et, sur le train, la valeur encodée dépend de la cible de la ligne (risque de surapprentissage : un bruit sigma peut l'atténuer).",
+        ("encoding", "HASH_ENCODE"): "Le hachage projette les modalités dans un nombre fixe de colonnes; il gère les modalités inconnues, mais des collisions mélangent certaines modalités.",
         ("distribution", "SQRT"): "La racine carrée réduit modérément l'effet des grandes valeurs; elle convient aux comptes positifs et change l'échelle des coefficients.",
         ("distribution", "NONE"): "Aucune transformation conserve l'échelle observée; c'est adapté si la forme n'est pas assez éloignée du seuil, mais les modèles linéaires restent sensibles à l'asymétrie.",
         ("scaling", "ROBUST"): "RobustScaler centre par médiane et échelle par IQR; il convient aux outliers, mais ne rend pas la distribution normale.",
@@ -184,11 +242,17 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("scaling", "NONE"): "Aucune mise à l'échelle garde les unités; c'est utile pour les arbres et rend les grandeurs incomparables pour certains modèles.",
         ("missing", "MEDIAN"): "La médiane remplace les manquants par une valeur centrale robuste; elle convient aux variables asymétriques, mais réduit leur dispersion.",
         ("missing", "MEAN"): "La moyenne remplace les manquants par le centre arithmétique; elle convient aux données symétriques, mais est sensible aux outliers.",
+        ("missing", "KNN"): "KNN estime la valeur absente avec les lignes les plus proches sur les autres colonnes numériques; il capte les relations non linéaires, mais coûte plus cher et dépend de l'échelle.",
+        ("missing", "ITERATIVE"): "L'imputation itérative prédit la valeur absente par régression sur les autres colonnes; elle exploite les relations linéaires, mais suppose que les absences dépendent des colonnes observées.",
         ("missing", "MODE"): "Le mode remplace les manquants par la valeur la plus fréquente; il préserve une modalité existante, mais peut renforcer son déséquilibre.",
         ("missing", "MISSING_CATEGORY"): "Une modalité dédiée conserve l'information qu'une valeur manque; elle convient aux catégories, mais crée une modalité supplémentaire.",
         ("missing", "CONSTANT"): "Une constante explicite rend les manquants visibles; elle est utile si sa valeur a un sens métier, mais peut créer un point artificiel.",
         ("outliers", "WINSORIZE"): "La winsorisation borne les queues selon les quantiles; elle limite l'influence des extrêmes, mais écrase leurs différences.",
         ("outliers", "IQR"): "Le clipping IQR borne les valeurs au seuil de 1,5 IQR; il réduit l'effet des extrêmes, mais peut couper des valeurs rares légitimes.",
+        ("outliers", "ZSCORE"): "Le Z-score borne au-delà de moyenne ± 3 écarts-types; il convient aux distributions proches de la normale, mais la moyenne et l'écart-type sont eux-mêmes tirés par les extrêmes.",
+        ("outliers", "MODIFIED_ZSCORE"): "Le Z-score modifié utilise médiane et MAD; il reste fiable quand les extrêmes sont nombreux, mais ne détecte rien si plus de la moitié des valeurs sont identiques.",
+        ("outliers", "REPLACE_MEDIAN"): "Remplacer par la médiane neutralise les extrêmes jugés erronés; il écrase la variance et crée un pic de valeurs identiques.",
+        ("outliers", "OUTLIER_TO_NAN"): "Convertir en manquant traite les extrêmes comme des erreurs puis les impute; c'est cohérent avec une erreur de mesure, mais perd l'information si les extrêmes sont réels.",
         ("outliers", "NONE"): "Aucun traitement conserve les extrêmes; c'est préférable s'ils sont réels, mais ils peuvent dominer les modèles sensibles à l'échelle.",
         ("encoding", "ONEHOT"): "One-Hot crée une variable par modalité; il convient aux catégories sans ordre, mais augmente la dimension quand la cardinalité est forte.",
         ("encoding", "TARGET_ENCODE"): "Target encoding remplace chaque modalité par une statistique de cible calculée hors pli; il réduit la dimension, mais exige une cible et un contrôle du surapprentissage.",
@@ -196,6 +260,9 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
         ("encoding", "ORDINAL"): "L'encodage ordinal associe un nombre selon l'ordre fourni; il convient aux niveaux ordonnés, mais invente un ordre s'il est mal défini.",
         ("encoding", "BINARY_MAP"): "Le mappage binaire code les deux modalités en 0/1; il est compact, mais le sens des codes doit rester stable.",
         ("dates", "DATE_FEATURES"): "Les composantes calendaires extraient année, mois et jour; elles rendent la date exploitable, mais n'expriment pas seules la saisonnalité cyclique.",
+        ("text", "TFIDF_NGRAMS"): "TF-IDF avec n-grammes pondère les mots et les suites de mots (par exemple « mauvaise qualité »); il capte un peu de contexte, mais le nombre de termes grandit vite et les colonnes restent clairsemées.",
+        ("text", "COUNT_VECTORIZER"): "Le comptage de mots donne le nombre d'occurrences des termes (et n-grammes) les plus fréquents du train; il est simple à interpréter, mais favorise les textes longs et les mots très courants.",
+        ("text", "HASH_TEXT"): "Le hachage de texte projette mots et n-grammes dans un nombre fixe de colonnes sans vocabulaire; il gère les mots inconnus et reste léger, mais des collisions mélangent des termes et les colonnes ne s'interprètent pas.",
         ("text", "TFIDF_SVD"): "TF-IDF suivi de SVD résume le vocabulaire en composantes numériques; c'est utile pour le texte libre, mais les composantes sont moins interprétables.",
         ("type", "DROP"): "La suppression retire cette colonne des features; elle convient aux identifiants ou fuites détectés, mais élimine toute information qu'elle portait.",
         ("type", "AUTO"): "Le type détecté conserve le traitement automatique adapté au profil observé; cela évite une conversion manuelle, mais dépend des heuristiques de détection.",
@@ -234,8 +301,7 @@ def pedagogical_explanation(step: str, action: str, measure: str, threshold: str
             base = f"L'action conserve le comportement ou les valeurs actuelles; elle convient si la mesure reste compatible avec le seuil observé ({threshold}), mais laisse les limites de cette représentation en place."
         else:
             base = f"{action} applique le traitement prévu pour l'étape {step}; il est proposé au vu de {measure} et du seuil {threshold}. Vérifiez que cette hypothèse métier convient à la colonne."
-    evidence = f"Preuve : {measure}; seuil : {threshold}." if measure or threshold else ""
-    return f"{base} {evidence}".strip()
+    return base.strip()
 
 
 def recommendation_help(step: str, action: str, measure: str = "mesure observée",
@@ -244,61 +310,81 @@ def recommendation_help(step: str, action: str, measure: str = "mesure observée
     return pedagogical_explanation(step, action, measure, threshold)
 
 
+def recommendation_step(row: Dict[str, Any]) -> str:
+    """Etape qui porte la decision principale de la colonne."""
+    return str(row.get("recommendation_step") or recommendation_step_name(row.get("action", "AUTO")))
+
+
 def analysis_recommendation_summary(row: Dict[str, Any]) -> Dict[str, str]:
-    """Construit raison courte, preuve et explication de la recommandation principale."""
+    """Expose directement la recommandation structuree calculee par analyze()."""
     if row.get("est_cible"):
-        return {"raison": "Colonne cible : exclue des transformations de features.", "preuve": "—", "explication": "La cible sert à mesurer les relations et à ajuster les transformations supervisées; elle n'est pas une feature transformée."}
-    action = str(row.get("action", "AUTO"))
-    kind = str(row.get("type", ""))
-    steps = row.get("steps", {})
-    if action == "DROP" and row.get("alerte_identifiant"):
-        ratio = float(row.get("ratio_uniques_lignes", 0) or 0) * 100
-        reason = f"{ratio:.1f} % d'uniques : profil d'identifiant, suppression recommandée."
-        measure, threshold, step = f"ratio uniques={ratio:.1f}%", "> 90 % ou nom d'identifiant", "type"
-    elif action == "DROP" and kind.startswith("DROP"):
-        measure = str(row.get("raison", "Colonne signalée par le détecteur"))
-        threshold = "règle de détection du module"
-        step = "type"
-        reason = f"{measure} : suppression de la colonne recommandée."
-    elif action == "YEO_JOHNSON":
-        skew = float(row.get("skew", np.nan))
-        threshold = steps.get("distribution", {}).get("threshold", "|skew| > 1")
-        measure = f"skew={skew:.2f}"
-        reason = f"{measure} ({threshold}) : Yeo-Johnson réduit l'asymétrie."
-        step = "distribution"
-    elif action == "KEEP_NUMERIC":
-        skew = float(row.get("skew", np.nan))
-        threshold = steps.get("distribution", {}).get("threshold", "|skew| > 1")
-        measure = f"skew={skew:.2f}"
-        missing = float(row.get("manquants_pct", 0) or 0)
-        reason = (f"{missing:.1f} % de manquants : imputation médiane; asymétrie faible ({measure})."
-                  if missing > 0 else f"{measure} (seuil {threshold}) : asymétrie faible, conservation numérique.")
-        step = "distribution"
-    elif action == "DATE_FEATURES":
-        measure = f"dates uniques={row.get('uniques', 0)}"; threshold = "dates parsables"; step = "dates"
-        reason = f"{measure} : extraction des composantes calendaires recommandée."
-    elif action == "TFIDF_SVD":
-        measure = f"modalités uniques={row.get('uniques', 0)}"; threshold = "texte libre détecté"; step = "text"
-        reason = f"{measure} : texte libre, résumé TF-IDF/SVD recommandé."
-    else:
-        measure = f"type={kind}; uniques={row.get('uniques', 0)}"
-        threshold = steps.get("type", {}).get("threshold", "règle du type détecté")
-        step = "encoding" if "encoding" in steps else "type"
-        reason = f"{measure} : {action} selon la règle de type ({threshold})."
-    explanation = pedagogical_explanation(step, action, measure, threshold, kind)
-    return {"raison": reason, "preuve": f"{measure} ; seuil : {threshold}", "explication": explanation}
+        return {
+            "raison": "Colonne cible : exclue des transformations de features.",
+            "preuve": "-",
+            "explication": "La cible sert a mesurer les relations; elle n'est pas une feature transformee.",
+        }
+    step = recommendation_step(row)
+    recommendation = row.get("steps", {}).get(step, {})
+    measure = recommendation.get("measure", "")
+    threshold = recommendation.get("threshold", "")
+    return {
+        "raison": recommendation.get("reason") or format_step_reason(
+            row.get("action", "AUTO"), measure, threshold
+        ),
+        "preuve": recommendation.get("evidence") or format_step_evidence(measure, threshold),
+        "explication": recommendation.get("explanation", ""),
+    }
 
 
-def build_analysis_detail(result: AnalysisResult, column: Optional[str],
-                          choices: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _step_has_problem(row: Dict[str, Any], step: str, detail: Dict[str, Any]) -> bool:
+    """Détermine à partir des mesures si une sous-étape de nettoyage a un travail utile."""
+    if step == "clean_missing_tokens":
+        return int(row.get("faux_manquants", 0) or 0) > 0
+    if step == "clean_variants":
+        return int(row.get("variantes_casse_espaces", 0) or 0) > 0
+    measure = str(detail.get("measure", ""))
+    if step == "clean_numeric_text":
+        match = re.search(r"convertibles\s*=\s*([\d.,]+)%", measure)
+        return bool(match and float(match.group(1).replace(",", ".")) > 0)
+    if step == "clean_dates":
+        match = re.search(r"parsables\s*=\s*([\d.,]+)%", measure)
+        return row.get("type") == "DATETIME" or bool(match and float(match.group(1).replace(",", ".")) > 0)
+    if step == "clean_impossible":
+        match = re.search(r"cas impossibles\s*=\s*(\d+)", measure)
+        return bool(match and int(match.group(1)) > 0)
+    if step == "duplicates":
+        match = re.search(r"lignes dupliqu\w*\s*=\s*(\d+)", measure, re.IGNORECASE)
+        return bool(match and int(match.group(1)) > 0)
+    if step == "nettoyage":
+        match = re.search(r"cellules candidates\s*=\s*(\d+)", measure)
+        return bool(match and int(match.group(1)) > 0)
+    return True
+
+
+def _display_action_for_step(step: str, action: str, drop_column: bool = False) -> str:
+    if drop_column and step == "type" and action == "AUTO":
+        return "Garder (type automatique)"
+    return label_action(action)
+
+
+def _explanation_without_proof(step: str, action: str, measure: str,
+                               threshold: str, column_type: str) -> str:
+    return pedagogical_explanation(step, action, measure, threshold, column_type)
+
+
+def _build_analysis_detail_core(result: AnalysisResult, column: Optional[str],
+                          choices: Optional[Dict[str, Any]] = None,
+                          show_all: bool = False) -> Dict[str, Any]:
     """Construit l'en-tête et les lignes de détail d'analyse, sans Tkinter."""
     if not column:
-        return {"header": "Sélectionnez une colonne pour voir ses statistiques et les explications.", "rows": []}
+        return {"header": "Sélectionnez une colonne pour voir ses statistiques et les explications.",
+                "rows": [], "masked_count": 0}
     row = next((item for item in result.columns if item["colonne"] == column), None)
     if row is None:
         raise ValueError(f"Colonne inconnue : {column}")
     if row.get("est_cible"):
-        return {"header": f"{column} | cible — aucune recommandation de transformation de feature.", "rows": []}
+        return {"header": f"{column} | cible — aucune recommandation de transformation de feature.",
+                "rows": [], "masked_count": 0}
     stats = [f"manquants={row.get('manquants_pct', np.nan):.1f}%", f"uniques={row.get('uniques', 0)}"]
     for key, label in (("skew", "skew"), ("outliers_pct", "outliers"), ("relation_cible", "relation cible")):
         value = row.get(key, np.nan)
@@ -307,37 +393,89 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
     header = f"{column} | type={row.get('type_semantique', row.get('type'))} | " + " | ".join(stats)
     selected = (choices or {}).get(column, {})
     if not isinstance(selected, dict):
-        legacy_map = {"YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"),
+        legacy_map = {"YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"), "SQRT": ("distribution", "SQRT"), "CBRT": ("distribution", "CBRT"), "QUANTILE": ("distribution", "QUANTILE"), "RANK": ("distribution", "RANK"),
                       "WINSORIZE": ("outliers", "WINSORIZE"), "SCALE_STANDARD": ("scaling", "STANDARD"),
                       "SCALE_ROBUST": ("scaling", "ROBUST"), "SCALE_MINMAX": ("scaling", "MINMAX"),
                       "NO_SCALE": ("scaling", "NONE"), "ONEHOT": ("encoding", "ONEHOT"),
-                      "TARGET_ENCODE": ("encoding", "TARGET_ENCODE"), "FREQUENCY_ENCODE": ("encoding", "FREQUENCY_ENCODE"),
+                      "TARGET_ENCODE": ("encoding", "TARGET_ENCODE"), "FREQUENCY_ENCODE": ("encoding", "FREQUENCY_ENCODE"), "LOO_ENCODE": ("encoding", "LOO_ENCODE"),
                       "ORDINAL": ("encoding", "ORDINAL"), "BINARY_MAP": ("encoding", "BINARY_MAP"),
                       "DATE_FEATURES": ("dates", "DATE_FEATURES"), "TFIDF_SVD": ("text", "TFIDF_SVD"),
+                      "TFIDF_NGRAMS": ("text", "TFIDF_NGRAMS"), "COUNT_VECTORIZER": ("text", "COUNT_VECTORIZER"), "HASH_TEXT": ("text", "HASH_TEXT"),
                       "DROP": ("type", "DROP")}
         selected = {}
         mapped = legacy_map.get(str((choices or {}).get(column, "")).upper())
         if mapped:
             selected[mapped[0]] = mapped[1]
     detail_rows = []
+    masked_count = 0
+    drop_column = str(row.get("action", "")) == "DROP" or str(row.get("type", "")).startswith("DROP")
+    if drop_column:
+        detail = row.get("steps", {}).get("type", {})
+        recommended = str(detail.get("action", "DROP"))
+        saved = selected.get("type", recommended)
+        action = saved[0] if isinstance(saved, (tuple, list)) and len(saved) == 2 else str(saved)
+        choices_for_step = ["AUTO", "DROP"]
+        measure, threshold = str(detail.get("measure", "")), str(detail.get("threshold", ""))
+        detail_rows.append({"etape": "type", "etape_label": "Garder / Supprimer",
+                            "recommandation": recommended, "recommandation_label": _display_action_for_step("type", recommended, True),
+                            "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
+                             "explication": detail.get("explanation", ""),
+                             "explication_affichee": detail.get("explanation", ""),
+                            "choix": action, "choix_label": _display_action_for_step("type", action, True),
+                            "choix_labels": [_display_action_for_step("type", item, True) for item in choices_for_step],
+                            "modifie": action != recommended,
+                            "aide_choix": _explanation_without_proof("type", action, measure, threshold, row.get("type", "")),
+                            "detail_analyse": row})
+        return {"header": header, "rows": detail_rows, "masked_count": 0}
     for step in ANALYSIS_STEP_ORDER:
         detail = row.get("steps", {}).get(step)
-        if not detail or len(detail.get("choices", [])) <= 1:
+        if not detail or step in {"nettoyage", "target"}:
+            continue
+        applicable = len(detail.get("choices", [])) > 1
+        clean_step = step in {"clean_missing_tokens", "clean_variants", "clean_numeric_text",
+                              "clean_dates", "clean_impossible", "duplicates"}
+        if not applicable:
+            masked_count += 1
+            continue
+        has_problem = _step_has_problem(row, step, detail) if clean_step else True
+        if clean_step and not has_problem and not show_all:
+            masked_count += 1
             continue
         recommended = str(detail.get("action", "AUTO"))
         saved = selected.get(step, recommended)
         action = saved[0] if isinstance(saved, (tuple, list)) and len(saved) == 2 else str(saved)
         measure, threshold = str(detail.get("measure", "")), str(detail.get("threshold", ""))
-        detail_rows.append({"etape": step, "recommandation": recommended, "preuve": f"{measure} ; seuil : {threshold}",
-                            "explication": pedagogical_explanation(step, recommended, measure, threshold, row.get("type", "")),
+        choices_for_step = [item for item in detail.get("choices", [])
+                            if detail.get("comparaison", {}).get(item, {}).get("applicable") is not False]
+        if drop_column and step == "type":
+            choices_for_step = ["AUTO", "DROP"]
+        detail_rows.append({"etape": step, "etape_label": label_step(step),
+                            "recommandation": recommended,
+                            "recommandation_label": _display_action_for_step(step, recommended),
+                            "preuve": detail.get("evidence") or format_step_evidence(measure, threshold),
+                             "explication": detail.get("explanation", ""),
+                             "explication_affichee": detail.get("explanation", ""),
+                            "choix": action, "modifie": action != recommended,
+                            "choix_label": _display_action_for_step(step, action),
+                            "choix_labels": [_display_action_for_step(step, item) for item in choices_for_step],
+                            "aide_choix": _explanation_without_proof(step, action, measure, threshold, row.get("type", "")),
                             "confiance": detail.get("confidence", ""),
                             "comparaison": detail.get("comparaison", {}),
-                            "choix": action, "modifie": action != recommended,
-                            "aide_choix": recommendation_help(step, action), "detail_analyse": row})
-    return {"header": header, "rows": detail_rows, "profil": row.get("profil", {}),
-            "raison_type": row.get("raison_type", ""), "confiance_type": row.get("confiance_type", ""),
-            "diagnostic_manquants": row.get("diagnostic_manquants", {}),
-            "analyse_cible": row.get("analyse_cible", {})}
+                            "detail_analyse": row})
+    return {"header": header, "rows": detail_rows, "masked_count": masked_count}
+
+
+def build_analysis_detail(result: AnalysisResult, column: Optional[str],
+                          choices: Optional[Dict[str, Any]] = None,
+                          show_all: bool = False) -> Dict[str, Any]:
+    """Détail d'analyse d'une colonne, avec le diagnostic indicatif du mécanisme de manque (MCAR / MAR / MNAR)."""
+    detail = _build_analysis_detail_core(result, column, choices, show_all)
+    row = next((item for item in result.columns if item["colonne"] == column), None) if column else None
+    detail["diagnostic_manquants"] = str((row or {}).get("diagnostic_manquants_texte") or "")
+    for field in ("profil", "raison_type", "confiance_type", "analyse_cible"):
+        detail[field] = (row or {}).get(field, {})
+    detail["diagnostic_detail"] = (row or {}).get("diagnostic_manquants", {})
+    return detail
 
 
 def format_analysis_value(column: str, value: Any) -> str:
@@ -357,7 +495,17 @@ def format_analysis_value(column: str, value: Any) -> str:
         if column in {"manquants_pct", "outliers_pct"}:
             return f"{number:.1f}%"
         return f"{number:.2f}" if isinstance(value, (float, np.floating)) else str(value)
-    s = str(value).strip()
+    if isinstance(value, dict):
+        if not value:
+            return "Aucune"
+        return "; ".join(f"{key} ({format_analysis_value('', item)})" for key, item in value.items())
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(format_analysis_value("", item) for item in value) or "Aucune"
+    s = localize_display_text(value).strip()
+    if column == "type":
+        s = label_type(value)
+    elif column in {"action", "choix_final"}:
+        s = label_action(value)
     return "—" if not s else s
 
 
@@ -384,9 +532,51 @@ def truncate_reason(text: str, limit: int = 92) -> str:
 
 def export_analysis_csv(result: AnalysisResult, path: str,
                         choices: Optional[Dict[str, Any]] = None) -> str:
-    """Exporte les raisons, preuves et explications de chaque étape applicables."""
-    build_analysis_table(result, choices).to_csv(path, index=False, encoding="utf-8-sig")
+    """Exporte les statistiques et textes déjà formatés, avec des en-têtes français."""
+    source = build_analysis_table(result, choices)
+    safe_columns = [column for column in (
+        "colonne", "type", "dtype", "manquants_pct", "uniques", "exemples", "min", "max",
+        "mean", "median", "std", "skew", "kurtosis", "outliers_pct", "outliers_mad_pct",
+        "rare_category_pct", "cardinality", "relation_cible", "action", "choix_final",
+        "état_choix", "confiance", "raison", "preuve", "explication", "diagnostic_manquants_texte") if column in source]
+    exported = source[safe_columns].copy()
+    exported["type"] = exported["type"].map(label_type)
+    exported["action"] = exported["action"].map(label_action)
+    if "exemples" in exported:
+        exported["exemples"] = exported["exemples"].map(
+            lambda values: ", ".join(map(str, values)) if isinstance(values, (list, tuple)) else str(values))
+    exported = exported.rename(columns={"colonne": "Colonne", "type": "Type détecté",
+        "dtype": "Type brut", "manquants_pct": "Manquants (%)", "uniques": "Valeurs uniques",
+        "min": "Minimum", "max": "Maximum", "mean": "Moyenne", "median": "Médiane",
+        "std": "Écart-type", "skew": "Asymétrie", "kurtosis": "Kurtosis",
+        "outliers_pct": "Outliers IQR (%)", "outliers_mad_pct": "Outliers MAD (%)",
+        "rare_category_pct": "Modalités rares (%)", "cardinality": "Cardinalité",
+        "relation_cible": "Relation cible", "action": "Action recommandée",
+        "choix_final": "Choix final", "état_choix": "État du choix",
+        "confiance": "Confiance", "raison": "Raison", "preuve": "Preuve",
+        "explication": "Explication", "diagnostic_manquants_texte": "Diagnostic des manquants"})
+    for row_index, row in enumerate(result.columns):
+        for step, detail in row.get("steps", {}).items():
+            step_label = label_step(step)
+            action_col = f"Action — {step_label}"
+            evidence_col = f"Preuve — {step_label}"
+            explanation_col = f"Explication — {step_label}"
+            exported.loc[row_index, action_col] = label_action(detail.get("action", "AUTO"))
+            exported.loc[row_index, evidence_col] = detail.get("evidence", "")
+            exported.loc[row_index, explanation_col] = detail.get("explanation", "")
+    exported.to_csv(path, index=False, encoding="utf-8-sig")
     return path
+
+
+def suggest_target_column(frame: pd.DataFrame) -> Optional[str]:
+    """Suggère la dernière colonne seulement si son contenu est binaire."""
+    if frame.shape[1] == 0:
+        return None
+    column = str(frame.columns[-1])
+    series = frame.iloc[:, -1]
+    if pd.api.types.is_bool_dtype(series) or series.dropna().nunique() == 2:
+        return column
+    return None
 
 
 def validate_column_choice(result: AnalysisResult, column: str, action: str) -> str:
@@ -460,6 +650,41 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
         if not 0 <= threshold <= 1:
             raise ValueError("Le seuil de catégories rares doit être compris entre 0 et 1.")
         return {"rare_threshold": threshold}
+    if step == "encoding" and action == "HASH_ENCODE" and value:
+        try:
+            n_components = int(value)
+        except ValueError as exc:
+            raise ValueError("Le nombre de colonnes de hachage doit être un entier ≥ 1.") from exc
+        if n_components < 1:
+            raise ValueError("Le nombre de colonnes de hachage doit être ≥ 1.")
+        return {"n_components": n_components}
+    if step == "encoding" and action == "LOO_ENCODE" and value:
+        try:
+            sigma = float(value)
+        except ValueError as exc:
+            raise ValueError("sigma doit être un nombre ≥ 0 (0 = aucun bruit).") from exc
+        if sigma < 0:
+            raise ValueError("sigma doit être ≥ 0 (0 = aucun bruit).")
+        return {"sigma": sigma}
+    if step == "text" and action in {"TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"}:
+        if not value:
+            return None
+        parts = [part.strip() for part in value.split(",")]
+        if len(parts) not in (2, 3):
+            raise ValueError("Saisissez « min, max » pour les n-grammes, puis éventuellement la taille : par exemple 1, 2, 15.")
+        try:
+            low, high = int(parts[0]), int(parts[1])
+            size = int(parts[2]) if len(parts) == 3 else None
+        except ValueError as exc:
+            raise ValueError("Les n-grammes et la taille doivent être des entiers.") from exc
+        if not 1 <= low <= high <= 5:
+            raise ValueError("Les n-grammes doivent vérifier 1 ≤ min ≤ max ≤ 5.")
+        if size is not None and size < 1:
+            raise ValueError("La taille (termes ou colonnes) doit être ≥ 1.")
+        result = {"ngram_range": [low, high]}
+        if size is not None:
+            result["n_features" if action == "HASH_TEXT" else "max_features"] = size
+        return result
     if step == "text" and action == "TFIDF_SVD":
         try:
             components = int(value)
@@ -469,6 +694,24 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
             raise ValueError("Le nombre de composantes SVD ne peut pas être négatif.")
         return {"components": components}
     return None
+
+
+def step_parameter_visible(step: str, action: str) -> bool:
+    """Indique sans Tkinter si l'action nécessite un champ de paramètre éditable."""
+    return (step, str(action).upper()) in {
+        ("clean_missing_tokens", "SELECTED_TO_NAN"),
+        ("missing", "CONSTANT"),
+        ("outliers", "WINSORIZE"),
+        ("encoding", "ORDINAL"),
+        ("encoding", "MANUAL_MAP"),
+        ("encoding", "ONEHOT"),
+        ("encoding", "HASH_ENCODE"),
+        ("encoding", "LOO_ENCODE"),
+        ("text", "TFIDF_SVD"),
+        ("text", "TFIDF_NGRAMS"),
+        ("text", "COUNT_VECTORIZER"),
+        ("text", "HASH_TEXT"),
+    }
 
 
 def choices_to_overrides(result: AnalysisResult, choices: Dict[str, str]) -> Dict[str, ColumnOverride]:
@@ -483,6 +726,110 @@ def choices_to_overrides(result: AnalysisResult, choices: Dict[str, str]) -> Dic
         else:
             out[col] = ColumnOverride(validate_column_choice(result, col, action))
     return out
+
+
+# ---------------------------------------------------------------------------------------------
+# Aperçu avant / après (logique pure : aucune dépendance à Tkinter)
+# ---------------------------------------------------------------------------------------------
+PREVIEW_STAT_ROWS = (
+    ("count", "Observations"), ("missing_pct", "Manquants (%)"), ("mean", "Moyenne"), ("median", "Médiane"),
+    ("std", "Écart-type"), ("skew", "Asymétrie"), ("kurtosis", "Kurtosis"), ("min", "Minimum"),
+    ("max", "Maximum"), ("outlier_pct", "Extrêmes IQR (%)"), ("zero_pct", "Zéros (%)"),
+    ("normality_p", "p normalité"),
+)
+
+
+def _preview_number(value: Any) -> str:
+    if value is None or (isinstance(value, float) and not np.isfinite(value)):
+        return "—"
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    value = float(value)
+    return f"{value:.3g}" if abs(value) < 1e-3 and value != 0 else f"{value:.4g}"
+
+
+def build_preview_table(preview: Dict[str, Any]) -> pd.DataFrame:
+    """Tableau comparatif avant / après (numérique) ou résumé des modalités et colonnes de sortie (catégoriel)."""
+    if preview.get("status") != "ok":
+        return pd.DataFrame({"information": [note for note in preview.get("notes", [])[1:]] or ["Aucune sortie."]})
+    if "after_scaled" in preview:
+        rows = [{"statistique": label, "avant": _preview_number(preview["before"].get(key)),
+                 "après traitement": _preview_number(preview["after"].get(key)),
+                 "après échelle": _preview_number(preview["after_scaled"].get(key))}
+                for key, label in PREVIEW_STAT_ROWS]
+        affected = preview["affected"]
+        rows += [{"statistique": "Valeurs manquantes imputées", "avant": "", "après traitement": str(affected["missing_filled"]), "après échelle": ""},
+                 {"statistique": "Valeurs hors bornes traitées", "avant": "", "après traitement": str(affected["outside_bounds"]), "après échelle": ""},
+                 {"statistique": "Lignes modifiées", "avant": "",
+                  "après traitement": f"{affected['rows_changed']} ({affected['rows_changed_pct']:.1f}%)", "après échelle": ""}]
+        return pd.DataFrame(rows)
+    before, after = preview["before"], preview["after"]
+    rows = [{"statistique": "Modalités", "avant": str(before["n_categories"]), "après": ""},
+            {"statistique": "Manquants (%)", "avant": _preview_number(before["missing_pct"]), "après": ""},
+            {"statistique": "Entropie (bits)", "avant": _preview_number(before["entropy"]), "après": ""},
+            {"statistique": "Colonnes de sortie", "avant": "1", "après": str(after["n_columns"])}]
+    rows += [{"statistique": f"Fréquence « {name} » (%)", "avant": _preview_number(freq), "après": ""} for name, freq in before["top"][:5]]
+    rows += [{"statistique": f"Sortie {name}", "avant": "",
+              "après": f"moy. {_preview_number(prof['mean'])}, min {_preview_number(prof['min'])}, max {_preview_number(prof['max'])}"}
+             for name, prof in list(after["columns"].items())[:6]]
+    return pd.DataFrame(rows)
+
+
+def build_preview_figure(preview: Dict[str, Any]):
+    """Figure matplotlib (sans pyplot) : histogrammes et boîtes avant/après, ou fréquences des modalités."""
+    # pyrefly: ignore[missing-import]
+    from matplotlib.figure import Figure
+    if preview.get("status") != "ok":
+        fig = Figure(figsize=(7, 2.4), dpi=100)
+        fig.add_subplot(111).text(0.5, 0.5, "\n".join(preview.get("notes", [])[1:2]) or "Aucune sortie", ha="center", va="center", wrap=True)
+        return fig
+    data = preview["data"]
+    if "after_scaled" in preview:
+        fig = Figure(figsize=(8, 5), dpi=100)
+        axes = fig.subplots(2, 2)
+        before, after = data["before"], data["after"]
+        for ax, values, title in ((axes[0][0], before, "Avant"), (axes[0][1], after, "Après traitement")):
+            if len(values):
+                ax.hist(values, bins=30, color="#4c78a8" if title == "Avant" else "#59a14f", edgecolor="white")
+            ax.set_title(title, fontsize=10); ax.set_ylabel("effectif")
+        box_ax = axes[1][0]
+        series = [v for v in (before, after) if len(v)]
+        if series:
+            try:
+                box_ax.boxplot(series, orientation="horizontal", showfliers=True)
+            except (TypeError, ValueError):   # matplotlib plus ancien : paramètre ``vert``
+                box_ax.boxplot(series, vert=False, showfliers=True)
+            box_ax.set_yticklabels(["Avant", "Après"][:len(series)])
+        box_ax.set_title("Boîtes à moustaches", fontsize=10)
+        stat_ax = axes[1][1]
+        stat_ax.axis("off")
+        stat_ax.text(0.0, 0.9, f"Asymétrie : {_preview_number(preview['before']['skew'])} → {_preview_number(preview['after']['skew'])}\n"
+                               f"Extrêmes IQR : {_preview_number(preview['before']['outlier_pct'])}% → {_preview_number(preview['after']['outlier_pct'])}%\n"
+                               f"Manquants : {_preview_number(preview['before']['missing_pct'])}% → {_preview_number(preview['after']['missing_pct'])}%",
+                     va="top", fontsize=10)
+        fig.suptitle(f"{preview['column']}", fontsize=11)
+        fig.tight_layout()
+        return fig
+    fig = Figure(figsize=(8, 3.5), dpi=100)
+    ax = fig.add_subplot(111)
+    freqs = data.get("before_frequencies", {})
+    ax.barh(list(freqs)[::-1], list(freqs.values())[::-1], color="#4c78a8")
+    ax.set_xlabel("fréquence (%)"); ax.set_title(f"{preview['column']} : modalités les plus fréquentes", fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+def export_preview_png(preview: Dict[str, Any], path: str) -> None:
+    """Enregistre le graphique d'aperçu au format PNG."""
+    build_preview_figure(preview).savefig(path, dpi=150)
+
+
+def preview_for_choice(df: pd.DataFrame, result: AnalysisResult, column: str, choices: Dict[str, Any],
+                       config: PreprocessConfig, target: Optional[str] = None, task: str = "auto") -> Dict[str, Any]:
+    """Aperçu d'une colonne avec le choix courant de l'utilisateur (recommandation si aucun choix)."""
+    override = choices_to_overrides(result, {column: choices[column]}).get(column) if column in choices else None
+    return preview_column(df, column, override, config, target=target, task=task)
+
 
 
 def build_preprocess_summary(result: AnalysisResult, choices: Dict[str, Any]) -> Dict[str, Any]:
@@ -566,7 +913,7 @@ def import_user_choices(result: AnalysisResult, path: str) -> Dict[str, str]:
             except TypeError as exc:
                 raise ValueError(f"Paramètres invalides pour {col!r}/{step}.") from exc
             parsed = parse_step_parameters(step, name, raw, valid[col]["type"])
-            if parsed is None or parsed != params:
+            if parsed is None or json.dumps(parsed, sort_keys=True) != json.dumps(params, sort_keys=True):
                 raise ValueError(f"Paramètres invalides pour {col!r}/{step}.")
             steps[step] = (name, parsed)
         validated[col] = steps
@@ -612,6 +959,7 @@ def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) ->
     notes: List[str] = []
     config = build_config(opts)
     prep = AutoPreprocessor(config=config, task=opts.task)
+    prep.analysis_result_ = AutoPreprocessor(config=config, task=opts.task).analyze(df, target=target or None)
     n_rows_in, n_cols_in = df.shape
 
     # Cas non supervisé : pas de cible
@@ -679,7 +1027,35 @@ def report_text(result: RunResult) -> str:
     """Rapport lisible : résumé, décisions colonne par colonne, fuites, classes de la cible."""
     prep = result.prep
     rep = prep.report()
-    lines = [prep.summary(), ""]
+    report_table = rep["colonnes_detaillees"].copy()
+    def report_status(value: Any) -> str:
+        text = str(value)
+        prefix = "SUPPRIMÉE ("
+        if text.startswith(prefix) and text.endswith(")"):
+            return f"Supprimée ({label_type(text[len(prefix):-1])})"
+        return text
+
+    def report_choice(value: Any) -> str:
+        text = str(value)
+        prefix = "choix utilisateur : "
+        if text.startswith(prefix):
+            action = text[len(prefix):].split(" ", 1)[0]
+            return f"Choix utilisateur : {label_action(action)}"
+        return "Recommandation suivie" if text == "recommandation suivie" else text
+
+    if not report_table.empty:
+        report_table["Type détecté"] = report_table["Type détecté"].map(label_type)
+        report_table["Action appliquée"] = report_table["Action appliquée"].map(label_action)
+        report_table["Choix utilisateur"] = report_table["Choix utilisateur"].map(report_choice)
+        report_table["Justification"] = report_table.apply(
+            lambda row: row["Raison recommandée"] or "La colonne suit la règle statistique du préprocesseur.", axis=1)
+        report_table["Statut"] = report_table["Statut"].map(report_status)
+        report_table = report_table.drop(columns=["Détails nettoyage", "Raison recommandée",
+                                                   "Preuve recommandée", "Explication recommandée"], errors="ignore")
+    task_names = {"classification": "classification", "regression": "régression", "unsupervised": "sans supervision"}
+    lines = ["Résumé du prétraitement",
+             f"{LABELS['interface']['task']} : {task_names.get(str(rep['tache_detectee']).lower(), str(rep['tache_detectee']))}",
+             f"Dimensions : {rep['nb_features_initiales']} colonnes d'entrée, {rep['nb_features_finales']} variables finales", ""]
     lines.append(f"Fichier : {result.n_rows_in} lignes x {result.n_cols_in} colonnes")
     lines.append(f"Train   : {result.X_train.shape[0]} lignes x {result.X_train.shape[1]} features numériques")
     if result.X_test is not None:
@@ -696,9 +1072,17 @@ def report_text(result: RunResult) -> str:
     if scores:
         top = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:5]
         lines.append("Test de fuite (score d'une colonne seule, 5 plus hauts) : "
-                     + ", ".join(f"{c}={s:.3f}" for c, s in top))
+                     + ", ".join(f"{c} (score {s:.3f})" for c, s in top))
     lines += ["", "Détail des transformations par colonne :",
-              rep["colonnes_detaillees"].to_string(index=False)]
+              report_table.to_string(index=False, max_colwidth=None)]
+    analysis = getattr(prep, "analysis_result_", None)
+    if analysis is not None:
+        lines.extend(["", "Analyse et recommandations :"])
+        for row in analysis.columns:
+            summary = analysis_recommendation_summary(row)
+            lines.extend([f"{row['colonne']} — {summary['raison']}",
+                          f"Preuve : {summary['preuve']}",
+                          f"Explication : {summary['explication']}"])
     return "\n".join(lines)
 
 
@@ -775,8 +1159,11 @@ class App:
         self.result: Optional[RunResult] = None
         self.analysis: Optional[AnalysisResult] = None
         self.choices: Dict[str, str] = {}
+        self.checked_columns = set()
         self.prep: Optional[AutoPreprocessor] = None   # préprocesseur actif (ajusté ou chargé)
         self._queue: "queue.Queue[tuple]" = queue.Queue()
+        self._setting_target_suggestion = False
+        self.target_suggested = False
 
         self._build_variables()
         self._build_layout()
@@ -800,6 +1187,9 @@ class App:
         self.v_discrete_cat = tk.BooleanVar(value=False)
         self.v_model_family = tk.StringVar(value="Statistique seule")
         self.v_status = tk.StringVar(value="Ouvrez un fichier pour commencer.")
+        self.v_show_all_steps = tk.BooleanVar(value=False)
+        self.v_masked_steps = tk.StringVar(value="")
+        self.v_target_hint = tk.StringVar(value="")
 
     # ------------------------------------------------------------------ mise en page
     def _build_layout(self) -> None:
@@ -868,43 +1258,52 @@ class App:
         self.cb_analysis_task = ttk.Combobox(bar, textvariable=self.v_task, state="readonly", width=14,
                                              values=["auto", "classification", "regression"])
         self.cb_analysis_task.pack(side="left")
+        ttk.Label(bar, textvariable=self.v_target_hint, foreground="#245b83").pack(side="left", padx=8)
         self.v_analysis_warning = self.tk.StringVar(value="analyse sans cible : relations, fuites et encodage supervisé indisponibles")
         ttk.Label(self.tab_analysis, textvariable=self.v_analysis_warning, foreground="#9a5700").pack(fill="x", padx=8)
-        self.v_target.trace_add("write", lambda *_: self._update_analysis_target_warning())
+        self.v_target.trace_add("write", lambda *_: self._on_target_changed())
         self.analysis_paned = ttk.Panedwindow(self.tab_analysis, orient="vertical")
         self.analysis_paned.pack(fill="both", expand=True, padx=5, pady=3)
         table_panel = ttk.Frame(self.analysis_paned)
         detail_panel = ttk.Frame(self.analysis_paned)
-        self.analysis_paned.add(table_panel, weight=3)
-        self.analysis_paned.add(detail_panel, weight=5)
+        self.analysis_paned.add(table_panel, weight=6)
+        self.analysis_paned.add(detail_panel, weight=4)
         self.tree_analysis = self._make_tree(table_panel)
-        self.tree_analysis.configure(selectmode="extended")
+        self.tree_analysis.configure(selectmode="browse")
         self.tree_analysis.bind("<<TreeviewSelect>>", self._analysis_selection)
+        self.tree_analysis.bind("<Button-1>", self._toggle_analysis_check, add="+")
         self.tree_analysis.bind("<Motion>", self._analysis_reason_hover)
         self.tree_analysis.bind("<Leave>", self._hide_reason_tooltip)
         self.detail_header = ttk.Label(detail_panel,
             text="Sélectionnez une colonne pour voir ses statistiques et les explications.",
             wraplength=1180, justify="left", padding=6)
         self.detail_header.pack(fill="x")
+        self.detail_missing = ttk.Label(detail_panel, text="", wraplength=1180, justify="left",
+                                        padding=(6, 0, 6, 4), foreground="#245b83")
+        self.detail_missing.pack(fill="x")
+        detail_options = ttk.Frame(detail_panel)
+        detail_options.pack(fill="x", padx=5)
+        ttk.Label(detail_options, textvariable=self.v_masked_steps).pack(side="left")
+        ttk.Checkbutton(detail_options, text="Afficher toutes les étapes", variable=self.v_show_all_steps,
+                        command=self._refresh_selected_detail).pack(side="right")
         self.step_editor = ttk.LabelFrame(detail_panel, text="Étapes applicables : recommandation, preuve, explication et choix")
         self.step_editor.pack(fill="both", expand=True, padx=5, pady=3)
         self.detail_canvas = self.tk.Canvas(self.step_editor, highlightthickness=0)
         detail_y = ttk.Scrollbar(self.step_editor, orient="vertical", command=self.detail_canvas.yview)
-        detail_x = ttk.Scrollbar(self.step_editor, orient="horizontal", command=self.detail_canvas.xview)
-        self.detail_canvas.configure(yscrollcommand=detail_y.set, xscrollcommand=detail_x.set)
+        self.detail_x = ttk.Scrollbar(self.step_editor, orient="horizontal", command=self.detail_canvas.xview)
+        self.detail_canvas.configure(yscrollcommand=detail_y.set, xscrollcommand=self.detail_x.set)
         detail_y.pack(side="right", fill="y")
-        detail_x.pack(side="bottom", fill="x")
         self.detail_canvas.pack(side="left", fill="both", expand=True)
         self.detail_rows_frame = ttk.Frame(self.detail_canvas)
         self.detail_canvas_window = self.detail_canvas.create_window((0, 0), window=self.detail_rows_frame, anchor="nw")
-        self.detail_rows_frame.bind("<Configure>", lambda _e: self.detail_canvas.configure(
-            scrollregion=self.detail_canvas.bbox("all")))
+        self.detail_rows_frame.bind("<Configure>", self._update_detail_scroll_region)
         edit = ttk.Frame(self.tab_analysis, padding=6); edit.pack(fill="x")
         self.v_analysis_action = self.tk.StringVar(value="")
         self.cb_analysis_action = ttk.Combobox(edit, textvariable=self.v_analysis_action, state="readonly", width=28)
         self.cb_analysis_action.pack(side="left")
-        ttk.Button(edit, text="Appliquer aux colonnes sélectionnées", command=self._apply_analysis_choice).pack(side="left", padx=5)
+        ttk.Button(edit, text="Appliquer aux colonnes cochées / sélectionnées", command=self._apply_analysis_choice).pack(side="left", padx=5)
         ttk.Button(edit, text="Réinitialiser la colonne", command=self._reset_analysis_selection).pack(side="left")
+        ttk.Button(edit, text="Aperçu avant / après", command=self._show_preview).pack(side="left", padx=5)
         ttk.Button(edit, text="Profil et comparaison", command=self._show_analysis_comparison).pack(side="left", padx=5)
 
     def _show_analysis_comparison(self) -> None:
@@ -919,11 +1318,11 @@ class App:
         scroll.pack(side="right", fill="y")
         output.pack(side="left", fill="both", expand=True)
         for item in selected:
-            column = str(self.tree_analysis.item(item, "values")[0])
+            column = self.tree_analysis.set(item, "colonne")
             detail = build_analysis_detail(self.analysis, column, self.choices)
             output.insert("end", detail["header"] + "\n")
             output.insert("end", f"{detail.get('raison_type', '')}  Confiance {detail.get('confiance_type', '')}\n")
-            for title, key in (("Profil", "profil"), ("Diagnostic des manquants", "diagnostic_manquants"),
+            for title, key in (("Profil", "profil"), ("Diagnostic des manquants", "diagnostic_detail"),
                                ("Association avec la cible", "analyse_cible")):
                 for metric, value in detail.get(key, {}).items():
                     output.insert("end", f"{title} · {metric.replace('_', ' ')} = {value}\n")
@@ -944,7 +1343,7 @@ class App:
         selected = self.tree_analysis.selection()
         if not selected:
             return
-        col = self.tree_analysis.item(selected[0], "values")[0]
+        col = self.tree_analysis.set(selected[0], "colonne")
         row = next((r for r in self.analysis.columns if r["colonne"] == col), None)
         if row:
             self._render_analysis_detail(col)
@@ -952,38 +1351,56 @@ class App:
                 self.cb_analysis_action["values"] = []
                 self.v_analysis_action.set("")
                 return
-            self.cb_analysis_action["values"] = list(dict.fromkeys([row["action"], *row["alternatives"]]))
+            available = list(dict.fromkeys([row["action"], *row["alternatives"]]))
+            self.cb_analysis_action["values"] = [label_action(action) for action in available]
             current_global = self.choices.get(col, row["action"])
-            self.v_analysis_action.set(current_global if not isinstance(current_global, dict) else row["action"])
+            current_code = current_global if not isinstance(current_global, dict) else row["action"]
+            self.v_analysis_action.set(label_action(current_code))
+
+    def _refresh_selected_detail(self) -> None:
+        selected = self.tree_analysis.selection()
+        if selected:
+            self._render_analysis_detail(self.tree_analysis.set(selected[0], "colonne"))
     def _render_analysis_detail(self, column: str) -> None:
         if self.analysis is None:
             return
-        detail = build_analysis_detail(self.analysis, column, self.choices)
+        detail = build_analysis_detail(self.analysis, column, self.choices,
+                                       show_all=bool(self.v_show_all_steps.get()))
         self.detail_header.configure(text=detail["header"])
+        diagnostic = detail.get("diagnostic_manquants", "")
+        self.detail_missing.configure(text=f"Diagnostic des manquants : {diagnostic}" if diagnostic else "")
+        count = detail.get("masked_count", 0)
+        self.v_masked_steps.set(f"{count} étape(s) masquée(s)" if count else "Aucune étape masquée")
         for child in self.detail_rows_frame.winfo_children():
             child.destroy()
         if not detail["rows"]:
             self.ttk.Label(self.detail_rows_frame, text="Aucune étape de transformation applicable.",
                            padding=8).grid(row=0, column=0, sticky="w")
             return
-        headings = [("Étape", 105), ("Recommandation", 170), ("Preuve chiffrée (mesure vs seuil)", 235),
-                    ("Explication", 430), ("Choix / paramètres / aide", 340)]
+        available_width = max(900, int(self.root.winfo_width()) - 100)
+        fractions = (0.09, 0.14, 0.20, 0.27, 0.30)
+        widths = [int(available_width * fraction) for fraction in fractions]
+        headings = [("Étape", widths[0]), ("Recommandation", widths[1]),
+                    ("Preuve chiffrée (mesure vs seuil)", widths[2]),
+                    ("Explication", widths[3]), ("Choix / aide", widths[4])]
+        for col_index, width in enumerate(widths):
+            self.detail_rows_frame.grid_columnconfigure(col_index, minsize=width, weight=1)
         for col_index, (heading, width) in enumerate(headings):
             self.ttk.Label(self.detail_rows_frame, text=heading, font=("TkDefaultFont", 9, "bold"),
                            wraplength=width, padding=4).grid(row=0, column=col_index, sticky="nsew")
         source_row = next(row for row in self.analysis.columns if row["colonne"] == column)
         for index, item in enumerate(detail["rows"], start=1):
             step = item["etape"]
-            rec_text = item["recommandation"]
+            rec_text = item["recommandation_label"]
             if item["modifie"]:
                 rec_text = f"✎ modifié — recommandation : {rec_text}"
-            self.ttk.Label(self.detail_rows_frame, text=step, wraplength=100, padding=4).grid(
+            self.ttk.Label(self.detail_rows_frame, text=item["etape_label"], wraplength=widths[0] - 8, padding=4).grid(
                 row=index, column=0, sticky="nw")
-            self.ttk.Label(self.detail_rows_frame, text=f"{rec_text}\nConfiance {item['confiance']}", wraplength=165, padding=4).grid(
+            self.ttk.Label(self.detail_rows_frame, text=f"{rec_text}\nConfiance {item['confiance']}", wraplength=widths[1] - 8, padding=4).grid(
                 row=index, column=1, sticky="nw")
-            self.ttk.Label(self.detail_rows_frame, text=item["preuve"], wraplength=230,
+            self.ttk.Label(self.detail_rows_frame, text=item["preuve"], wraplength=widths[2] - 8,
                            justify="left", padding=4).grid(row=index, column=2, sticky="nw")
-            self.ttk.Label(self.detail_rows_frame, text=item["explication"], wraplength=420,
+            self.ttk.Label(self.detail_rows_frame, text=item["explication_affichee"], wraplength=widths[3] - 8,
                            justify="left", padding=4).grid(row=index, column=3, sticky="nw")
             detail_step = source_row["steps"][step]
             saved = self.choices.get(column, {})
@@ -992,34 +1409,75 @@ class App:
             saved_params = saved_value[1] if isinstance(saved_value, (tuple, list)) and len(saved_value) == 2 else None
             choice_frame = self.ttk.Frame(self.detail_rows_frame, padding=2)
             choice_frame.grid(row=index, column=4, sticky="nsew")
-            variable = self.tk.StringVar(value=saved_action)
-            applicable = [action for action in detail_step["choices"]
-                          if detail_step.get("comparaison", {}).get(action, {}).get("applicable") is not False]
-            combo = self.ttk.Combobox(choice_frame, textvariable=variable, values=applicable,
-                                      state="readonly", width=19)
-            combo.grid(row=0, column=0, sticky="w")
+            variable = self.tk.StringVar(value=item["choix_label"])
+            combo = self.ttk.Combobox(choice_frame, textvariable=variable, values=item["choix_labels"],
+                                      state="readonly", width=max(12, min(27, (widths[4] - 20) // 8)))
+            combo.grid(row=0, column=0, sticky="ew", columnspan=2)
             default_param = self._format_step_parameter(step, saved_action, saved_params, source_row)
             param_var = self.tk.StringVar(value=default_param)
             param_entry = self.ttk.Entry(choice_frame, textvariable=param_var, width=18)
-            param_entry.configure(state="normal" if default_param or (step == "encoding" and saved_action in {"ORDINAL", "MANUAL_MAP"})
-                                  else "disabled")
-            param_entry.grid(row=0, column=1, sticky="w", padx=3)
-            help_var = self.tk.StringVar(value=recommendation_help(
-                step, saved_action, detail_step.get("measure", ""), detail_step.get("threshold", "")))
-            help_label = self.ttk.Label(choice_frame, textvariable=help_var, wraplength=320,
+            if step_parameter_visible(step, saved_action):
+                param_entry.grid(row=1, column=0, sticky="w", padx=3)
+            else:
+                param_entry.grid_remove()
+            help_label = self.ttk.Label(choice_frame, text=item["aide_choix"], wraplength=widths[4] - 20,
                                         justify="left", foreground="#555")
-            help_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
+            help_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
             combo.bind("<<ComboboxSelected>>", lambda _ev, c=column, st=step, v=variable, p=param_var,
-                       e=param_entry, r=source_row: self._step_action_changed(c, st, v, p, e, r))
-            combo.bind("<<ComboboxSelected>>", lambda _ev, v=variable, h=help_var, st=step,
-                       d=detail_step: h.set(recommendation_help(st, v.get(), d.get("measure", ""),
-                                                              d.get("threshold", ""))), add="+")
+                       e=param_entry, r=source_row, allowed=detail_step["choices"]:
+                       self._step_choice_selected(c, st, v, p, e, r, allowed))
             param_entry.bind("<FocusOut>", lambda _ev, c=column, st=step, v=variable, p=param_var,
-                             t=source_row["type"]: self._apply_step_value(c, st, v.get(), p.get(), t))
+                             t=source_row["type"], allowed=detail_step["choices"]:
+                             self._apply_step_value(c, st, self._choice_code(v.get(), allowed, st), p.get(), t))
         self.detail_canvas.configure(scrollregion=self.detail_canvas.bbox("all"))
 
+    @staticmethod
+    def _choice_code(label: str, options: List[str], step: str = "") -> str:
+        if step == "type" and label == "Garder (type automatique)":
+            return "AUTO"
+        for action in options:
+            if label_action(action) == label:
+                return action
+        raise ValueError(f"Choix d'action inconnu : {label}")
+
+    def _step_choice_selected(self, column: str, step: str, variable, param_var, param_entry,
+                              row: Dict[str, Any], allowed: List[str]) -> None:
+        try:
+            action = self._choice_code(variable.get(), allowed, step)
+            default = self._format_step_parameter(step, action, None, row)
+            param_var.set(default)
+            if step_parameter_visible(step, action):
+                param_entry.grid()
+                param_entry.configure(state="normal")
+                if action in {"ORDINAL", "MANUAL_MAP"} and not default:
+                    param_entry.focus_set()
+                    return
+            else:
+                param_entry.grid_remove()
+            self._apply_step_value(column, step, action, default, row["type"])
+        except ValueError as exc:
+            self.messagebox.showerror("Choix invalide", str(exc))
+
+    def _toggle_analysis_check(self, event):
+        if self.tree_analysis.identify_column(event.x) != "#1":
+            return None
+        item = self.tree_analysis.identify_row(event.y)
+        if not item:
+            return None
+        column = self.tree_analysis.set(item, "colonne")
+        row = next((row for row in self.analysis.columns if row["colonne"] == column), None) if self.analysis else None
+        if row is None or row.get("est_cible"):
+            return "break"
+        if column in self.checked_columns:
+            self.checked_columns.remove(column)
+            self.tree_analysis.set(item, "cocher", "☐")
+        else:
+            self.checked_columns.add(column)
+            self.tree_analysis.set(item, "cocher", "☑")
+        return "break"
+
     def _analysis_reason_hover(self, event) -> None:
-        if "raison" not in self.tree_analysis["columns"]:
+        if not any(col in self.tree_analysis["columns"] for col in ("raison", "choix_final", "relation_cible")):
             return
         row_id = self.tree_analysis.identify_row(event.y)
         column_id = self.tree_analysis.identify_column(event.x)
@@ -1027,14 +1485,30 @@ class App:
             col_name = self.tree_analysis["columns"][int(column_id.lstrip("#")) - 1]
         except (ValueError, IndexError):
             return
-        if not row_id or col_name != "raison":
+        if not row_id or col_name not in {"raison", "choix_final", "relation_cible"}:
             self._hide_reason_tooltip()
             return
         column_name = self.tree_analysis.set(row_id, "colonne")
         row = next((item for item in self.analysis.columns if item["colonne"] == column_name), None) if self.analysis else None
         if row is None:
             return
-        text = analysis_recommendation_summary(row)["raison"]
+        if col_name == "relation_cible":
+            if row.get("relation_cible_non_fiable_identifiant") or row.get("alerte_identifiant"):
+                ratio = float(row.get("ratio_uniques_lignes", 0) or 0) * 100
+                threshold = float(row.get("seuil_identifiant_uniques", .90)) * 100
+                trigger = (f"ratio au-dessus du seuil de {threshold:.1f}%" if ratio > threshold
+                           else "nom de colonne évocateur d'un identifiant")
+                text = f"Non fiable (identifiant) : {ratio:.1f}% d'uniques; règle déclenchée par {trigger}."
+            elif row.get("relation_cible_methode"):
+                text = f"Méthode : {row['relation_cible_methode']}. La valeur affichée suit cette échelle."
+            else:
+                text = "Relation indisponible : aucune cible sélectionnée ou statistique non calculable."
+        elif col_name == "choix_final":
+            chosen = build_analysis_table(self.analysis, self.choices)
+            chosen_row = chosen.loc[chosen["colonne"] == column_name].iloc[0]
+            text = localize_display_text(format_analysis_value("choix_final", chosen_row["choix_final"]))
+        else:
+            text = analysis_recommendation_summary(row)["raison"]
         if getattr(self, "_reason_tooltip_text", None) == text:
             return
         self._hide_reason_tooltip()
@@ -1044,6 +1518,17 @@ class App:
         self._reason_tooltip.wm_geometry(f"+{event.x_root + 12}+{event.y_root + 12}")
         self.ttk.Label(self._reason_tooltip, text=text, wraplength=520, justify="left",
                        padding=6, relief="solid").pack()
+
+    def _update_detail_scroll_region(self, _event=None) -> None:
+        """Met à jour la zone défilante et n'affiche l'horizontale qu'en cas de débordement."""
+        bounds = self.detail_canvas.bbox("all")
+        self.detail_canvas.configure(scrollregion=bounds)
+        if not bounds:
+            self.detail_x.pack_forget()
+        elif bounds[2] > self.detail_canvas.winfo_width() + 2:
+            self.detail_x.pack(side="bottom", fill="x")
+        else:
+            self.detail_x.pack_forget()
 
     def _hide_reason_tooltip(self, _event=None) -> None:
         tooltip = getattr(self, "_reason_tooltip", None)
@@ -1083,6 +1568,18 @@ class App:
             if isinstance(params, dict) and "mapping" in params:
                 return json.dumps(params["mapping"], ensure_ascii=False)
             return ""
+        if step == "encoding" and action == "HASH_ENCODE":
+            p = params if isinstance(params, dict) else {}
+            return str(p.get("n_components", 8))
+        if step == "encoding" and action == "LOO_ENCODE":
+            p = params if isinstance(params, dict) else {}
+            return str(p.get("sigma", 0.0))
+        if step == "text" and action in {"TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"}:
+            p = params if isinstance(params, dict) else {}
+            low, high = p.get("ngram_range", (1, 2))
+            default_size = 16 if action == "HASH_TEXT" else 15
+            size = p.get("n_features" if action == "HASH_TEXT" else "max_features", default_size)
+            return f"{low}, {high}, {size}"
         if step == "text" and action == "TFIDF_SVD":
             p = params if isinstance(params, dict) else {}
             return str(p.get("components", 4))
@@ -1117,8 +1614,14 @@ class App:
         self.tree_analysis.delete(*self.tree_analysis.get_children())
         columns = list(self.tree_analysis["columns"])
         for _, row in view.iterrows():
-            values = [truncate_reason(row.get(c, "")) if c == "raison" else format_analysis_value(c, row.get(c, ""))
-                      for c in columns]
+            values = []
+            for c in columns:
+                if c == "cocher":
+                    values.append("☑" if row["colonne"] in self.checked_columns else "☐")
+                elif c == "raison":
+                    values.append(truncate_reason(str(row.get(c, ""))))
+                else:
+                    values.append(format_analysis_value(c, row.get(c, "")))
             tag = "cible" if bool(row.get("est_cible", False)) else ()
             item = self.tree_analysis.insert("", "end", values=values, tags=tag)
             if row["colonne"] in selected_columns:
@@ -1131,25 +1634,83 @@ class App:
             self._refresh_analysis_tree()
 
     def _reset_all(self) -> None:
-        self.choices.clear(); self._refresh_analysis_tree()
+        self.choices.clear(); self.checked_columns.clear(); self._refresh_analysis_tree()
 
     def _reset_analysis_selection(self) -> None:
         if self.analysis:
-            for item in self.tree_analysis.selection():
-                col = self.tree_analysis.item(item, "values")[0]
+            columns = set(self.checked_columns)
+            if not columns:
+                columns = {self.tree_analysis.set(item, "colonne") for item in self.tree_analysis.selection()}
+            for col in columns:
                 self.choices.pop(col, None)
             self._refresh_analysis_tree()
 
     def _apply_analysis_choice(self) -> None:
         if self.analysis is None:
             return
-        for item in self.tree_analysis.selection():
-            col = self.tree_analysis.item(item, "values")[0]
+        columns = set(self.checked_columns)
+        if not columns:
+            columns = {self.tree_analysis.set(item, "colonne") for item in self.tree_analysis.selection()}
+        for col in columns:
             try:
-                self.choices[col] = validate_column_choice(self.analysis, col, self.v_analysis_action.get())
+                row = next(row for row in self.analysis.columns if row["colonne"] == col)
+                action = self._choice_code(self.v_analysis_action.get(), [row["action"], *row["alternatives"]])
+                self.choices[col] = validate_column_choice(self.analysis, col, action)
             except ValueError as exc:
                 self.messagebox.showerror("Choix invalide", str(exc)); return
         self._refresh_analysis_tree()
+        if self.tree_analysis.selection():
+            self._analysis_selection()
+
+    def _show_preview(self) -> None:
+        """Ouvre une fenêtre comparant la colonne sélectionnée avant et après son traitement choisi."""
+        if self.analysis is None or self.df is None:
+            self.messagebox.showinfo("Analyse requise", "Analysez d'abord le dataset."); return
+        selected = self.tree_analysis.selection()
+        if not selected:
+            self.messagebox.showinfo("Colonne requise", "Sélectionnez une colonne."); return
+        column = self.tree_analysis.set(selected[0], "colonne")
+        target = self.v_target.get(); target = None if target == NO_TARGET_LABEL else target
+        if column == target:
+            self.messagebox.showinfo("Cible", "L'aperçu ne s'applique pas à la colonne cible."); return
+        options = self._read_options()
+        try:
+            self._set_status(f"Aperçu de {column}...")
+            self.root.update_idletasks()
+            preview = preview_for_choice(self.df, self.analysis, column, self.choices,
+                                         build_config(options), target=target, task=options.task)
+        except Exception as exc:
+            self.messagebox.showerror("Aperçu impossible", str(exc)); return
+        finally:
+            self._set_status("Prêt")
+        ttk = self.ttk
+        win = self.tk.Toplevel(self.root)
+        win.title(f"Aperçu avant / après : {column}")
+        win.geometry("980x720")
+        table = build_preview_table(preview)
+        tree = ttk.Treeview(win, columns=list(table.columns), show="headings", height=min(len(table), 12))
+        for name in table.columns:
+            tree.heading(name, text=name); tree.column(name, width=180, anchor="w")
+        for _, row in table.iterrows():
+            tree.insert("", "end", values=[row[c] for c in table.columns])
+        tree.pack(fill="x", padx=6, pady=6)
+        try:
+            # pyrefly: ignore[missing-import]
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            canvas = FigureCanvasTkAgg(build_preview_figure(preview), master=win)
+            canvas.draw(); canvas.get_tk_widget().pack(fill="both", expand=True, padx=6)
+        except Exception as exc:  # matplotlib absent : le tableau reste disponible
+            ttk.Label(win, text=f"Graphiques indisponibles ({exc}).").pack()
+        ttk.Label(win, text="\n".join(preview.get("notes", [])), wraplength=940, justify="left").pack(fill="x", padx=6, pady=6)
+        def save_png() -> None:
+            path = self.filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG", "*.png")],
+                                                     initialfile=f"apercu_{column}.png")
+            if path:
+                try:
+                    export_preview_png(preview, path)
+                except Exception as exc:
+                    self.messagebox.showerror("Export impossible", str(exc))
+        ttk.Button(win, text="Enregistrer le graphique (PNG)", command=save_png).pack(pady=(0, 8))
 
     def _import_analysis_choices(self) -> None:
         if self.analysis is None:
@@ -1200,11 +1761,10 @@ class App:
         self.analysis = payload
         self.tree_analysis.delete(*self.tree_analysis.get_children())
         view = build_analysis_table(payload, self.choices)
-        columns = ["colonne", "type", "manquants_pct", "uniques", "skew", "outliers_pct",
-                   "relation_cible", "choix_final", "raison", "état_choix", "confiance"]
-        columns = [c for c in columns if c in view.columns]
+        columns = analysis_table_column_order(view.columns)
         self.tree_analysis["columns"] = columns
         headers = {
+            "cocher": "Choisir",
             "colonne": "colonne",
             "type": "type",
             "manquants_pct": "manquants (%)",
@@ -1218,27 +1778,35 @@ class App:
             "confiance": "confiance",
         }
         col_min_defaults = {
-            "colonne": 140,
-            "type": 190,
-            "manquants_pct": 115,
-            "uniques": 85,
-            "skew": 75,
-            "outliers_pct": 110,
-            "relation_cible": 115,
-            "choix_final": 170,
-            "raison": 320,
-            "état_choix": 115,
-            "confiance": 95,
+            "cocher": 58,
+            "colonne": 125,
+            "type": 145,
+            "manquants_pct": 105,
+            "uniques": 72,
+            "skew": 68,
+            "outliers_pct": 100,
+            "relation_cible": 105,
+            "choix_final": 145,
+            "raison": 290,
+            "état_choix": 105,
+            "confiance": 78,
         }
         for col in columns:
             header = headers.get(col, col)
             self.tree_analysis.heading(col, text=header, command=lambda c=col: self._sort_analysis(c, False))
-            display_values = [truncate_reason(value) if col == "raison" else format_analysis_value(col, value)
-                              for value in view[col].tolist()]
+            display_values = []
+            for _, display_row in view.iterrows():
+                value = display_row.get(col, "")
+                if col == "cocher":
+                    display_values.append("☑" if display_row["colonne"] in self.checked_columns else "☐")
+                elif col == "raison":
+                    display_values.append(truncate_reason(str(value)))
+                else:
+                    display_values.append(format_analysis_value(col, value))
             content_width = max((len(str(value)) for value in display_values), default=0)
             min_w = col_min_defaults.get(col, 95)
-            calc_w = max(len(header), content_width) * 9 + 30
-            width = max(min_w, min(500, calc_w))
+            calc_w = max(len(header), min(content_width, 16)) * 8 + 20
+            width = max(min_w, min(360 if col == "raison" else 190, calc_w))
             self.tree_analysis.column(col, width=width, minwidth=min_w, stretch=False)
         self.tree_analysis.tag_configure("risque", foreground="#b00020")
         self.tree_analysis.tag_configure("cible", foreground="#777777")
@@ -1247,8 +1815,11 @@ class App:
             risk = (str(row.get("type", "")).startswith("DROP_ID") or
                     float(row.get("manquants_pct", 0) or 0) > 50 or
                     (pd.notna(row.get("score_fuite")) and float(row.get("score_fuite")) >= .95))
-            values = [truncate_reason(row.get(c, "")) if c == "raison" else format_analysis_value(c, row.get(c, ""))
-                       for c in columns]
+            values = ["☑" if c == "cocher" and row["colonne"] in self.checked_columns else
+                      "☐" if c == "cocher" else
+                      truncate_reason(str(row.get(c, ""))) if c == "raison" else
+                      truncate_reason(localize_display_text(row.get(c, ""))) if c == "choix_final" else
+                      format_analysis_value(c, row.get(c, "")) for c in columns]
             self.tree_analysis.insert("", "end", values=values,
                                       tags=("cible",) if is_target else ("risque",) if risk else ())
         feature_item = next((item for item in self.tree_analysis.get_children("")
@@ -1276,9 +1847,19 @@ class App:
             return
         if self.v_target.get() == NO_TARGET_LABEL:
             self.v_analysis_warning.set("analyse sans cible : relations, fuites et encodage supervisé indisponibles")
+            self.v_target_hint.set("Aucune cible suggérée")
         else:
+            if self.target_suggested:
+                self.v_target_hint.set("Cible suggérée automatiquement")
+            else:
+                self.v_target_hint.set("Cible choisie manuellement")
             self.v_analysis_warning.set("Analyse descriptive du fichier entier. Pour choisir une configuration à évaluer, "
                                         "analysez uniquement les données d’entraînement.")
+
+    def _on_target_changed(self) -> None:
+        if not self._setting_target_suggestion:
+            self.target_suggested = False
+        self._update_analysis_target_warning()
 
     def _build_tab_params(self) -> None:
         ttk = self.ttk
@@ -1411,18 +1992,32 @@ class App:
             self.messagebox.showerror("Lecture impossible", str(exc))
             return
         self.df, self.path, self.result = df, path, None
+        self.analysis = None
+        self.choices.clear()
+        self.checked_columns.clear()
+        for item in self.tree_analysis.get_children(""):
+            self.tree_analysis.delete(item)
+        self.detail_header.configure(text="Sélectionnez une colonne pour voir ses statistiques et les explications.")
+        self.detail_missing.configure(text="")
+        self.v_masked_steps.set("")
         self.v_file.set(os.path.basename(path))
         target_values = [NO_TARGET_LABEL] + [str(c) for c in df.columns]
         self.cb_target["values"] = target_values
         self.cb_analysis_target["values"] = target_values
-        self.v_target.set(NO_TARGET_LABEL)
+        suggested = suggest_target_column(df)
+        self._setting_target_suggestion = True
+        self.v_target.set(suggested if suggested is not None else NO_TARGET_LABEL)
+        self._setting_target_suggestion = False
+        self.target_suggested = suggested is not None
+        self._update_analysis_target_warning()
         self.v_task.set("auto")  # évite de garder « regression » d'un fichier précédent
         n_missing = int(df.isna().sum().sum())
         self.lbl_info.configure(
             text=f"{len(df)} lignes x {df.shape[1]} colonnes | {n_missing} valeurs manquantes | "
                  f"aperçu : {min(len(df), self.PREVIEW_ROWS)} premières lignes")
         self._fill_tree(self.tree_data, df)
-        self._set_status("Fichier chargé. Choisissez la cible dans Analyse ou Paramètres.")
+        self._set_status(f"Fichier chargé. Cible suggérée automatiquement : {suggested}." if suggested
+                         else "Fichier chargé. Aucune cible suggérée; choisissez-la dans Analyse ou Paramètres.")
         self.notebook.select(self.tab_analysis)
 
     def _start_run(self) -> None:

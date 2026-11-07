@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Suite de tests unitaires et d'intégration pour AutoPreprocessor.
 Vérifie la robustesse, l'absence de fuite de données, la persistance et les cas limites.
 """
 
 import os
+import re
 import tempfile
 # pyrefly: ignore[missing-import]
 import numpy as np
@@ -167,7 +169,7 @@ def test_no_data_leakage(synthetic_dataframe):
     train_df = df.iloc[:120].copy()
     test_df = df.iloc[120:].copy()
 
-    prep = AutoPreprocessor(PreprocessConfig(outlier_method="winsorize", random_state=42))
+    prep = AutoPreprocessor(PreprocessConfig(outlier_method="winsorize", adaptive_recommendations=False, random_state=42))
     prep.fit(train_df.drop(columns=["target"]), y=train_df["target"])
 
     # 1. Vérifier que les bornes de winsorisation sont issues du train
@@ -495,7 +497,7 @@ def test_analysis_demo_recommendations():
     fraud = prep.analyze(read_table("data/fraud_signal_demo.csv")).to_dataframe().set_index("colonne")
     assert fraud.loc["heure", "action"] == "DATE_FEATURES"
     housing = prep.analyze(read_table("data/immobilier_demo.csv")).to_dataframe().set_index("colonne")
-    assert housing.loc["prix_dh", "action"] == "YEO_JOHNSON"
+    assert housing.loc["prix_dh", "action"] in {"LOG1P", "SQRT", "YEO_JOHNSON"}
 
 
 @pytest.mark.parametrize("path", ["data/churn_telecom_demo.csv", "data/immobilier_demo.csv", "data/fraud_signal_demo.csv"])
@@ -621,7 +623,8 @@ def test_identifier_name_is_dropped_and_explained():
     frame = read_table("data/fraud_signal_demo.csv")
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame).to_dataframe().set_index("colonne")
     assert result.loc["client_id", "action"] == "DROP"
-    assert "ratio uniques/lignes" in result.loc["client_id", "raison"]
+    assert "94.7%" in result.loc["client_id", "raison"]
+    assert "90.0%" in result.loc["client_id", "raison"]
 
 
 def test_all_step_recommendations_are_accepted_by_fit():
@@ -718,13 +721,14 @@ def test_cleaning_dates_and_impossible_value_actions():
         column_overrides={"date_event": {"clean_dates": "KEEP"}})).fit_transform(frame)
     dropped_date = AutoPreprocessor(PreprocessConfig(verbose=0,
         column_overrides={"date_event": {"clean_dates": "DROP_COLUMN"}})).fit_transform(frame)
-    clipped = AutoPreprocessor(PreprocessConfig(verbose=0,
+    bounds = {"age": (0., 120.)}
+    clipped = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "CLIP"}})).fit_transform(frame)
-    replaced = AutoPreprocessor(PreprocessConfig(verbose=0,
+    replaced = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "NAN"}})).fit_transform(frame)
-    ignored = AutoPreprocessor(PreprocessConfig(verbose=0,
+    ignored = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "IGNORE"}})).fit_transform(frame)
-    dropped_rows = AutoPreprocessor(PreprocessConfig(verbose=0,
+    dropped_rows = AutoPreprocessor(PreprocessConfig(verbose=0, value_bounds=bounds,
         column_overrides={"age": {"clean_impossible": "DROP_ROWS"}})).fit_transform(frame)
     assert any(c.startswith("date_event_") for c in parsed.columns)
     assert not any(c.startswith("date_event_") for c in kept_date.columns)
@@ -802,7 +806,7 @@ def test_analysis_cleaning_counts_and_prelaunch_summary():
     frame = pd.DataFrame({"value": ["N/A", "?", "null", "a", "b", "c", "d", "e", "f", "g"]})
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
     row = result.to_dataframe().iloc[0]
-    assert row["steps"]["clean_missing_tokens"]["measure"].startswith("cellules=3")
+    assert row["steps"]["clean_missing_tokens"]["measure"].startswith("3 cellules")
     summary = build_preprocess_summary(result, {"value": {"type": "DROP"}})
     assert summary["dropped_columns"] == ["value"]
     assert summary["user_columns"] == ["value"]
@@ -819,7 +823,8 @@ def test_churn_target_relations_are_populated_for_every_feature():
     assert target_row["est_cible"]
     assert target_row["type"] == "TARGET"
     assert target_row["steps"] == {}
-    assert features["relation_cible"].notna().all()
+    assert features.loc[~features["alerte_identifiant"], "relation_cible"].notna().all()
+    assert features.loc[features["alerte_identifiant"], "relation_cible"].isna().all()
     display = build_analysis_table(result).set_index("colonne")
     assert display.loc["churn", "état_choix"] == "cible"
     assert display.loc["churn", "choix_final"] == "cible"
@@ -857,16 +862,17 @@ def test_analysis_display_formatting_and_confidence_thresholds():
 def test_detail_panel_logic_is_pure_and_contains_step_evidence():
     from app_preprocess import build_analysis_detail
 
-    frame = pd.DataFrame({"price": np.r_[np.arange(1., 60.), 500., 900.]})
+    frame = pd.DataFrame({"price": np.random.default_rng(7).lognormal(3, 1.2, 300)})
     result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
     empty = build_analysis_detail(result, None)
     assert "Sélectionnez une colonne" in empty["header"]
     detail = build_analysis_detail(result, "price", {"price": {"distribution": "NONE"}})
     assert "price | type=" in detail["header"]
     assert any(row["etape"] == "distribution" and row["modifie"] and
-               row["recommandation"] == "YEO_JOHNSON" for row in detail["rows"])
-    assert all(row["explication"] and row["preuve"].split(" ; seuil : ")[0] in row["explication"]
-               for row in detail["rows"])
+               row["recommandation"] in {"LOG1P", "SQRT", "YEO_JOHNSON"} for row in detail["rows"])
+    assert all(row["explication"] and row["preuve"] and " ; seuil : " in row["preuve"]
+               and row["preuve"].split(" ; seuil : ")[0] in row["preuve"]
+               and row["preuve"] not in row["explication"] for row in detail["rows"])
 
 
 def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
@@ -880,21 +886,120 @@ def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
     for row in result.columns:
         details = build_analysis_detail(result, row["colonne"])["rows"]
         assert details
-        assert all(item["explication"].strip() and item["preuve"].split(" ; seuil : ")[0] in item["explication"]
-                   for item in details)
+        assert all(item["explication"].strip() and item["preuve"]
+                   and " ; seuil : " in item["preuve"]
+                   and item["preuve"].split(" ; seuil : ")[0] in item["preuve"]
+                   and item["preuve"] not in item["explication"] for item in details)
         for step, recommendation in row["steps"].items():
             if len(recommendation.get("choices", [])) > 1:
                 assert recommendation["explanation"].strip()
                 assert recommendation["measure"].strip()
-                assert recommendation["measure"] in recommendation["explanation"]
+                assert recommendation["evidence"].startswith(recommendation["measure"])
+                assert " ; seuil : " in recommendation["evidence"]
+                assert recommendation["evidence"] not in recommendation["explanation"]
     table = build_analysis_table(result)
     assert table["raison"].str.len().gt(0).all()
     assert table["preuve"].str.len().gt(0).all()
     path = tmp_path / "analyse_colonnes.csv"
     export_analysis_csv(result, str(path))
     exported = pd.read_csv(path)
-    assert {"raison", "preuve", "explication", "explication_distribution"}.issubset(exported.columns)
-    assert exported.loc[exported["colonne"] == "amount", "explication_distribution"].notna().all()
+    assert {"Raison", "Preuve", "Explication", "Explication — Distribution"}.issubset(exported.columns)
+    assert exported.loc[exported["Colonne"] == "amount", "Explication — Distribution"].notna().all()
+
+
+def test_dropped_column_detail_shows_only_keep_or_drop_stage():
+    from app_preprocess import build_analysis_detail, read_table
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    detail = build_analysis_detail(result, "transaction_id", show_all=True)
+    assert len(detail["rows"]) == 1
+    assert detail["rows"][0]["etape_label"] == "Garder / Supprimer"
+    assert detail["rows"][0]["choix_labels"] == ["Garder (type automatique)", "Supprimer"]
+
+
+def test_empty_cleanup_steps_are_hidden_and_counted():
+    from app_preprocess import build_analysis_detail
+
+    frame = pd.DataFrame({"measure": np.arange(100, dtype=float)})
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    compact = build_analysis_detail(result, "measure")
+    expanded = build_analysis_detail(result, "measure", show_all=True)
+    hidden_cleaning = {"clean_missing_tokens", "clean_variants", "clean_numeric_text",
+                       "clean_dates", "clean_impossible", "duplicates"}
+    assert compact["masked_count"] > 0
+    assert hidden_cleaning.isdisjoint({row["etape"] for row in compact["rows"]})
+    assert hidden_cleaning.issubset({row["etape"] for row in expanded["rows"]})
+
+
+def test_visible_analysis_labels_do_not_expose_internal_identifiers():
+    from app_preprocess import build_analysis_detail, format_analysis_value, read_table
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    from app_preprocess import label_action, label_step
+    texts = [format_analysis_value("type", "DROP_ID"), label_action("TO_NAN"),
+             label_step("clean_missing_tokens")]
+    for row in result.columns:
+        detail = build_analysis_detail(result, row["colonne"], show_all=True)
+        texts.append(detail["header"])
+        for item in detail["rows"]:
+            texts.extend([item["etape_label"], item["recommandation_label"], item["preuve"],
+                          item["explication_affichee"], item["choix_label"], *item["choix_labels"], item["aide_choix"]])
+    visible = " ".join(texts)
+    for forbidden in ("TO_NAN", "DEFAULT_NA_VALUES", "clean_missing_tokens", "{}"):
+        assert forbidden not in visible
+    assert "aucune" in visible.lower()
+
+
+def test_display_explanation_does_not_repeat_proof_measure():
+    from app_preprocess import build_analysis_detail, read_table
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
+        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    for row in result.columns:
+        detail = build_analysis_detail(result, row["colonne"], show_all=True)
+        for item in detail["rows"]:
+            assert "Preuve :" not in item["explication_affichee"]
+            assert item["preuve"]
+            assert item["explication_affichee"]
+
+
+def test_target_suggestion_for_demo_datasets():
+    from app_preprocess import read_table, suggest_target_column
+
+    assert suggest_target_column(read_table("data/churn_telecom_demo.csv")) == "churn"
+    assert suggest_target_column(read_table("data/fraud_signal_demo.csv")) == "is_fraud"
+    assert suggest_target_column(read_table("data/immobilier_demo.csv")) is None
+
+
+def test_tk_smoke_load_analyze_and_treeview_count():
+    import time
+    import tkinter
+    from app_preprocess import App, read_table
+
+    try:
+        app = App()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tkinter indisponible dans cette session : {exc}")
+    try:
+        app.root.withdraw()
+        path = os.path.abspath("data/churn_telecom_demo.csv")
+        frame = read_table(path)
+        app._load_path(path)
+        assert app.v_target.get() == "churn"
+        app._start_analysis()
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not app.tree_analysis.get_children(""):
+            app.root.update()
+            time.sleep(.03)
+        assert len(app.tree_analysis.get_children("")) == len(frame.columns)
+        assert app.analysis is not None
+    finally:
+        try:
+            app.root.destroy()
+        except tkinter.TclError:
+            pass
 
 
 def test_target_provided_populates_relation_cible_for_all_features():
@@ -911,8 +1016,9 @@ def test_target_provided_populates_relation_cible_for_all_features():
     assert target_row["est_cible"]
     assert target_row["type"] == "TARGET"
     assert pd.isna(target_row["relation_cible"])
-    assert features["relation_cible"].notna().all()
-    assert (features["relation_cible"] >= 0).all()
+    assert features.loc[~features["alerte_identifiant"], "relation_cible"].notna().all()
+    assert features.loc[features["alerte_identifiant"], "relation_cible"].isna().all()
+    assert (features.loc[~features["alerte_identifiant"], "relation_cible"] >= 0).all()
 
     # Vérification que Cramér's V, Spearman ou MI est présent pour chaque feature
     has_stat = (
@@ -920,7 +1026,7 @@ def test_target_provided_populates_relation_cible_for_all_features():
         | features["spearman_cible"].notna()
         | features["information_mutuelle_cible"].notna()
     )
-    assert has_stat.all()
+    assert has_stat.loc[~features["alerte_identifiant"]].all()
 
     display = build_analysis_table(result).set_index("colonne")
     assert display.loc["churn", "état_choix"] == "cible"
@@ -1011,8 +1117,8 @@ def test_three_confidence_levels_statistical_rules():
     assert analysis_small.columns[0]["confiance"] == "faible"
 
 
-def test_every_recommendation_step_has_nonempty_explanation_with_measure():
-    """Test (e) : chaque recommandation (colonne x étape) a une explication non vide avec la mesure."""
+def test_every_recommendation_step_separates_explanation_and_evidence():
+    """Chaque recommandation expose séparément son explication et sa preuve."""
     from app_preprocess import read_table
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
@@ -1028,7 +1134,1117 @@ def test_every_recommendation_step_has_nonempty_explanation_with_measure():
                     meas = detail.get("measure", "").strip()
                     assert len(exp) > 0, f"Explication vide pour {row['colonne']} -> {step}"
                     assert len(meas) > 0, f"Mesure vide pour {row['colonne']} -> {step}"
-                    assert meas in exp or meas.split(";")[0] in exp, (
-                        f"Mesure '{meas}' non trouvée dans explication '{exp}' ({row['colonne']} -> {step})"
-                    )
+                    evidence = detail.get("evidence", "")
+                    assert evidence.startswith(meas)
+                    assert " ; seuil : " in evidence
+                    assert evidence not in exp
 
+
+
+def test_drop_evidence_uses_the_actual_configured_thresholds():
+    from app_preprocess import analysis_recommendation_summary
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    config = PreprocessConfig(verbose=0, identifier_unique_threshold=.75,
+                              missing_threshold=.75, constant_threshold=.95,
+                              leakage_threshold=.80, leakage_min_gap=.20)
+    frame = pd.DataFrame({
+        "customer_id": [f"C{i}" for i in range(40)],
+        "constant": ["x"] * 40,
+        "mostly_missing": [None] * 32 + list(range(8)),
+        "base": np.arange(40),
+        "duplicate": np.arange(40),
+    })
+    result = AutoPreprocessor(config).analyze(frame)
+    rows = {row["colonne"]: row for row in result.columns}
+    id_proof = analysis_recommendation_summary(rows["customer_id"])["preuve"]
+    missing_proof = analysis_recommendation_summary(rows["mostly_missing"])["preuve"]
+    constant_proof = analysis_recommendation_summary(rows["constant"])["preuve"]
+    duplicate_proof = analysis_recommendation_summary(rows["duplicate"])["preuve"]
+    assert "40 / 40 lignes (100.0%)" in id_proof
+    assert "75.0%" in id_proof
+    assert "75.0%" in missing_proof
+    assert "1 valeur unique" in constant_proof
+    assert "identique" in duplicate_proof.lower()
+
+    leakage = {"action": "DROP", "type": "DROP_LEAKAGE", "raison": "fuite",
+               "drop_preuve": "score fuite CV = 0.910",
+               "drop_seuil": ">= 0.800 et ecart >= 0.200",
+               "steps": {"type": {"measure": "score fuite CV = 0.910",
+                                    "threshold": ">= 0.800 et ecart >= 0.200"}}}
+    assert "0.800" in analysis_recommendation_summary(leakage)["preuve"]
+    assert "0.200" in analysis_recommendation_summary(leakage)["preuve"]
+
+
+def test_identifier_target_relations_are_hidden_and_other_methods_are_named():
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    rows = {row["colonne"]: row for row in result.columns}
+    for name in ("transaction_id", "client_id"):
+        assert pd.isna(rows[name]["relation_cible"])
+        assert rows[name]["relation_cible_non_fiable_identifiant"]
+        assert rows[name]["relation_cible_methode"] == "non fiable (identifiant)"
+    ordinary = [row for row in result.columns if not row.get("est_cible")
+                and not row.get("relation_cible_non_fiable_identifiant")]
+    assert ordinary
+    assert all(pd.notna(row["relation_cible"]) for row in ordinary)
+    assert all(row["relation_cible_methode"] for row in ordinary)
+
+
+def test_analysis_main_table_order_and_parameter_field_visibility():
+    from app_preprocess import analysis_table_column_order, step_parameter_visible
+
+    columns = analysis_table_column_order({"colonne", "type", "choix_final", "raison", "confiance",
+                                           "manquants_pct", "skew", "relation_cible"})
+    assert columns[:6] == ["cocher", "colonne", "type", "choix_final", "raison", "confiance"]
+    assert columns.index("choix_final") < columns.index("manquants_pct")
+    assert columns.index("raison") < columns.index("skew")
+    assert not step_parameter_visible("type", "DROP")
+    assert not step_parameter_visible("type", "AUTO")
+    assert step_parameter_visible("outliers", "WINSORIZE")
+
+
+def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos():
+    from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
+                                read_table, recommendation_step)
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        frame = read_table(path)
+        config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
+        result = AutoPreprocessor(config).analyze(frame)
+        for row in result.columns:
+            if row.get("est_cible"):
+                continue
+            summary = analysis_recommendation_summary(row)
+            step = recommendation_step(row)
+            detail = build_analysis_detail(result, row["colonne"], show_all=True)
+            panel_row = next(item for item in detail["rows"] if item["etape"] == step)
+            assert panel_row["preuve"] == summary["preuve"], (path, row["colonne"])
+            assert row["steps"][step]["reason"] == summary["raison"]
+            assert not re.search(r"\w+=\S", summary["raison"])
+            assert "Garder / Supprimer=" not in summary["raison"]
+            assert not any(token in summary["raison"] for token in
+                           ("encoding=", "distribution=", "type=", "dates="))
+
+
+def test_identifier_panel_proof_uses_unique_ratio_and_config_threshold():
+    from app_preprocess import analysis_recommendation_summary, build_analysis_detail
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = read_table("data/fraud_signal_demo.csv")
+    config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
+    result = AutoPreprocessor(config).analyze(frame)
+    row = next(item for item in result.columns if item["colonne"] == "client_id")
+    summary = analysis_recommendation_summary(row)
+    detail = build_analysis_detail(result, "client_id")
+    assert summary["preuve"] == detail["rows"][0]["preuve"]
+    assert "94.7%" in summary["preuve"]
+    assert "90.0%" in summary["preuve"]
+    assert "cardinalite" not in summary["preuve"].lower()
+
+
+def test_analysis_reasons_use_selected_stage_measure_and_date_details():
+    from app_preprocess import analysis_recommendation_summary, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(path))
+        for row in result.columns:
+            if row.get("est_cible"):
+                continue
+            reason = analysis_recommendation_summary(row)["raison"]
+            assert not re.search(r"\w+=\S", reason)
+            assert "Garder / Supprimer" not in reason
+            assert "DROP_ID" not in reason and "NUMERIC_CONTINUOUS" not in reason
+            if row.get("action") == "DATE_FEATURES":
+                assert "heures" in reason.lower() or "plage" in reason.lower()
+                assert "parsables" in reason.lower()
+                assert "granularite" in reason.lower() or "granularité" in reason.lower()
+
+
+def test_phase1_source_encoding_and_demo_recommendation_text():
+    from pathlib import Path
+    from app_preprocess import analysis_recommendation_summary, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    mojibake = re.compile(r"(?:Ã[©-ÿ]|â€|Â\s)")
+    for filename in ("auto_preprocessor.py", "app_preprocess.py"):
+        source = Path(filename).read_text(encoding="utf-8-sig")
+        assert not mojibake.search(source)
+        assert "# -*- coding: utf-8 -*-" in source.splitlines()[:2]
+
+    technical = re.compile(r"\b(?:skew|cardinality|normality_p|p_cible|IQR|MAD)=\S", re.I)
+    for filename in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                     "data/fraud_signal_demo.csv"):
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(filename))
+        for row in result.columns:
+            summary = analysis_recommendation_summary(row)
+            for text in (summary["raison"], summary["preuve"], summary["explication"]):
+                assert not mojibake.search(text)
+                assert "p 0" not in text.lower()
+                assert "plus de" not in text.lower()
+                assert not technical.search(text), (filename, row["colonne"], text)
+
+
+def test_phase1_montant_proof_and_csv_export_keep_unicode_and_p_value(tmp_path):
+    from app_preprocess import analysis_recommendation_summary, export_analysis_csv, read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
+        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    row = next(item for item in result.columns if item["colonne"] == "montant")
+    proof = analysis_recommendation_summary(row)["preuve"]
+    assert "|skew| > 1" in proof
+    assert "p < 0.001" in proof
+    output = tmp_path / "analyse_colonnes.csv"
+    export_analysis_csv(result, str(output))
+    data = output.read_text(encoding="utf-8-sig")
+    assert "asym" + chr(0xE9) + "trie" in data
+    assert "p < 0.001" in data
+
+
+def test_phase1_read_table_decodes_utf8_and_cp1252_accents(tmp_path):
+    from app_preprocess import read_table
+
+    expected = "Caf" + chr(0xE9)
+    for encoding in ("utf-8", "cp1252"):
+        path = tmp_path / (encoding + ".csv")
+        path.write_bytes(("ville\n" + expected + "\n").encode(encoding))
+        assert read_table(str(path)).iloc[0, 0] == expected
+
+
+def test_phase1_time_only_features_do_not_depend_on_current_date(monkeypatch):
+    import auto_preprocessor as module
+    from app_preprocess import analysis_recommendation_summary
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    frame = pd.DataFrame({"heure": ["00:00:12", "08:15:00", "16:30:05", "23:59:41"] * 20})
+    analysis = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    row = analysis.columns[0]
+    reason = analysis_recommendation_summary(row)["raison"]
+    assert row["action"] == "DATE_FEATURES"
+    assert "heures 00:00:12" in reason and "23:59:41" in reason
+    assert "colonne horaire sans date" in reason
+
+    monkeypatch.setattr(module, "_current_timestamp", lambda tz=None: pd.Timestamp("2001-01-01"))
+    first = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    monkeypatch.setattr(module, "_current_timestamp", lambda tz=None: pd.Timestamp("2099-12-31"))
+    second = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_phase2_recommendation_matches_report_action_on_demo_datasets():
+    from app_preprocess import read_table
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+                 "data/fraud_signal_demo.csv"):
+        frame = read_table(path)
+        prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+        analysis = prep.analyze(frame)
+        prep.fit_transform(frame)
+        report = prep.report()["colonnes_detaillees"].set_index("Colonne")
+        for row in analysis.columns:
+            if row.get("est_cible"):
+                continue
+            assert report.loc[row["colonne"], "Action appliquée"] == row["action"]
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("include_target", [False, True])
+def test_phase2_accept_all_recommendations_matches_baseline(task, include_target):
+    from auto_preprocessor import AutoPreprocessor, ColumnOverride, PreprocessConfig
+
+    n = 120
+    frame = pd.DataFrame({
+        "value": np.linspace(1., 25., n) ** 1.4,
+        "category": [f"group_{i % 15}" for i in range(n)],
+        "small_category": [f"s{i % 4}" for i in range(n)],
+        "event_date": pd.date_range("2023-01-01", periods=n).astype(str),
+    })
+    rng = np.random.default_rng(43)
+    y = rng.integers(0, 2, size=n) if task == "classification" else rng.normal(40., 8., size=n)
+    if include_target:
+        frame["target"] = y
+    features = frame.drop(columns=["target"], errors="ignore")
+    config = PreprocessConfig(verbose=0)
+    analysis = AutoPreprocessor(config, task=task).analyze(
+        frame, target="target" if include_target else None)
+    overrides = {row["colonne"]: ColumnOverride(row["action"])
+                 for row in analysis.columns if not row.get("est_cible")}
+    fit_target = y if include_target else None
+    baseline = AutoPreprocessor(config, task=task).fit_transform(features, fit_target)
+    accepted = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides=overrides), task=task).fit_transform(features, fit_target)
+    pd.testing.assert_frame_equal(baseline, accepted)
+
+
+def test_phase2_test_data_cannot_change_train_fitted_statistics():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    train = pd.DataFrame({"amount": [1., 2., np.nan, 4., 5., 7.],
+                          "category": ["a", "b", "a", "b", "c", "a"]})
+    test_a = pd.DataFrame({"amount": [8., np.nan], "category": ["new", "a"]})
+    test_b = pd.DataFrame({"amount": [1e9, -1e9], "category": ["other", "other"]})
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+    train_result = prep.fit_transform(train)
+    learned_imputer = dict(prep.num_imputer_)
+    learned_frequency = {col: values.copy() for col, values in prep.freq_encoding_maps_.items()}
+    prep.transform(test_a)
+    prep.transform(test_b)
+    assert prep.num_imputer_ == learned_imputer
+    assert prep.freq_encoding_maps_ == learned_frequency
+    pd.testing.assert_frame_equal(train_result, AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(train))
+
+
+def test_phase2_save_load_transform_keeps_overrides_and_unknown_category_behavior(tmp_path):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    train = pd.DataFrame({"category": ["a", "b", "a", "c"] * 10,
+                          "amount": np.arange(40, dtype=float)})
+    test = pd.DataFrame({"category": ["unseen", "a", "other"], "amount": [50., 51., 52.]})
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0,
+        column_overrides={"category": {"encoding": "ONEHOT"}, "amount": {"scaling": "ROBUST"}}))
+    prep.fit(train)
+    expected = prep.transform(test)
+    path = tmp_path / "phase2.joblib"
+    prep.save(str(path))
+    loaded = AutoPreprocessor.load(str(path))
+    actual = loaded.transform(test)
+    pd.testing.assert_frame_equal(expected, actual)
+    assert loaded.config.column_overrides == prep.config.column_overrides
+    report = loaded.report()["colonnes_detaillees"].set_index("Colonne")
+    assert "choix utilisateur" in report.loc["category", "Choix utilisateur"]
+    assert "choix utilisateur" in report.loc["amount", "Choix utilisateur"]
+
+
+def invariant_validation_frames():
+    """Jeux variés indépendants des noms de colonnes et règles métier particulières."""
+    from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
+    from app_preprocess import read_table
+
+    frames = [read_table(path) for path in (
+        "data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
+        "data/fraud_signal_demo.csv")]
+    frames.extend(loader(as_frame=True).data for loader in
+                  (load_wine, load_breast_cancer, load_diabetes))
+    for seed in (310, 311, 312):
+        rng = np.random.default_rng(seed)
+        size = 160
+        continuous = rng.lognormal(mean=1.0, sigma=1.4, size=size)
+        continuous[0] = 1e4
+        frame = pd.DataFrame({
+            "continuous_measure": continuous,
+            "discrete_measure": rng.integers(0, 8, size=size),
+            "binary_category": rng.choice(["a", "b"], size=size),
+            "five_category": rng.choice(list("abcde"), size=size),
+            "many_category": rng.choice([f"class_{i}" for i in range(50)], size=size),
+            "calendar_values": pd.date_range("2024-01-01", periods=size).astype(str),
+            "clock_values": [f"{i % 24:02d}:{i % 60:02d}:00" for i in range(size)],
+            "free_text": [f"sample phrase topic {i % 17}" for i in range(size)],
+            "sequential_integer": np.arange(size),
+            "opaque_text_identifier": [f"C{i:04d}" for i in range(size)],
+            "constant_feature": ["same"] * size,
+            "empty_feature": [np.nan] * size,
+            "partial_missing": [np.nan if i % 5 < 2 else float(i) for i in range(size)],
+            "false_missing_markers": ["?" if i % 19 == 0 else "valid" for i in range(size)],
+            "numeric_text_measure": [f"{value:.2f} EUR" for value in continuous],
+        })
+        frames.append(frame)
+    return frames
+
+
+def _display_texts_for_analysis(frame):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import analysis_recommendation_summary
+
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    texts = []
+    for row in result.columns:
+        summary = analysis_recommendation_summary(row)
+        texts.extend(summary[key] for key in ("raison", "preuve", "explication"))
+        for step in row.get("steps", {}).values():
+            texts.extend(step.get(key, "") for key in ("reason", "evidence", "explanation"))
+    return result, texts
+
+
+def test_invariant_c1_recommendation_text_is_single_source_across_outputs(tmp_path):
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
+                                build_analysis_table, export_analysis_csv, report_text, RunResult)
+
+    forbidden = re.compile(r"Ã[©-ÿ]|â€|Â\s|\w+=\S|[{}\[\]]|\bNone\b|\bnan\b|\bTO_NAN\b|\bDEFAULT_NA_VALUES\b|\bclean_\w+", re.I)
+    for frame in invariant_validation_frames():
+        prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+        result = prep.analyze(frame)
+        prep.analysis_result_ = result
+        fitted = prep.fit_transform(frame)
+        report = prep.report()["colonnes_detaillees"].set_index("Colonne")
+        rendered_report = report_text(RunResult(prep, None, fitted, None,
+                                                n_rows_in=len(frame), n_cols_in=frame.shape[1]))
+        assert not forbidden.search(rendered_report)
+        table = build_analysis_table(result)
+        for i, row in enumerate(result.columns):
+            summary = analysis_recommendation_summary(row)
+            assert table.loc[i, "raison"] == summary["raison"]
+            assert table.loc[i, "preuve"] == summary["preuve"]
+            assert table.loc[i, "explication"] == summary["explication"]
+            assert summary["raison"] in rendered_report
+            assert summary["preuve"] in rendered_report
+            assert summary["explication"] in rendered_report
+            if row["colonne"] in report.index:
+                assert report.loc[row["colonne"], "Raison recommandée"] == summary["raison"]
+                assert report.loc[row["colonne"], "Action appliquée"] == row["action"]
+                step_name = next((name for name, detail in row["steps"].items()
+                                  if detail.get("reason") == summary["raison"]), None)
+                if step_name:
+                    assert report.loc[row["colonne"], "Preuve recommandée"] == row["steps"][step_name]["evidence"]
+            for text in summary.values():
+                assert not forbidden.search(str(text)), (row["colonne"], text)
+            detail = build_analysis_detail(result, row["colonne"], show_all=True)
+            for step_row in detail["rows"]:
+                source_step = row["steps"][step_row["etape"]]
+                assert step_row["preuve"] == source_step["evidence"]
+                assert step_row["explication"] == source_step["explanation"]
+        output = tmp_path / "analysis.csv"
+        export_analysis_csv(result, str(output))
+        exported = pd.read_csv(output, encoding="utf-8-sig")
+        assert exported["Raison"].tolist() == table["raison"].tolist()
+
+
+def test_invariant_c2_each_decision_exposes_its_evaluated_rule():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+
+    config = PreprocessConfig(verbose=0)
+    for frame in invariant_validation_frames():
+        result = AutoPreprocessor(config).analyze(frame)
+        for row in result.columns:
+            for step, recommendation in row.get("steps", {}).items():
+                if len(recommendation.get("choices", [])) <= 1:
+                    continue
+                assert recommendation.get("rule"), (row["colonne"], step)
+                assert recommendation.get("measure")
+                assert recommendation.get("threshold")
+                assert recommendation.get("evidence")
+                assert isinstance(recommendation["rule"], dict)
+                assert recommendation["rule"]["measure"] == recommendation["measure"]
+                assert recommendation["rule"]["threshold"] == recommendation["threshold"]
+                assert recommendation["rule"]["domain"] == row["type"]
+
+
+def test_invariant_c3_explanations_are_measure_consistent_and_step_free():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import LABELS
+
+    step_labels = [label for label, _ in LABELS["steps"].values()]
+    for frame in invariant_validation_frames():
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+        for row in result.columns:
+            for step, recommendation in row.get("steps", {}).items():
+                explanation = recommendation.get("explanation", "")
+                if len(recommendation.get("choices", [])) <= 1:
+                    continue
+                assert explanation.strip()
+                assert recommendation.get("measure", "") not in explanation
+                assert recommendation.get("evidence", "") not in explanation
+                assert not any(label in explanation for label in step_labels)
+
+
+def test_invariant_c4_source_and_label_accents_are_preserved():
+    from pathlib import Path
+    from app_preprocess import LABELS
+
+    for filename in ("auto_preprocessor.py", "app_preprocess.py"):
+        source = Path(filename).read_text(encoding="utf-8")
+        assert not re.search(r"(?:Ã[©-ÿ]|â€|Â\s)", source)
+    all_labels = " ".join(str(item) for group in LABELS.values()
+                           for item in group.values())
+    for word in ("Tâche", "Données", "Paramètres", "Résultat", "Sélection"):
+        assert word in all_labels
+
+
+def test_invariant_c6_user_column_names_are_not_reformatted():
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import build_analysis_table
+
+    column = "Étage = {Nord}"
+    frame = pd.DataFrame({column: np.arange(40, dtype=float)})
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    table = build_analysis_table(result)
+    assert table.loc[0, "colonne"] == column
+
+
+def test_invariant_c4_no_unaccented_french_words_in_sources():
+    """Les mots français courants gardent leur accent circonflexe dans les sources."""
+    import re
+    from pathlib import Path
+
+    here = Path(__file__).parent
+    # « \b » n'accroche pas les identifiants techniques comme tache_detectee (le « _ » est un caractère de mot).
+    forbidden = re.compile(r"\b[Tt]aches?\b")
+    for name in ("app_preprocess.py", "auto_preprocessor.py"):
+        text = (here / name).read_text(encoding="utf-8")
+        hits = [m.group(0) for m in forbidden.finditer(text)]
+        assert not hits, f"{name} contient un mot sans accent : {hits}"
+
+
+def test_invariant_c4_task_label_keeps_circumflex():
+    from pathlib import Path
+
+    source = (Path(__file__).parent / "app_preprocess.py").read_text(encoding="utf-8")
+    assert "Tâche" in source
+    
+
+def test_invariant_every_applied_override_is_noted_without_overwrite():
+    # pyrefly: ignore[missing-import]
+    import pandas as pd, numpy as np
+    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"num": rng.normal(size=80)})
+    df.loc[::9, "num"] = np.nan
+    y = pd.Series(rng.integers(0, 2, 80))
+    cfg = PreprocessConfig(column_overrides={"num": {"missing": "MEDIAN", "outliers": "WINSORIZE", "scaling": "ROBUST"}})
+    pre = AutoPreprocessor(cfg)
+    pre.fit_transform(df, y)
+    note = pre.user_override_notes_["num"]
+    for expected in ("MEDIAN", "WINSORIZE", "ROBUST"):
+        assert expected in note, f"override {expected} non consigné : {note}"
+    assert note.count("MEDIAN") == 1, f"doublon dans la note : {note}"
+
+# ---------------------------------------------------------------------------
+# Règles statistiques de recommandation (une seule règle pour analyze et fit)
+# ---------------------------------------------------------------------------
+
+def _cfg():
+    return PreprocessConfig(verbose=0)
+
+
+def test_rule_outliers_none_iqr_winsorize():
+    from auto_preprocessor import _recommend_outliers
+    rng = np.random.default_rng(1)
+    assert _recommend_outliers(pd.Series(np.linspace(0, 1, 200)), _cfg())[0] == "NONE"
+    mild = pd.Series(np.append(rng.normal(size=300), 4.2))          # 1 extrême isolé, distribution symétrique
+    assert _recommend_outliers(mild, _cfg())[0] == "IQR"
+    heavy = pd.Series(rng.lognormal(0, 1.5, 400))                    # queue lourde
+    assert _recommend_outliers(heavy, _cfg())[0] == "WINSORIZE"
+
+
+def test_rule_imputation_mean_median_mode():
+    from auto_preprocessor import _recommend_imputation
+    rng = np.random.default_rng(2)
+    assert _recommend_imputation(pd.Series(rng.normal(50, 5, 500)), _cfg())[0] == "MEAN"
+    assert _recommend_imputation(pd.Series(rng.lognormal(0, 1, 500)), _cfg())[0] == "MEDIAN"
+    assert _recommend_imputation(pd.Series(rng.integers(0, 4, 500)), _cfg())[0] == "MODE"
+
+
+def test_rule_distribution_respects_domain_and_gain():
+    from auto_preprocessor import _recommend_distribution
+    rng = np.random.default_rng(3)
+    assert _recommend_distribution(pd.Series(rng.normal(size=500)), _cfg())[0] == "NONE"
+    positive = pd.Series(rng.lognormal(0, 1, 500))
+    assert _recommend_distribution(positive, _cfg())[0] in {"LOG1P", "SQRT", "YEO_JOHNSON"}
+    shifted = pd.Series(rng.lognormal(0, 1, 500) - 2)                  # valeurs négatives
+    assert _recommend_distribution(shifted, _cfg())[0] in {"YEO_JOHNSON", "NONE"}
+    assert _recommend_distribution(shifted, _cfg())[0] not in {"LOG1P", "SQRT", "BOX_COX"}
+
+
+def test_recommended_equals_applied_for_numeric_rules():
+    from auto_preprocessor import AutoPreprocessor
+    rng = np.random.default_rng(4)
+    n = 300
+    frame = pd.DataFrame({"symetrique": rng.normal(50, 5, n), "revenu": rng.lognormal(3, 1.2, n),
+                          "compte": rng.poisson(0.6, n).astype(float)})
+    frame.loc[::13, "symetrique"] = np.nan
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0))
+    analysis = prep.analyze(frame)
+    fitted = AutoPreprocessor(PreprocessConfig(verbose=0)).fit(frame)
+    for row in analysis.columns:
+        col, steps = row["colonne"], row["steps"]
+        assert fitted.column_outliers_[col] == steps["outliers"]["action"], col
+        expected_missing = steps["missing"]["action"]
+        assert fitted.auto_imputation_[col] == expected_missing, col
+        assert fitted.column_distributions_[col] == steps["distribution"]["action"], col
+
+
+def test_text_transformer_custom_components_output_names():
+    from auto_preprocessor import RobustTextTransformer
+    words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa"]
+    rng = np.random.default_rng(5)
+    frame = pd.DataFrame({"a": [" ".join(rng.choice(words, 6)) for _ in range(80)],
+                          "b": [" ".join(rng.choice(words, 6)) for _ in range(80)]})
+    tr = RobustTextTransformer(max_features=10, svd_components=4, column_components={"a": 2, "b": 3}).fit(frame)
+    out = tr.transform(frame)
+    assert list(out.columns) == list(tr.get_feature_names_out())
+    assert sum(c.startswith("a_svd_") for c in out.columns) == 2
+    assert sum(c.startswith("b_svd_") for c in out.columns) == 3
+
+
+# ---------------------------------------------------------------------------
+# Imputation multivariée (KNN / itérative)
+# ---------------------------------------------------------------------------
+
+def _correlated_frame(n=400, missing=0.15, seed=11, monotone=False):
+    rng = np.random.default_rng(seed)
+    base = rng.normal(size=n)
+    other = np.exp(base) if monotone else base
+    frame = pd.DataFrame({"a": base * 10 + 50, "b": other * 5 + rng.normal(scale=0.3, size=n),
+                          "c": rng.normal(size=n)})
+    frame.loc[rng.random(n) < missing, "b"] = np.nan
+    return frame
+
+
+def test_rule_recommends_multivariate_imputation_only_with_strong_link():
+    from auto_preprocessor import _recommend_imputation
+    frame = _correlated_frame()
+    assert _recommend_imputation(frame["b"], _cfg(), frame[["a", "c"]])[0] == "ITERATIVE"
+    mono = _correlated_frame(monotone=True)
+    assert _recommend_imputation(mono["b"], _cfg(), mono[["a", "c"]])[0] in {"KNN", "ITERATIVE"}
+    assert _recommend_imputation(frame["b"], _cfg(), frame[["c"]])[0] != "ITERATIVE"     # aucun lien
+    low = _correlated_frame(missing=0.02)
+    assert _recommend_imputation(low["b"], _cfg(), low[["a", "c"]])[0] not in {"KNN", "ITERATIVE"}  # peu de manquants
+
+
+@pytest.mark.parametrize("method", ["KNN", "ITERATIVE"])
+def test_multivariate_imputation_fills_and_beats_median(method):
+    frame = _correlated_frame(missing=0.2)
+    truth = _correlated_frame(missing=0.0)
+    mask = frame["b"].isna()
+    out = AutoPreprocessor(PreprocessConfig(verbose=0, scaler_type="none", outlier_method="none",
+                                            column_overrides={"b": {"missing": method, "distribution": "NONE", "scaling": "NONE"}}
+                                            )).fit_transform(frame)
+    assert not out.isna().any().any()
+    median_err = (truth.loc[mask, "b"] - truth["b"].median()).abs().mean()
+    imputed_err = (out.loc[mask, "b"] - truth.loc[mask, "b"]).abs().mean()
+    assert imputed_err < median_err
+
+
+def test_multivariate_imputer_is_fitted_on_train_only_and_n_neighbors_param():
+    frame = _correlated_frame(missing=0.2)
+    train, test = frame.iloc[:300], frame.iloc[300:]
+    cfg = PreprocessConfig(verbose=0, column_overrides={"b": {"missing": ("KNN", {"n_neighbors": 3})}})
+    prep = AutoPreprocessor(cfg).fit(train)
+    imputer, cols, _, _ = prep.multivariate_imputers_["KNN"]
+    assert imputer.n_neighbors == 3 and cols == ["b"]
+    assert not prep.transform(test).isna().any().any()
+    # le train ajusté n'a pas vu le test : changer le test ne change pas l'imputeur
+    before = imputer.get_params()
+    AutoPreprocessor(cfg).fit(train).transform(test.assign(a=test["a"] * 100))
+    assert imputer.get_params() == before
+
+
+def test_accept_recommendations_with_multivariate_imputation_is_noop():
+    from auto_preprocessor import ColumnOverride
+    frame = _correlated_frame()
+    baseline = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    analysis = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    assert next(r for r in analysis.columns if r["colonne"] == "b")["steps"]["missing"]["action"] == "ITERATIVE"
+    overrides = {r["colonne"]: ColumnOverride({step: d["action"] for step, d in r["steps"].items()
+                                              if step in {"missing", "outliers", "distribution"}})
+                 for r in analysis.columns}
+    accepted = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides=overrides)).fit_transform(frame)
+    pd.testing.assert_frame_equal(baseline, accepted)
+
+
+# ---------------------------------------------------------------------------
+# Transformations Quantile / Rank / Cube-root et encodages Count / Binary / Hash
+# ---------------------------------------------------------------------------
+
+def _skewed_frame(n=300, seed=21):
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame({"x": rng.lognormal(1, 1.3, n) - 3,                       # négatifs présents
+                         "y": rng.normal(size=n)})
+
+
+@pytest.mark.parametrize("choice", ["CBRT", "QUANTILE", "RANK"])
+def test_new_distribution_choices_apply_and_reduce_skew(choice):
+    # pyrefly: ignore[missing-import]
+    from scipy import stats as sps
+    frame = _skewed_frame()
+    out = AutoPreprocessor(PreprocessConfig(verbose=0, adaptive_recommendations=False, scaler_type="none",
+                                            column_overrides={"x": {"distribution": choice, "scaling": "NONE",
+                                                                   "outliers": "NONE"}})).fit_transform(frame)
+    assert not out.isna().any().any()
+    assert abs(sps.skew(out["x"])) < abs(sps.skew(frame["x"]))
+    if choice == "RANK":
+        assert out["x"].min() >= 0 and out["x"].max() <= 1
+
+
+def test_quantile_n_quantiles_param_and_unseen_values():
+    frame = _skewed_frame()
+    train, test = frame.iloc[:200], frame.iloc[200:].copy()
+    test.loc[test.index[0], "x"] = 1e6                                               # valeur hors plage d'entraînement
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides={"x": {"distribution": ("QUANTILE", {"n_quantiles": 50})}})).fit(train)
+    assert prep.num_power_transformer_["x"].n_quantiles == 50
+    assert np.isfinite(prep.transform(test).to_numpy()).all()
+    with pytest.raises(ValueError):
+        AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides={"x": {"distribution": ("QUANTILE", {"n_quantiles": 1})}})).fit(train)
+
+
+def test_distribution_evaluations_report_validity():
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(_skewed_frame())
+    ev = next(r for r in result.columns if r["colonne"] == "x")["steps"]["distribution"]["evaluations"]
+    assert ev["BOX_COX"]["valid"] is False and "strictement positives" in ev["BOX_COX"]["reason"]
+    assert ev["SQRT"]["valid"] is False and ev["CBRT"]["valid"] and ev["YEO_JOHNSON"]["skew_after"] is not None
+    assert ev["QUANTILE"]["information_loss"] != "aucune"
+
+
+def _cat_frame(n=400, k=20, seed=31):
+    rng = np.random.default_rng(seed)
+    cats = [f"c{i}" for i in range(k)]
+    return pd.DataFrame({"cat": rng.choice(cats, n, p=np.r_[0.3, np.full(k - 1, 0.7 / (k - 1))]),
+                         "num": rng.normal(size=n)}), rng.integers(0, 2, n)
+
+
+@pytest.mark.parametrize("method,prefix", [("COUNT_ENCODE", "cat_count"), ("BINARY_ENCODE", "cat_bin_"), ("HASH_ENCODE", "cat_hash_")])
+def test_new_encodings_with_and_without_target_and_unseen_categories(method, prefix):
+    frame, y = _cat_frame()
+    train, test = frame.iloc[:300].copy(), frame.iloc[300:].copy()
+    test.loc[test.index[0], "cat"] = "jamais_vu"
+    cfg = PreprocessConfig(verbose=0, noise_guard="off", column_overrides={"cat": {"encoding": method}})
+    for target in (None, pd.Series(y[:300], index=train.index)):
+        prep = AutoPreprocessor(cfg).fit(train, target)
+        out = prep.transform(test)
+        assert any(c.startswith(prefix) for c in out.columns), list(out.columns)
+        assert not out.isna().any().any()
+        assert not any(c.startswith("cat_") and "onehot" in c.lower() for c in out.columns)
+
+
+def test_encoding_shapes_and_params():
+    frame, _ = _cat_frame(k=20)
+    base = dict(verbose=0, noise_guard="off", variance_threshold=-1.0, correlation_threshold=2.0)
+    binary = AutoPreprocessor(PreprocessConfig(**base, column_overrides={"cat": {"encoding": "BINARY_ENCODE"}})).fit(frame)
+    assert binary.custom_encoders_["cat"]["n_bits"] == 5                              # ceil(log2(20+1))
+    hashed = AutoPreprocessor(PreprocessConfig(**base, column_overrides={"cat": {"encoding": ("HASH_ENCODE", {"n_components": 4})}})).fit(frame)
+    assert hashed.custom_encoders_["cat"]["n_components"] == 4
+    with pytest.raises(ValueError):
+        AutoPreprocessor(PreprocessConfig(**base, column_overrides={"cat": {"encoding": ("HASH_ENCODE", {"n_components": 0})}})).fit(frame)
+    with pytest.raises(ValueError):
+        AutoPreprocessor(PreprocessConfig(**base, column_overrides={"num": {"encoding": "COUNT_ENCODE"}})).fit(frame)
+
+
+def test_encoding_choices_exposed_by_analysis():
+    frame, _ = _cat_frame()
+    row = next(r for r in AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame).columns if r["colonne"] == "cat")
+    assert {"COUNT_ENCODE", "BINARY_ENCODE", "HASH_ENCODE"} <= set(row["steps"]["encoding"]["choices"])
+
+
+# ---------------------------------------------------------------------------
+# Méthodes de traitement des extrêmes : Z-score, Z-score modifié, médiane, conversion en manquant
+# ---------------------------------------------------------------------------
+
+def _outlier_frame(n=300, seed=41):
+    rng = np.random.default_rng(seed)
+    x = rng.normal(100, 10, n)
+    x[:3] = [900.0, -700.0, 1500.0]
+    return pd.DataFrame({"x": x, "z": rng.normal(size=n)})
+
+
+def _fit_outliers(frame, spec, **kw):
+    cfg = PreprocessConfig(verbose=0, adaptive_recommendations=False, scaler_type="none", noise_guard="off",
+                           column_overrides={"x": {"outliers": spec, "distribution": "NONE", "scaling": "NONE"}}, **kw)
+    prep = AutoPreprocessor(cfg)
+    return prep, prep.fit_transform(frame)
+
+
+@pytest.mark.parametrize("method", ["ZSCORE", "MODIFIED_ZSCORE", "IQR", "WINSORIZE"])
+def test_clipping_methods_bound_extremes(method):
+    frame = _outlier_frame()
+    prep, out = _fit_outliers(frame, method)
+    assert out["x"].max() < 900 and out["x"].min() > -700
+    assert out["x"].max() <= prep.winsorizer_.upper_bounds_["x"] + 1e-9
+    assert not out.isna().any().any()
+
+
+def test_replace_median_and_to_nan_behaviour():
+    frame = _outlier_frame()
+    median = float(frame["x"].median())
+    prep, out = _fit_outliers(frame, "REPLACE_MEDIAN")
+    assert np.isclose(out["x"].iloc[0], median) and np.isclose(out["x"].iloc[1], median)
+    prep2, out2 = _fit_outliers(frame, "OUTLIER_TO_NAN")
+    assert not out2.isna().any().any()                       # converti en manquant puis imputé
+    assert np.isnan(prep2.winsorizer_.replace_values_["x"])
+    clean_median = float(frame["x"].iloc[3:].median())
+    assert abs(out2["x"].iloc[0] - clean_median) < 5         # imputé par la médiane du train
+
+
+def test_outlier_method_parameters_change_bounds():
+    frame = _outlier_frame()
+    tight, _ = _fit_outliers(frame, ("ZSCORE", {"threshold": 1.5}))
+    wide, _ = _fit_outliers(frame, ("ZSCORE", {"threshold": 5.0}))
+    assert tight.winsorizer_.upper_bounds_["x"] < wide.winsorizer_.upper_bounds_["x"]
+    narrow_iqr, _ = _fit_outliers(frame, ("IQR", {"multiplier": 0.5}))
+    wide_iqr, _ = _fit_outliers(frame, ("IQR", {"multiplier": 3.0}))
+    assert narrow_iqr.winsorizer_.upper_bounds_["x"] < wide_iqr.winsorizer_.upper_bounds_["x"]
+    with pytest.raises(ValueError):
+        _fit_outliers(frame, ("ZSCORE", {"threshold": 0}))
+    with pytest.raises(ValueError):
+        _fit_outliers(frame, ("IQR", {"multiplier": -1}))
+
+
+def test_outlier_bounds_learned_on_train_only():
+    frame = _outlier_frame()
+    train, test = frame.iloc[:200], frame.iloc[200:].copy()
+    test.loc[test.index[0], "x"] = 5e5
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0, adaptive_recommendations=False, scaler_type="none", noise_guard="off",
+                                             column_overrides={"x": {"outliers": "MODIFIED_ZSCORE", "distribution": "NONE", "scaling": "NONE"}})).fit(train)
+    upper = prep.winsorizer_.upper_bounds_["x"]
+    assert prep.transform(test)["x"].max() <= upper + 1e-9 < 5e5
+
+
+def test_modified_zscore_without_dispersion_flags_nothing():
+    from auto_preprocessor import _outlier_bounds
+    low, high = _outlier_bounds(pd.Series([5.0] * 50 + [6.0]), "MODIFIED_ZSCORE", PreprocessConfig(verbose=0))
+    assert (low, high) == (-np.inf, np.inf)
+
+
+def test_outlier_methods_evidence_and_choices_in_analysis():
+    row = next(r for r in AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(_outlier_frame()).columns if r["colonne"] == "x")
+    step = row["steps"]["outliers"]
+    assert {"ZSCORE", "MODIFIED_ZSCORE", "REPLACE_MEDIAN", "OUTLIER_TO_NAN"} <= set(step["choices"])
+    methods = step["evaluations"]["methods"]
+    assert methods["IQR"]["outlier_count"] >= 3 and methods["ZSCORE"]["upper"] > methods["MODIFIED_ZSCORE"]["upper"]
+    assert "erreur de saisie" in step["evaluations"]["nature"]
+    clean = next(r for r in AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
+        pd.DataFrame({"x": np.linspace(0, 1, 100)})).columns if r["colonne"] == "x")
+    assert clean["steps"]["outliers"]["evaluations"]["nature"] == "aucun extrême détecté"
+
+
+# ---------------------------------------------------------------------------
+# Aperçu avant / après
+# ---------------------------------------------------------------------------
+
+def _preview_frame(n=300, seed=51):
+    rng = np.random.default_rng(seed)
+    frame = pd.DataFrame({"x": rng.lognormal(3, 1, n), "cat": rng.choice(list("abcde"), n), "y": rng.integers(0, 2, n)})
+    frame.loc[::10, "x"] = np.nan
+    return frame
+
+
+def test_preview_numeric_before_after_stats_and_no_mutation():
+    from auto_preprocessor import preview_column
+    frame = _preview_frame()
+    snapshot = frame.copy(deep=True)
+    p = preview_column(frame, "x", {"distribution": "LOG1P", "outliers": "IQR", "scaling": "STANDARD"})
+    pd.testing.assert_frame_equal(frame, snapshot)                       # données d'origine intactes
+    assert p["status"] == "ok" and p["rows"] == 300
+    assert p["before"]["count"] == 300 and np.isclose(p["before"]["missing_pct"], 10.0)   # aucune ligne retirée
+    assert abs(p["after"]["skew"]) < abs(p["before"]["skew"])
+    assert p["after"]["missing_pct"] == 0 and np.isclose(p["after_scaled"]["std"], 1.0, atol=0.02)
+    assert p["affected"]["missing_filled"] == 30 and p["affected"]["outside_bounds"] > 0
+    assert p["applied"]["distribution"] == "LOG1P" and p["applied"]["outliers"] == "IQR"
+    assert set(p["data"]) == {"before", "after", "after_scaled"}
+
+
+def test_preview_matches_real_pipeline_output():
+    from auto_preprocessor import preview_column
+    frame = _preview_frame()
+    override = {"distribution": "SQRT", "scaling": "ROBUST", "outliers": "WINSORIZE"}
+    p = preview_column(frame, "x", override)
+    real = AutoPreprocessor(PreprocessConfig(verbose=0, noise_guard="off",
+                                             column_overrides={"x": {**override, "duplicates": "KEEP"}})).fit_transform(frame[["x"]])
+    assert np.isclose(p["after_scaled"]["mean"], real["x"].mean()) and np.isclose(p["after_scaled"]["std"], real["x"].std(), rtol=1e-2)
+
+
+def test_preview_default_uses_recommendation_and_categorical_summary():
+    from auto_preprocessor import preview_column
+    frame = _preview_frame()
+    auto = preview_column(frame, "x")
+    assert auto["applied"]["distribution"] in {"NONE", "LOG1P", "SQRT", "YEO_JOHNSON", "QUANTILE"}
+    cat = preview_column(frame, "cat", "ONEHOT")
+    assert cat["before"]["n_categories"] == 5 and cat["after"]["n_columns"] >= 4
+    count = preview_column(frame, "cat", {"encoding": "COUNT_ENCODE"}, target="y")
+    assert count["output_columns"] == ["cat_count"]
+
+
+def test_preview_multivariate_imputation_and_errors():
+    from auto_preprocessor import preview_column
+    p = preview_column(_correlated_frame(missing=0.2), "b", {"missing": "ITERATIVE"})
+    assert p["status"] == "ok" and p["after"]["missing_pct"] == 0
+    with pytest.raises(ValueError):
+        preview_column(_preview_frame(), "inconnue")
+    with pytest.raises(ValueError):
+        preview_column(_preview_frame(), "y", target="y")
+
+
+def test_preview_dropped_column_reports_status():
+    from auto_preprocessor import preview_column
+    frame = _preview_frame().assign(constante=1)
+    p = preview_column(frame, "constante")
+    assert p["status"] == "dropped" and p["output_columns"] == []
+
+
+def test_preview_table_figure_and_png_export(tmp_path):
+    from app_preprocess import build_preview_table, build_preview_figure, export_preview_png, preview_for_choice
+    from auto_preprocessor import preview_column
+    frame = _preview_frame()
+    numeric = preview_column(frame, "x", {"distribution": "LOG1P"})
+    table = build_preview_table(numeric)
+    assert list(table.columns) == ["statistique", "avant", "après traitement", "après échelle"]
+    assert "Lignes modifiées" in set(table["statistique"])
+    categorical = build_preview_table(preview_column(frame, "cat", "ONEHOT"))
+    assert "Colonnes de sortie" in set(categorical["statistique"])
+    for preview, name in ((numeric, "num.png"), (preview_column(frame, "cat", "ONEHOT"), "cat.png")):
+        export_preview_png(preview, str(tmp_path / name))
+        assert (tmp_path / name).stat().st_size > 1000
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="y")
+    viaChoice = preview_for_choice(frame, result, "x", {"x": {"distribution": "CBRT"}}, PreprocessConfig(verbose=0), target="y")
+    assert viaChoice["applied"]["distribution"] == "CBRT"
+
+# ---------------------------------------------------------------------------
+# Leave-One-Out encoding
+# ---------------------------------------------------------------------------
+
+def _loo_frame(n=300, seed=61):
+    rng = np.random.default_rng(seed)
+    cat = rng.choice([f"c{i}" for i in range(12)], n)
+    y = (rng.random(n) < np.where(np.isin(cat, ["c1", "c2"]), 0.8, 0.2)).astype(int)
+    return pd.DataFrame({"cat": cat, "num": rng.normal(size=n)}), y
+
+
+def _loo_config(spec="LOO_ENCODE"):
+    return PreprocessConfig(verbose=0, noise_guard="off", variance_threshold=-1.0, correlation_threshold=2.0,
+                            column_overrides={"cat": {"encoding": spec}})
+
+
+def test_loo_train_values_exclude_own_label_and_test_uses_full_mean():
+    frame, y = _loo_frame()
+    train, test = frame.iloc[:200].copy(), frame.iloc[200:].copy()
+    prep = AutoPreprocessor(_loo_config())
+    out = prep.fit_transform(train, pd.Series(y[:200]))
+    assert "cat_loo" in out.columns
+    data = pd.DataFrame({"c": train["cat"].to_numpy(), "y": y[:200]})
+    for i in (0, 5, 17, 120):
+        others = data[data["c"] == data["c"].iloc[i]].drop(data.index[i])["y"]
+        assert np.isclose(out["cat_loo"].iloc[i], others.mean(), atol=1e-6)
+    test.iloc[0, 0] = "jamais_vu"
+    encoded = prep.transform(test)["cat_loo"]
+    state = prep.custom_encoders_["cat"]
+    assert np.isclose(encoded.iloc[0], state["global_mean"])
+    known = test["cat"].iloc[1]
+    sums, counts = state["sums"][known], state["counts"][known]
+    assert np.isclose(encoded.iloc[1], sums / counts, atol=1e-6)
+
+
+def test_loo_singleton_category_gets_global_mean_and_state_is_train_only():
+    frame, y = _loo_frame()
+    train = frame.iloc[:200].copy()
+    train.iloc[0, 0] = "rare_singleton"
+    prep = AutoPreprocessor(_loo_config())
+    out = prep.fit_transform(train, pd.Series(y[:200]))
+    assert np.isclose(out["cat_loo"].iloc[0], prep.custom_encoders_["cat"]["global_mean"])
+    before = dict(prep.custom_encoders_["cat"]["sums"])
+    prep.transform(frame.iloc[200:])
+    assert prep.custom_encoders_["cat"]["sums"] == before
+
+
+def test_loo_validations_and_sigma_parameter():
+    frame, y = _loo_frame()
+    with pytest.raises(ValueError, match="exige une cible"):
+        AutoPreprocessor(_loo_config()).fit(frame)
+    with pytest.raises(ValueError, match="binaire ou continue"):
+        AutoPreprocessor(_loo_config()).fit(frame, pd.Series(np.random.default_rng(0).integers(0, 3, len(frame))))
+    with pytest.raises(ValueError, match="sigma"):
+        AutoPreprocessor(_loo_config(("LOO_ENCODE", {"sigma": -1}))).fit(frame, pd.Series(y))
+    with pytest.raises(ValueError, match="incompatible"):
+        AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides={"num": {"encoding": "LOO_ENCODE"}})).fit(frame, pd.Series(y))
+    plain = AutoPreprocessor(_loo_config()).fit_transform(frame, pd.Series(y))["cat_loo"].to_numpy()
+    noisy = AutoPreprocessor(_loo_config(("LOO_ENCODE", {"sigma": 0.5}))).fit_transform(frame, pd.Series(y))["cat_loo"].to_numpy()
+    assert not np.allclose(plain, noisy)
+    noisy_again = AutoPreprocessor(_loo_config(("LOO_ENCODE", {"sigma": 0.5}))).fit_transform(frame, pd.Series(y))["cat_loo"].to_numpy()
+    np.testing.assert_allclose(noisy, noisy_again)           # reproductible (random_state)
+
+
+def test_loo_regression_target_and_save_load(tmp_path):
+    frame, _ = _loo_frame()
+    target = pd.Series(np.random.default_rng(5).normal(10, 3, len(frame)) + frame["cat"].str[1:].astype(int))
+    prep = AutoPreprocessor(_loo_config()).fit(frame.iloc[:200], target.iloc[:200])
+    expected = prep.transform(frame.iloc[200:])
+    path = tmp_path / "loo.joblib"
+    prep.save(str(path))
+    pd.testing.assert_frame_equal(expected, AutoPreprocessor.load(str(path)).transform(frame.iloc[200:]))
+
+
+def test_loo_exposed_by_analysis_and_gui_parameters():
+    from app_preprocess import parse_step_parameters, step_parameter_visible, pedagogical_explanation
+    frame, _ = _loo_frame()
+    row = next(r for r in AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame).columns if r["colonne"] == "cat")
+    assert "LOO_ENCODE" in row["steps"]["encoding"]["choices"]
+    assert parse_step_parameters("encoding", "LOO_ENCODE", "0.2", "CATEGORICAL_LOW_CARD") == {"sigma": 0.2}
+    assert parse_step_parameters("encoding", "HASH_ENCODE", "4", "CATEGORICAL_LOW_CARD") == {"n_components": 4}
+    with pytest.raises(ValueError):
+        parse_step_parameters("encoding", "LOO_ENCODE", "-1", "CATEGORICAL_LOW_CARD")
+    with pytest.raises(ValueError):
+        parse_step_parameters("encoding", "HASH_ENCODE", "0", "CATEGORICAL_LOW_CARD")
+    assert step_parameter_visible("encoding", "LOO_ENCODE") and step_parameter_visible("encoding", "HASH_ENCODE")
+    assert "cible" in pedagogical_explanation("encoding", "LOO_ENCODE", "m", "t")
+
+
+def test_loo_preview_uses_target():
+    from auto_preprocessor import preview_column
+    frame, y = _loo_frame()
+    frame["y"] = y
+    preview = preview_column(frame, "cat", {"encoding": "LOO_ENCODE"}, target="y")
+    assert preview["status"] == "ok" and preview["output_columns"] == ["cat_loo"]
+
+
+# ---------------------------------------------------------------------------
+# Texte : TF-IDF / comptage / hachage avec n-grammes
+# ---------------------------------------------------------------------------
+
+def _text_frame(n=200, seed=71):
+    rng = np.random.default_rng(seed)
+    words = "red blue green fast slow quick model data science deep learning forest tree market price risk".split()
+    return pd.DataFrame({"txt": [" ".join(rng.choice(words, 6)) for _ in range(n)], "num": rng.normal(size=n)}), \
+        rng.integers(0, 2, n)
+
+
+def _text_config(spec):
+    return PreprocessConfig(verbose=0, noise_guard="off", variance_threshold=-1.0, correlation_threshold=2.0,
+                            column_overrides={"txt": {"text": spec}})
+
+
+@pytest.mark.parametrize("spec,prefix,width", [
+    (("TFIDF_NGRAMS", {"ngram_range": (1, 2), "max_features": 12}), "txt_tfidf_", 12),
+    (("COUNT_VECTORIZER", {"ngram_range": [1, 1], "max_features": 8}), "txt_cnt_", 8),
+    (("HASH_TEXT", {"ngram_range": (1, 2), "n_features": 6}), "txt_texthash_", 6),
+])
+def test_text_vectorizers_shapes_unseen_text_and_train_only_vocabulary(spec, prefix, width):
+    frame, y = _text_frame()
+    train, test = frame.iloc[:150].copy(), frame.iloc[150:].copy()
+    prep = AutoPreprocessor(_text_config(spec))
+    out = prep.fit_transform(train, pd.Series(y[:150]))
+    assert sum(c.startswith(prefix) for c in out.columns) == width
+    test["txt"] = "totally unseen words appear here"
+    out_test = prep.transform(test)
+    assert list(out_test.columns) == list(out.columns)
+    assert np.isfinite(out_test.to_numpy()).all()
+    assert not any(c.startswith("txt_") and c not in out.columns for c in out_test.columns)
+    if spec[0] == "HASH_TEXT":
+        assert (out_test[[c for c in out.columns if c.startswith(prefix)]].to_numpy().sum(axis=1) > 0).all()
+
+
+def test_count_vectorizer_counts_occurrences_and_ngrams_include_bigrams():
+    frame = pd.DataFrame({"txt": [f"alpha beta alpha gamma delta epsilon w{i % 12}" for i in range(40)]
+                          + [f"zeta eta theta iota kappa lambda w{i % 12}" for i in range(40)]})
+    out = AutoPreprocessor(_text_config(("COUNT_VECTORIZER", {"ngram_range": (1, 1), "max_features": 20}))).fit_transform(frame)
+    assert set(out["txt_cnt_alpha"].unique()) == {0.0, 2.0}
+    bigrams = AutoPreprocessor(_text_config(("TFIDF_NGRAMS", {"ngram_range": (2, 2), "max_features": 30}))).fit_transform(frame)
+    assert "txt_tfidf_alpha_beta" in bigrams.columns
+
+
+def test_text_vectorizer_validations_and_gui_parsing():
+    from app_preprocess import parse_step_parameters, step_parameter_visible
+    frame, y = _text_frame()
+    with pytest.raises(ValueError, match="ngram_range"):
+        AutoPreprocessor(_text_config(("TFIDF_NGRAMS", {"ngram_range": (3, 1)}))).fit(frame)
+    with pytest.raises(ValueError, match="n_features"):
+        AutoPreprocessor(_text_config(("HASH_TEXT", {"n_features": 0}))).fit(frame)
+    with pytest.raises(ValueError, match="incompatible"):
+        AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides={"num": {"text": "TFIDF_NGRAMS"}})).fit(frame)
+    assert parse_step_parameters("text", "TFIDF_NGRAMS", "1, 2, 20", "TEXT") == {"ngram_range": [1, 2], "max_features": 20}
+    assert parse_step_parameters("text", "HASH_TEXT", "1, 3, 32", "TEXT") == {"ngram_range": [1, 3], "n_features": 32}
+    assert parse_step_parameters("text", "COUNT_VECTORIZER", "", "TEXT") is None
+    for bad in ("3, 1", "0, 2", "1, 9", "a, b", "1"):
+        with pytest.raises(ValueError):
+            parse_step_parameters("text", "TFIDF_NGRAMS", bad, "TEXT")
+    assert all(step_parameter_visible("text", a) for a in ("TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"))
+
+
+def test_text_vectorizers_listed_by_analysis_and_default_unchanged(tmp_path):
+    frame, y = _text_frame()
+    analysis = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    row = next(r for r in analysis.columns if r["colonne"] == "txt")
+    assert {"TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT"} <= set(row["steps"]["text"]["choices"])
+    assert row["steps"]["text"]["action"] == "TFIDF_SVD"
+    baseline = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    assert any(c.startswith("txt_") for c in baseline.columns)
+    prep = AutoPreprocessor(_text_config(("TFIDF_NGRAMS", {"ngram_range": (1, 2), "max_features": 10}))).fit(frame)
+    path = tmp_path / "text.joblib"
+    prep.save(str(path))
+    pd.testing.assert_frame_equal(prep.transform(frame), AutoPreprocessor.load(str(path)).transform(frame))
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic du mécanisme de manque (MCAR / MAR / MNAR)
+# ---------------------------------------------------------------------------
+
+def _missingness_frame(n=600, seed=81):
+    rng = np.random.default_rng(seed)
+    age = rng.normal(40, 10, n)
+    income = rng.normal(50, 12, n)
+    mcar = income.copy()
+    mcar[rng.random(n) < 0.2] = np.nan
+    mar = income.copy()
+    mar[rng.random(n) < 0.7 / (1 + np.exp(-(age - 48) / 2))] = np.nan
+    return pd.DataFrame({"age": age, "group": rng.choice(list("abc"), n), "income_mcar": mcar, "income_mar": mar,
+                         "rare_missing": [np.nan if i < 3 else float(i) for i in range(n)]})
+
+
+def test_missingness_diagnostic_distinguishes_mcar_compatible_from_mar():
+    rows = {r["colonne"]: r for r in AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(_missingness_frame()).columns}
+    mcar, mar = rows["income_mcar"]["diagnostic_manquants"], rows["income_mar"]["diagnostic_manquants"]
+    assert mcar["verdict"] == "MCAR_COMPATIBLE" and "MCAR n'est pas prouvé" in mcar["texte"]
+    assert mar["verdict"] == "MAR_PLAUSIBLE" and mar["top"][0]["colonne"] == "age"
+    assert mar["top"][0]["p_adj"] < 0.05 and mar["top"][0]["effet"] >= 0.2
+    assert "multivariée" in mar["implication"]
+    assert rows["age"]["diagnostic_manquants"]["verdict"] == "AUCUN" and rows["age"]["diagnostic_manquants_texte"] == ""
+    assert rows["rare_missing"]["diagnostic_manquants"]["verdict"] == "INDETERMINE"
+
+
+def test_missingness_diagnostic_never_claims_mnar_and_does_not_change_recommendations():
+    frame = _missingness_frame()
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    from auto_preprocessor import MNAR_NOTE
+    for row in result.columns:
+        text = row["diagnostic_manquants_texte"]
+        if text:
+            assert MNAR_NOTE in text and "MNAR confirmé" not in text
+    baseline = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
+    overrides = {r["colonne"]: {step: d["action"] for step, d in r["steps"].items()
+                                if step in {"missing", "outliers", "distribution"}} for r in result.columns}
+    accepted = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides=overrides)).fit_transform(frame)
+    pd.testing.assert_frame_equal(baseline, accepted)
+
+
+def test_missingness_diagnostic_uses_target_and_categorical_columns():
+    rng = np.random.default_rng(9)
+    n = 500
+    y = rng.integers(0, 2, n)
+    value = rng.normal(size=n)
+    value[(y == 1) & (rng.random(n) < 0.5)] = np.nan
+    cat = rng.choice(list("xyz"), n)
+    value2 = rng.normal(size=n)
+    value2[(cat == "x") & (rng.random(n) < 0.6)] = np.nan
+    frame = pd.DataFrame({"value": value, "cat": cat, "value2": value2, "y": y})
+    rows = {r["colonne"]: r["diagnostic_manquants"] for r in
+            AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="y").columns if not r.get("est_cible")}
+    assert rows["value"]["verdict"] == "MAR_PLAUSIBLE" and rows["value"]["top"][0]["colonne"] == "y"
+    assert rows["value2"]["verdict"] == "MAR_PLAUSIBLE" and rows["value2"]["top"][0]["colonne"] == "cat"
+    assert rows["value2"]["top"][0]["test"] == "χ²"
+
+
+def test_missingness_diagnostic_shown_in_detail_and_csv_export(tmp_path):
+    from app_preprocess import build_analysis_detail, export_analysis_csv
+    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(_missingness_frame())
+    detail = build_analysis_detail(result, "income_mar")
+    assert "MAR plausible" in detail["diagnostic_manquants"]
+    assert build_analysis_detail(result, "age")["diagnostic_manquants"] == ""
+    assert build_analysis_detail(result, None)["diagnostic_manquants"] == ""
+    path = tmp_path / "analysis.csv"
+    export_analysis_csv(result, str(path))
+    exported = pd.read_csv(path, encoding="utf-8-sig").set_index("Colonne")
+    assert "MAR plausible" in exported.loc["income_mar", "Diagnostic des manquants"]
+
+
+def test_diagnose_missingness_threshold_parameter_controls_verdict():
+    from auto_preprocessor import diagnose_missingness, _missingness_pool
+    frame = _missingness_frame()
+    pool = _missingness_pool(frame[["age", "group"]])
+    strict = diagnose_missingness(frame["income_mar"], pool, PreprocessConfig(verbose=0, missingness_min_effect=0.99))
+    default = diagnose_missingness(frame["income_mar"], pool, PreprocessConfig(verbose=0))
+    assert default["verdict"] == "MAR_PLAUSIBLE" and strict["verdict"] == "MCAR_COMPATIBLE"

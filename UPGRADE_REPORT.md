@@ -1,5 +1,7 @@
 # Auto-Preprocessor intelligence upgrade
 
+The measurements and initial test counts below describe the original upgrade commit. The subsequent merge with `main` retained its adaptive preprocessing rules, configurable value bounds, row-level preview, and Leave-One-Out encoding alongside the upgrade's statistical profiles and optional model evaluation.
+
 ## Repository review
 
 | Files inspected | What they cover |
@@ -52,7 +54,7 @@ Final command `python -m pytest -q --basetemp=.pytest_cache/upgrade-final-valida
 
 - The output remains a dense numeric DataFrame. Sparse vectorizers are used internally. Large sparse-first workflows, streaming file ingestion, and process-isolated parsers remain outside this implementation.
 - Temporal interpolation, forward/backward filling, and automatic unit harmonization need explicit time order, entity boundaries, and domain policy. Use the provided per-feature imputers and clean units upstream where that context is available. The statistical profiles do not claim verified multimodality, seasonality, or language detection.
-- Categorical leave-one-out encoding and a general callable custom-transform registry are absent. Target encoding uses the existing cross-fitting path. Fixed-width hash, frequency, count, binary, or explicit manual mappings are available as compact alternatives. Cross-validation currently compares scaling configurations. XGBoost and LightGBM integrations were not exercised in this validation.
-- The UI has reset controls and statistical comparisons. It does not maintain a choice-history stack or show row-by-row previews for all operations. Model scores are exposed through Python. For supervised model selection, run exploratory analysis on training data only. The GUI can still profile the whole loaded file.
+- A general callable custom-transform registry is absent. Target encoding uses the existing cross-fitting path. The merged project also exposes Leave-One-Out encoding for binary and continuous targets. Fixed-width hash, frequency, count, binary, or explicit manual mappings are available as compact alternatives. Cross-validation currently compares scaling configurations. XGBoost and LightGBM integrations were not exercised in this validation.
+- The UI has reset controls, statistical comparisons, and a before/after preview for individual features. It does not maintain a choice-history stack. Model scores are exposed through Python. For supervised model selection, run exploratory analysis on training data only. The GUI can still profile the whole loaded file.
 - The four-dataset exercise measures Python DataFrame memory including indexes, rather than peak process memory. The added statistical work can increase analysis latency. Pairwise redundancy is capped at 500 input numeric columns during analysis, and missingness diagnostics still scale with the number of partially missing features and total features. Whole-dataset analysis is deterministic on its documented sample beyond 200,000 rows.
 - Suitable for local exploratory preprocessing and controlled pilots with supported tabular inputs. A production deployment that accepts untrusted uploads or very wide datasets would need process isolation, resource and throughput tests, explicit model-validation policy, and interactive GUI verification. The local OpenML-dependent benchmark and Windows executable build were outside this validation.

@@ -117,7 +117,7 @@ def test_semantic_profiles_missingness_and_target_association():
 def test_duplicate_indices_and_dropped_rows_keep_positional_targets():
     frame = pd.DataFrame({"age": [25., -1., 35., 35., 40., 50.],
                           "target": [10., 12., 23., 24., 31., 42.]}, index=[5, 5, 5, 5, 3, 3])
-    prep = AutoPreprocessor(PreprocessConfig(verbose=0, transform_target=False, column_overrides={
+    prep = AutoPreprocessor(PreprocessConfig(verbose=0, transform_target=False, value_bounds={"age": (0, 120)}, column_overrides={
         "age": {"clean_impossible": "DROP_ROWS"}}), task="regression")
     X, y = prep.fit_transform_xy(frame, "target")
     assert X.index.tolist() == [5, 5, 3, 3]
@@ -135,7 +135,7 @@ def test_supervised_run_can_choose_unsupervised_encoding(encoding, suffix):
     assert prep.transform(pd.DataFrame({"category": ["unseen"]}))[f"category_{suffix}"].iloc[0] == 0
 
 
-@pytest.mark.parametrize("encoding,prefix", [("HASH_ENCODE", "hash"), ("BINARY_ENCODE", "bit")])
+@pytest.mark.parametrize("encoding,prefix", [("HASH_ENCODE", "hash"), ("BINARY_ENCODE", "bin")])
 def test_compact_categorical_encoding_keeps_the_training_schema(encoding, prefix):
     frame = pd.DataFrame({"category": [f"group_{i % 13}" for i in range(80)]})
     prep = make_prep({"category": {"encoding": encoding}}, preserve_rows=True)

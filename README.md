@@ -40,6 +40,14 @@ py app_preprocess.py
 4. Onglet **Rapport** : colonnes supprimées, types détectés, avertissements (fuites, déséquilibre de classes), choix utilisateur.
 5. Onglet **Résultat** : exporter `train_transforme.csv`, `test_transforme.csv`, `detail_colonnes.csv`, `rapport_pretraitement.txt` et `preprocesseur.joblib`.
 
+### Chargement des modèles et limites mémoire
+
+Chargez uniquement des modèles joblib de confiance, créés par vous ou obtenus auprès d'une source fiable. L'ouverture d'un joblib peut exécuter du code arbitraire. L'interface demande une confirmation explicite et l'API Python `AutoPreprocessor.load()` est réservée aux fichiers de confiance. Les fichiers téléversés ou de provenance inconnue ne doivent jamais être transmis à ce chargeur.
+
+`PreprocessConfig(max_dense_bytes=160_000_000)` fixe le budget d'une allocation dense estimée. La limite de 20 000 000 cellules s'applique également, même avec un budget plus élevé. Le moteur estime la sortie agrégée en float64 avant de construire ses blocs et vérifie les grosses allocations intermédiaires, notamment la SVD et la matrice de corrélation. La largeur du schéma est limitée à 100 000 colonnes. Si une limite est atteinte, le message indique l'opération, et pour une allocation dense, les dimensions et les octets estimés.
+
+La sortie principale reste un DataFrame numérique dense. Utilisés séparément, `RobustTextTransformer(sparse_output=True)` et `NgramTextTransformer(sparse_output=True)` renvoient les colonnes vectorisées sous forme de colonnes pandas creuses. La réduction SVD reste dense. Le budget ne borne pas la mémoire totale du processus, le vocabulaire temporaire ni les données creuses.
+
 ### 2. Analyse & Recommandations (onglet « 2. Analyse »)
 
 Avant le prétraitement, l'application analyse chaque colonne et recommande, étape par étape, le nettoyage et la transformation adaptés, avec la mesure observée, le seuil de décision et une explication.

@@ -52,7 +52,8 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
 
 # Import de notre module AutoPreprocessor
-from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+from auto_preprocessor import (AutoPreprocessor, DEFAULT_MAX_DENSE_BYTES, PreprocessConfig,
+                               check_dense_allocation)
 
 # Import optionnel et protégé de matplotlib
 try:
@@ -104,7 +105,13 @@ class NaiveBaselinePreprocessor(BaseEstimator, TransformerMixin):
         self.is_fitted = True
         return self
 
+    def _check_output_size(self, X: pd.DataFrame) -> None:
+        width = len(self.num_cols) + (sum(map(len, self.ohe.categories_)) if self.cat_cols else 0)
+        check_dense_allocation(len(X), max(1, width), np.float64, DEFAULT_MAX_DENSE_BYTES,
+                               "Matrice de référence One-Hot")
+
     def transform(self, X: pd.DataFrame) -> np.ndarray:
+        self._check_output_size(X)
         X_df = pd.DataFrame(X).copy()
         parts = []
 
@@ -139,6 +146,7 @@ class SklearnStandardPreprocessor(NaiveBaselinePreprocessor):
         return self
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
+        self._check_output_size(X)
         X_df = pd.DataFrame(X).copy()
         parts = []
         if self.num_cols:

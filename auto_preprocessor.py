@@ -25,9 +25,17 @@ import pandas as pd
 # pyrefly: ignore[missing-import]
 from scipy import stats
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer, TfidfVectorizer
+from sklearn.feature_extraction import FeatureHasher
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+from sklearn.impute import IterativeImputer, KNNImputer
+from statistical_profile import (DISTRIBUTIONS, OUTLIER_ACTIONS, adjusted_p_values, apply_distribution,
+                                 apply_outlier_plan, association,
+                                 fit_distribution, missingness_evidence, numerical_cleaning_comparison,
+                                 numerical_comparison, outlier_plan, parse_dates, profile, semantic_type, text_evidence,
+                                 validate_distribution)
 from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
@@ -42,6 +50,8 @@ from sklearn.preprocessing import (
 
 # Configuration du logger
 logger = logging.getLogger("AutoPreprocessor")
+TREE_FAMILIES = {"decision_tree", "random_forest", "gradient_boosting", "xgboost", "lightgbm"}
+MAX_DENSE_CELLS = 20_000_000
 if not logger.handlers:
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
@@ -105,24 +115,26 @@ SUPPORTED_ACTIONS: Dict[str, Dict[str, List[str]]] = {
     "type": {"any": ["AUTO", "DROP", "FORCE_NUMERIC", "FORCE_CATEGORICAL", "FORCE_DATE", "FORCE_TEXT", "KEEP_RAW"]},
     "missing": {
         "any": ["AUTO"],
-        "numeric": ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR"],
+        "numeric": ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR", "KNN", "ITERATIVE"],
         "categorical_low": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
         "categorical_high": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
         "binary": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
         "ordinal": ["AUTO", "MODE", "MISSING_CATEGORY", "CONSTANT"],
         "datetime": ["AUTO"], "text": ["AUTO"]},
-    "outliers": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "WINSORIZE", "IQR"],
+    "outliers": {"any": ["AUTO"], "numeric": ["AUTO", *OUTLIER_ACTIONS],
                  "binary": ["AUTO"], "ordinal": ["AUTO"], "categorical_low": ["AUTO"],
                  "categorical_high": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
-    "distribution": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT"],
+    "distribution": {"any": ["AUTO"], "numeric": DISTRIBUTIONS,
                      "categorical": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
     "scaling": {"any": ["AUTO"], "numeric": ["AUTO", "NONE", "STANDARD", "ROBUST", "MINMAX", "MAXABS"],
                 "categorical": ["AUTO"], "datetime": ["AUTO"], "text": ["AUTO"]},
     "encoding": {"any": ["AUTO"], "binary": ["AUTO", "BINARY_MAP"], "ordinal": ["AUTO", "ORDINAL"],
-                 "categorical_low": ["AUTO", "ONEHOT", "ORDINAL", "FREQUENCY_ENCODE"],
-                 "categorical_high": ["AUTO", "ONEHOT", "ORDINAL", "TARGET_ENCODE", "FREQUENCY_ENCODE"]},
+                 "categorical_low": ["AUTO", "ONEHOT", "ORDINAL", "FREQUENCY_ENCODE", "COUNT_ENCODE",
+                                     "BINARY_ENCODE", "HASH_ENCODE", "MANUAL_MAP"],
+                 "categorical_high": ["AUTO", "ONEHOT", "ORDINAL", "TARGET_ENCODE", "FREQUENCY_ENCODE",
+                                      "COUNT_ENCODE", "BINARY_ENCODE", "HASH_ENCODE", "MANUAL_MAP"]},
     "dates": {"any": ["AUTO"], "datetime": ["AUTO", "DATE_FEATURES"]},
-    "text": {"any": ["AUTO"], "text": ["AUTO", "TFIDF_SVD"]},
+    "text": {"any": ["AUTO"], "text": ["AUTO", "TFIDF_SVD", "TFIDF", "TFIDF_NGRAM", "COUNT", "HASH"]},
     "target": {"any": ["AUTO"]},
     "selection": {"any": ["AUTO"]},
 }
@@ -131,6 +143,8 @@ SUPPORTED_ACTIONS: Dict[str, Dict[str, List[str]]] = {
 def _action_group(feature_type: Any) -> str:
     """Retourne la famille utilisée par SUPPORTED_ACTIONS."""
     kind = feature_type.value if isinstance(feature_type, FeatureType) else str(feature_type)
+    if kind == "NUMERIC_DISCRETE":
+        return "categorical_low"
     if kind.startswith("NUMERIC"):
         return "numeric"
     return {"BINARY": "binary", "ORDINAL": "ordinal", "CATEGORICAL_LOW_CARD": "categorical_low",
@@ -344,6 +358,9 @@ class PreprocessConfig:
     random_state: int = 42
     verbose: int = 1
     column_overrides: Dict[str, Any] = field(default_factory=dict)
+    model_family: Optional[str] = None
+    preserve_rows: bool = False
+    supervised_encoding: bool = True
 
 
 
@@ -403,15 +420,13 @@ class Winsorizer(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X_out = X.copy()
-        if self.method == "none":
-            return X_out
-
         for col in self.columns_:
             if col in X_out.columns:
                 low = self.lower_bounds_.get(col, -np.inf)
                 high = self.upper_bounds_.get(col, np.inf)
                 if low <= high:
-                    X_out[col] = X_out[col].clip(lower=low, upper=high)
+                    action, median = getattr(self, "replacements_", {}).get(col, ("CLIP", None))
+                    X_out[col] = apply_outlier_plan(X_out[col], action, (low, high), median)
         return X_out
 
     def get_feature_names_out(self, input_features=None) -> np.ndarray:
@@ -461,24 +476,28 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
         self.columns_ = list(X.columns)
         self.reference_dates_ = {}
         self.has_hour_ = {}
+        self.has_minute_ = {}
         self.output_feature_names_ = []
 
         for col in self.columns_:
-            dt_series = pd.to_datetime(X[col], errors="coerce", format="mixed")
+            dt_series = parse_dates(X[col])
             valid_dt = dt_series.dropna()
             if len(valid_dt) > 0:
                 self.reference_dates_[col] = valid_dt.max()
                 # Vérifier si l'heure est informative (>0)
-                self.has_hour_[col] = bool((valid_dt.dt.hour > 0).any())
+                self.has_minute_[col] = valid_dt.dt.minute.nunique() > 1
+                self.has_hour_[col] = valid_dt.dt.hour.nunique() > 1
             else:
-                self.reference_dates_[col] = pd.Timestamp.now()
+                self.reference_dates_[col] = pd.Timestamp("1970-01-01")
                 self.has_hour_[col] = False
+                self.has_minute_[col] = False
 
             base_names = [
                 f"{col}_year",
                 f"{col}_month",
                 f"{col}_day",
                 f"{col}_dayofweek",
+                f"{col}_dayofyear",
                 f"{col}_quarter",
                 f"{col}_is_weekend",
                 f"{col}_is_month_end",
@@ -489,7 +508,9 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
                 f"{col}_dow_cos",
             ]
             if self.has_hour_[col]:
-                base_names.extend([f"{col}_hour_sin", f"{col}_hour_cos"])
+                base_names.extend([f"{col}_hour", f"{col}_hour_sin", f"{col}_hour_cos"])
+            if self.has_minute_[col]:
+                base_names.append(f"{col}_minute")
 
             self.output_feature_names_.extend(base_names)
 
@@ -500,11 +521,12 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
 
         for col in self.columns_:
             if col in X.columns:
-                dt_series = pd.to_datetime(X[col], errors="coerce", format="mixed")
+                dt_series = (parse_dates(X[col]) if hasattr(self, "has_minute_") else
+                             pd.to_datetime(X[col], errors="coerce", format="mixed"))
             else:
-                dt_series = pd.Series([pd.NaT] * len(X), index=X.index)
+                dt_series = pd.Series(pd.NaT, index=X.index, dtype="datetime64[ns]")
 
-            ref_date = self.reference_dates_.get(col, pd.Timestamp.now())
+            ref_date = pd.to_datetime(self.reference_dates_.get(col, "1970-01-01"), utc=True).tz_localize(None)
             has_hr = self.has_hour_.get(col, False)
 
             # Remplacement des NaT par la date de référence pour éviter NaN
@@ -523,6 +545,7 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
             out_dict[f"{col}_month"] = month
             out_dict[f"{col}_day"] = day
             out_dict[f"{col}_dayofweek"] = dow
+            out_dict[f"{col}_dayofyear"] = filled_dt.dt.dayofyear.astype(float)
             out_dict[f"{col}_quarter"] = quarter
             out_dict[f"{col}_is_weekend"] = is_weekend
             out_dict[f"{col}_is_month_end"] = is_month_end
@@ -536,8 +559,11 @@ class DateTimeFeatureExtractor(BaseEstimator, TransformerMixin):
 
             if has_hr:
                 hour = filled_dt.dt.hour.astype(float)
+                out_dict[f"{col}_hour"] = hour
                 out_dict[f"{col}_hour_sin"] = np.sin(2 * np.pi * hour / 24.0)
                 out_dict[f"{col}_hour_cos"] = np.cos(2 * np.pi * hour / 24.0)
+            if getattr(self, "has_minute_", {}).get(col, False):
+                out_dict[f"{col}_minute"] = filled_dt.dt.minute.astype(float)
 
         return pd.DataFrame(out_dict, index=X.index)
 
@@ -656,11 +682,13 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
     """Extraction TF-IDF et réduction SVD pour colonnes de texte libre."""
 
     def __init__(self, max_features: int = 15, svd_components: int = 4, random_state: int = 42,
-                 column_components: Optional[Dict[str, int]] = None):
+                 column_components: Optional[Dict[str, int]] = None,
+                 column_modes: Optional[Dict[str, str]] = None):
         self.max_features = max_features
         self.svd_components = svd_components
         self.random_state = random_state
         self.column_components = column_components
+        self.column_modes = column_modes
         self.columns_: List[str] = []
         self.vectorizers_: Dict[str, TfidfVectorizer] = {}
         self.svd_models_: Dict[str, Optional[TruncatedSVD]] = {}
@@ -674,11 +702,23 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
 
         for col in self.columns_:
             text_series = X[col].fillna("").astype(str)
-            vec = TfidfVectorizer(
-                max_features=self.max_features,
-                stop_words="english",
-                token_pattern=r"(?u)\b\w+\b",
-            )
+            mode = (self.column_modes or {}).get(col, "TFIDF_SVD")
+            if mode == "AUTO":
+                mode = "TFIDF_SVD"
+            token_pattern = r"(?u)\b\w+\b"
+            if mode == "HASH":
+                vec = HashingVectorizer(n_features=self.max_features, token_pattern=token_pattern,
+                                        alternate_sign=False, norm=None)
+                self.vectorizers_[col] = vec
+                self.output_names_.extend(f"{col}_hash_{i}" for i in range(self.max_features))
+                continue
+            vectorizer = CountVectorizer if mode == "COUNT" else TfidfVectorizer
+            vec = vectorizer(max_features=self.max_features, token_pattern=token_pattern,
+                             ngram_range=(1, 2) if mode == "TFIDF_NGRAM" else (1, 1),
+                             stop_words="english" if mode == "TFIDF_SVD" else None)
+            if not any(map(vec.build_analyzer(), text_series)):
+                self.output_names_.append(f"{col}_text_0")
+                continue
             tfidf_mat = vec.fit_transform(text_series)
             self.vectorizers_[col] = vec
 
@@ -688,7 +728,7 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
                 self.output_names_.append(f"{col}_text_0")
                 continue
 
-            components = int((self.column_components or {}).get(col, self.svd_components))
+            components = int((self.column_components or {}).get(col, self.svd_components)) if mode == "TFIDF_SVD" else 0
             if components < 0:
                 raise ValueError(f"Nombre de composantes SVD négatif pour {col!r}.")
             if components > 0 and n_features > components:
@@ -699,7 +739,8 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
             else:
                 self.svd_models_[col] = None
                 feature_names = vec.get_feature_names_out()
-                col_names = [f"{col}_tfidf_{fn}" for fn in feature_names]
+                prefix = "count" if mode == "COUNT" else "tfidf"
+                col_names = [f"{col}_{prefix}_{fn}" for fn in feature_names]
 
             self.output_names_.extend(col_names)
 
@@ -730,12 +771,15 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
 
             if svd is not None:
                 reduced = svd.transform(tfidf_mat)
-                cols = [f"{col}_svd_{i}" for i in range(self.svd_components)]
+                cols = [f"{col}_svd_{i}" for i in range(reduced.shape[1])]
                 df_out = pd.DataFrame(reduced, index=X.index, columns=cols)
             else:
                 dense = tfidf_mat.toarray()
-                feature_names = vec.get_feature_names_out()
-                cols = [f"{col}_tfidf_{fn}" for fn in feature_names]
+                if isinstance(vec, HashingVectorizer):
+                    cols = [f"{col}_hash_{i}" for i in range(dense.shape[1])]
+                else:
+                    prefix = "count" if isinstance(vec, CountVectorizer) and not isinstance(vec, TfidfVectorizer) else "tfidf"
+                    cols = [f"{col}_{prefix}_{fn}" for fn in vec.get_feature_names_out()]
                 df_out = pd.DataFrame(dense, index=X.index, columns=cols)
 
             all_dfs.append(df_out)
@@ -774,7 +818,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         **kwargs,
     ):
         self.config = config if config is not None else PreprocessConfig(**kwargs)
-        self.task = task.lower()
+        self.task = task
         self.task_resolved_: str = "classification"
 
         # Métadonnées et traçabilité
@@ -871,15 +915,18 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             new_cols.append(clean_name)
 
         # Assurer l'unicité des noms
-        seen = {}
+        seen = set()
+        reserved = set(new_cols)
         unique_cols = []
         for c in new_cols:
-            if c not in seen:
-                seen[c] = 0
-                unique_cols.append(c)
-            else:
-                seen[c] += 1
-                unique_cols.append(f"{c}_{seen[c]}")
+            candidate = c
+            suffix = 1
+            if c in seen:
+                while f"{c}_{suffix}" in seen or f"{c}_{suffix}" in reserved:
+                    suffix += 1
+                candidate = f"{c}_{suffix}"
+            unique_cols.append(candidate)
+            seen.add(candidate)
 
         df_out = df.copy()
         df_out.columns = unique_cols
@@ -921,9 +968,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 actions.add(str(value.value if isinstance(value, Action) else value).upper())
         if len(actions) > 1:
             raise ValueError("Le choix de suppression des doublons est global : toutes les colonnes doivent avoir le même choix.")
-        action = next(iter(actions), "DROP")
+        preserve_rows = getattr(self.config, "preserve_rows", False)
+        action = next(iter(actions), "KEEP" if preserve_rows else "DROP")
         if not _action_supported("duplicates", "any", action):
             raise ValueError(f"Action de doublons invalide : {action}; choix valides : {SUPPORTED_ACTIONS['duplicates']['any']}.")
+        if preserve_rows and action == "DROP":
+            raise ValueError("DROP des doublons est incompatible avec preserve_rows.")
         return action
 
     @staticmethod
@@ -1131,7 +1181,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 df_clean[col] = df_clean[col].astype("string")
             elif type_action == "FORCE_DATE" or date_action == "PARSE":
                 raw_date = df_clean[col]
-                df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce", format="mixed")
+                df_clean[col] = parse_dates(df_clean[col])
                 self.cleaning_decisions_.setdefault(str(col), {}).update({
                     "dates_parsables_pct": float(df_clean[col].notna().mean() * 100),
                     "dates_non_parsables": int((raw_date.notna() & df_clean[col].isna()).sum()),
@@ -1191,9 +1241,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 else:
                     out[col] = pd.to_numeric(out[col], errors="coerce").clip(lower=lower, upper=upper)
             elif selected == "DROP_ROWS":
+                if getattr(self.config, "preserve_rows", False):
+                    raise ValueError("DROP_ROWS est incompatible avec preserve_rows.")
                 keep &= ~mask.to_numpy()
         if not keep.all():
-            self._last_keep_positions_ = np.asarray(self._last_keep_positions_)[keep]
+            self._last_keep_positions_ &= keep
             out = out.loc[keep]
         return out
 
@@ -1220,14 +1272,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             pass
 
         # Échantillonnage pour la performance
-        sample = non_null.head(100).astype(str)
+        sample = (non_null.sample(100, random_state=self.config.random_state) if len(non_null) > 100
+                  else non_null).astype(str)
         # Test de motifs de date typiques
         has_separators = sample.str.contains(r"[-/:.]", regex=True).mean() > 0.8
         if not has_separators:
             return False
 
         try:
-            converted = pd.to_datetime(sample, errors="coerce", format="mixed")
+            converted = parse_dates(sample)
             return bool((converted.notna().mean() >= 0.80))
         except Exception:
             return False
@@ -1324,7 +1377,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
 
             # 3. Colonne dupliquée (exactement même contenu)
-            content_hash = hash(tuple(series.head(50).fillna("__NA__")))
+            content_hash = hash(tuple(series.head(50).astype(object).fillna("__NA__")))
             if content_hash in seen_contents:
                 dup_col = seen_contents[content_hash]
                 if series.equals(X[dup_col]):
@@ -1339,7 +1392,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             # 4. Colonne d'identifiant (ID)
             identifier_name = bool(re.search(r"(^|_)(id|code|ref|num)(_|$)", str(col).strip().lower()))
             unique_ratio = n_unique / max(n_rows, 1)
-            is_id_candidate = (
+            text_stats = {}
+            is_text = False
+            if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+                text_stats = text_evidence(series, self.config.random_state)
+                is_text = (text_stats["part_phrases"] >= .6 and text_stats["vocabulaire"] >= 8
+                           and text_stats["part_codes"] < .2 and n_unique >= 3
+                           and (text_stats["longueur_moyenne"] >= 24
+                                or text_stats["part_ponctuee"] >= .4))
+            is_id_candidate = not is_text and (
                 n_rows > 30
                 and (identifier_name or (unique_ratio > 0.90 and
                      (pd.api.types.is_integer_dtype(series) or pd.api.types.is_object_dtype(series)
@@ -1396,15 +1457,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
 
             # 8. Détection Texte Libre
-            if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
-                mean_len = non_null.astype(str).str.len().mean() if len(non_null) > 0 else 0
-                avg_words = non_null.astype(str).str.split().str.len().mean() if len(non_null) > 0 else 0
-                if mean_len > 25 and avg_words > 3 and n_unique > self.config.cardinality_threshold:
-                    meta["type"] = FeatureType.TEXT
-                    meta["reason"] = f"Texte libre (longueur moy: {mean_len:.1f} car., {avg_words:.1f} mots/cellule)"
-                    self.text_cols_.append(col)
-                    self.column_metadata_[col] = meta
-                    continue
+            if is_text:
+                meta["type"] = FeatureType.TEXT
+                meta["reason"] = (f"Texte libre : {text_stats['part_phrases']:.0%} de séquences de quatre mots ou plus, "
+                                  f"{text_stats['vocabulaire']} termes distincts.")
+                self.text_cols_.append(col)
+                self.column_metadata_[col] = meta
+                continue
 
             # 9. Détection Numérique
             if pd.api.types.is_numeric_dtype(series):
@@ -1500,7 +1559,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     else DecisionTreeRegressor(max_depth=4, random_state=rs))
             try:
                 if pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s):
-                    v = s.astype(float)
+                    v = s.astype(float).replace([np.inf, -np.inf], np.nan)
                     v = v.fillna(float(v.min()) - 1.0 if v.notna().any() else 0.0).to_numpy().reshape(-1, 1)
                     est = tree
                 else:
@@ -1730,7 +1789,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
     def _resolve_task(self, y: Union[pd.Series, np.ndarray]) -> str:
         """Déduit automatiquement si la tâche est une classification ou régression."""
-        if self.task == "regression":
+        task = self.task.lower()
+        if task == "regression":
             y_num = pd.to_numeric(pd.Series(y).dropna(), errors="coerce")
             if y_num.isna().any():
                 msg = ("La tâche « regression » est demandée mais la cible contient du texte "
@@ -1738,8 +1798,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 self.warnings_.append(msg)
                 logger.warning(msg)
                 return "classification"
-        if self.task != "auto":
-            return self.task
+        if task != "auto":
+            return task
 
         y_series = pd.Series(y).dropna()
         n_unique = y_series.nunique()
@@ -1848,21 +1908,35 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if target is not None and target not in raw.columns:
             raise ValueError(f"La colonne cible '{target}' est absente du DataFrame.")
         feature_raw = raw.drop(columns=[target]) if target else raw
+        clean_names = dict(zip(feature_raw.columns, prep._normalize_column_names(feature_raw.iloc[:0]).columns))
         clean = prep._preprocess_raw_dataframe(feature_raw, is_fit=True)
         y_arr = None
+        aligned_target = None
         if target is not None:
-            y_arr = prep._fit_target(raw[target])
-            keep_rows = np.asarray(prep._last_keep_positions_, dtype=bool)
-            if len(keep_rows) == len(y_arr) and not keep_rows.all():
-                y_arr = y_arr[keep_rows]
+            aligned_target = raw[target].iloc[np.flatnonzero(prep._last_keep_positions_)].reset_index(drop=True)
+            if pd.api.types.is_numeric_dtype(aligned_target):
+                aligned_target = aligned_target.replace([np.inf, -np.inf], np.nan)
+            valid_target = aligned_target.notna().to_numpy()
+            if valid_target.any():
+                y_arr = prep._fit_target(aligned_target.iloc[valid_target])
         X = clean
         prep._detect_types(X)
+        missingness = missingness_evidence(X, self.config.random_state)
+        target_missing_tests = {}
         leakage = {}
         if y_arr is not None:
             # Réutilise la routine existante de détection; l'instance n'est pas ajustée.
-            prep._detect_leaky_columns(X.drop(columns=prep.columns_to_drop_, errors="ignore"), y_arr)
+            prep._detect_leaky_columns(X.iloc[valid_target].drop(columns=prep.columns_to_drop_, errors="ignore"), y_arr)
             leakage = prep.leakage_scores_
+            for name in X.columns:
+                if X[name].isna().any() and X[name].notna().any():
+                    target_missing_tests[name] = association(
+                        X[name].isna(), aligned_target, False, prep.task_resolved_ == "regression",
+                        kendall=False)
+        target_missing_q = adjusted_p_values({name: test["p_primaire"]
+                                              for name, test in target_missing_tests.items()})
         rows = []
+        duplicate_rows = int(raw.duplicated().sum())
         for col in df.columns:
             if target is not None and col == target:
                 rows.append({"colonne": str(col), "type": "TARGET", "dtype": str(df[col].dtype),
@@ -1872,14 +1946,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                              "raison": "Colonne cible : exclue des recommandations de transformation des features.",
                              "confiance": "", "alternatives": [], "steps": {}, "est_cible": True})
                 continue
-            clean_name = col
-            if clean_name not in prep.column_metadata_:
-                clean_name = next((c for c in prep.column_metadata_ if str(c) == str(col)), col)
+            clean_name = clean_names[col]
             raw_s = raw[col]
-            s = clean[clean_name] if clean_name in clean.columns else raw_s
+            s = clean[clean_name] if clean_name in clean.columns else raw_s.iloc[np.flatnonzero(prep._last_keep_positions_)]
             meta = prep.column_metadata_.get(clean_name, {})
             kind = meta.get("type", FeatureType.CATEGORICAL_LOW_CARD)
             kind_name = kind.value if isinstance(kind, FeatureType) else str(kind)
+            groups = _action_group(kind)
             nonnull = s.dropna()
             nunique = int(nonnull.nunique())
             missing = float(s.isna().mean()) if len(s) else 0.0
@@ -1904,7 +1977,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             elif kind_name == "DATETIME":
                 action = Action.DATE_FEATURES
                 alternatives = [Action.DROP]
-                dates = pd.to_datetime(nonnull, errors="coerce", format="mixed")
+                dates = parse_dates(nonnull)
                 stats_row.update(date_min=dates.min(), date_max=dates.max(), uniques=nunique)
                 reason = f"{nunique} dates distinctes; extraction des composantes calendaires recommandée."
             elif kind_name == "TEXT":
@@ -1920,7 +1993,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 alternatives = [Action.ONEHOT, Action.DROP]
                 reason = f"Ordre ordinal reconnu parmi {nunique} modalités; l'encodage conserve cet ordre."
             elif kind_name.startswith("CATEGORICAL") or kind_name == "NUMERIC_DISCRETE":
-                action = (Action.TARGET_ENCODE if target else Action.FREQUENCY_ENCODE) if kind_name.endswith("HIGH_CARD") else Action.ONEHOT
+                supervised = y_arr is not None and getattr(self.config, "supervised_encoding", True)
+                action = (Action.TARGET_ENCODE if supervised else Action.FREQUENCY_ENCODE) if kind_name.endswith("HIGH_CARD") else Action.ONEHOT
                 alternatives = [Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.DROP]
                 top = nonnull.astype(str).value_counts().head(5).to_dict()
                 rare = float((nonnull.astype(str).value_counts(normalize=True) < self.config.rare_category_threshold).sum() / max(nunique, 1))
@@ -1930,7 +2004,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 stats_row["natural_order"] = self._match_ordinal_pattern(nonnull.unique().tolist()) or []
                 reason = f"Cardinalité de {nunique}; encodage {'supervisé régularisé' if action == Action.TARGET_ENCODE else 'One-Hot'} adapté au type détecté."
             else:
-                vals = pd.to_numeric(nonnull, errors="coerce").dropna()
+                vals = pd.to_numeric(nonnull, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
                 skew = float(vals.skew()) if len(vals) > 2 else 0.0
                 q1, q3 = vals.quantile(.25), vals.quantile(.75)
                 iqr = q3 - q1
@@ -1944,10 +2018,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 cv = float(vals.std() / abs(vals.mean())) if len(vals) and vals.mean() else np.nan
                 normality_p = np.nan
                 shapiro_p = np.nan
-                if len(vals) >= 8:
+                if len(vals) >= 8 and vals.nunique() > 1:
                     try:
                         norm_sample = vals.sample(min(5000, len(vals)), random_state=42)
-                        normality_p = float(stats.normaltest(norm_sample).pvalue)
+                        if len(norm_sample) >= 20:
+                            normality_p = float(stats.normaltest(norm_sample).pvalue)
                         shapiro_p = float(stats.shapiro(norm_sample).pvalue)
                     except Exception:
                         pass
@@ -1980,12 +2055,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             mixed_date_formats = 0
             if len(nonnull) and (kind_name == "DATETIME" or re.search(r"date|heure|time", str(col), re.I)):
                 date_source = raw_s.dropna()
-                parsed_dates = pd.to_datetime(date_source, errors="coerce", format="mixed")
+                parsed_dates = parse_dates(date_source)
                 date_parse_rate = float(parsed_dates.notna().mean())
                 format_keys = date_source.astype(str).map(lambda v: "ymd" if re.match(r"^\d{4}[-/]", v) else "dmy" if re.match(r"^\d{1,2}[-/]\d{1,2}[-/]\d{4}", v) else "other")
                 mixed_date_formats = max(format_keys.nunique() - 1, 0)
             impossible_count = int(getattr(prep, "impossible_counts_", {}).get(str(col), 0))
-            duplicate_rows = int(raw.duplicated().sum())
             step_recs["clean_missing_tokens"] = rec(
                 "TO_NAN", f"cellules={int(false_tokens.sum())}; valeurs={found_false}", "valeurs reconnues dans DEFAULT_NA_VALUES",
                 f"{int(false_tokens.sum())} faux manquants détectés: {found_false}.", ["TO_NAN", "KEEP", "SELECTED_TO_NAN"])
@@ -2009,11 +2083,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 f"{duplicate_rows} ligne(s) dupliquée(s) exacte(s) dans le dataset.", ["DROP", "KEEP"])
             step_recs["type"] = rec("DROP" if kind_name.startswith("DROP") else "AUTO", f"uniques={nunique}", f"cardinalité ≤ {self.config.cardinality_threshold}",
                 f"Type détecté : {kind_name}; {reason}", ["AUTO", "DROP", "NUMERIC", "CATEGORICAL", "DATETIME", "TEXT"], confidence)
-            step_recs["missing"] = rec("MEDIAN" if kind_name.startswith("NUMERIC") else "AUTO",
+            step_recs["missing"] = rec("MEDIAN" if groups == "numeric" else "AUTO",
                 f"manquants={missing:.1%}", f"indicateur si > {self.config.missing_indicator_threshold:.1%}",
                 f"Le taux manquant observé est {missing:.1%}; imputation ajustée sur train.",
                 ["AUTO", "MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR"])
-            step_recs["outliers"] = rec("WINSORIZE" if kind_name.startswith("NUMERIC") else "AUTO",
+            step_recs["outliers"] = rec("WINSORIZE" if groups == "numeric" else "AUTO",
                 f"IQR={stats_row.get('outliers_pct', 0):.2f}% ; MAD={stats_row.get('outliers_mad_pct', 0):.2f}%",
                 "bornes IQR 1,5; MAD robuste 3,5",
                 "Le clipping par quantiles est appliqué selon la configuration du pipeline.",
@@ -2026,9 +2100,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             scale_measure = "type non numérique"
             scale_threshold = "aucun"
             scale_reason = "Aucun scaler numérique recommandé pour cette famille de colonnes."
-            if kind_name.startswith("NUMERIC"):
+            if groups == "numeric":
                 scale_recommendation, scale_measure, scale_threshold = _recommend_scaler(s)
                 scale_reason = f"{scale_measure}; seuil {scale_threshold} → {scale_recommendation}."
+                if getattr(self.config, "model_family", None) in TREE_FAMILIES:
+                    scale_recommendation = "NONE"
+                    scale_reason = "Le modèle arborescent utilise des seuils sur les valeurs des features."
             step_recs["scaling"] = rec(scale_recommendation, scale_measure, scale_threshold,
                 scale_reason, ["AUTO", "NONE", "STANDARD", "ROBUST", "MINMAX", "MAXABS"])
             step_recs["encoding"] = rec(action.value if action in (Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.ORDINAL, Action.BINARY_MAP) else "NONE",
@@ -2042,7 +2119,6 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 "La cible est traitée séparément; les statistiques de features ne l'ajustent pas.", ["NONE", "AUTO", "TRANSFORM"])
             step_recs["selection"] = rec("AUTO", f"uniques={nunique}", f"variance>{self.config.variance_threshold}",
                 "La sélection finale est ajustée exclusivement sur les données de train.", ["AUTO", "KEEP", "DROP"])
-            groups = _action_group(kind)
             for step_name, groups_for_step in SUPPORTED_ACTIONS.items():
                 supported = groups_for_step.get(groups, groups_for_step.get("any", ["AUTO"]))
                 if step_name in step_recs:
@@ -2078,8 +2154,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             target_cramer = np.nan
             target_mi = np.nan
             missing_target_p = np.nan
-            if target:
-                aligned = pd.DataFrame({"x": s, "target": raw[target].reindex(s.index)})
+            if y_arr is not None:
+                aligned = pd.DataFrame({"x": s.reset_index(drop=True), "target": aligned_target}).dropna(subset=["target"])
                 if len(aligned) >= 8:
                     try:
                         x_num = pd.to_numeric(aligned["x"], errors="coerce")
@@ -2098,6 +2174,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         pass
                     if prep.task_resolved_ == "classification":
                         try:
+                            if aligned["x"].nunique() * aligned["target"].nunique() > 100_000:
+                                raise ValueError("Table de contingence trop grande.")
                             ct = pd.crosstab(aligned["x"].fillna("__MISSING__").astype(str), aligned["target"].astype(str))
                             if ct.shape[0] > 1 and ct.shape[1] > 1:
                                 chi2 = float(stats.chi2_contingency(ct)[0])
@@ -2120,7 +2198,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                                 missing_target_p = float(stats.ttest_ind(left, right, equal_var=False).pvalue)
                     except (ValueError, TypeError):
                         pass
-                if kind_name.startswith("NUMERIC"):
+                if groups == "numeric":
                     target_relation = (target_spearman if pd.notna(target_spearman) else
                                        target_mi if pd.notna(target_mi) else np.nan)
                 elif kind_name in (FeatureType.CATEGORICAL_LOW_CARD.value, FeatureType.CATEGORICAL_HIGH_CARD.value,
@@ -2131,12 +2209,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     target_relation = (target_mi if pd.notna(target_mi) else
                                        target_spearman if pd.notna(target_spearman) else
                                        target_cramer if pd.notna(target_cramer) else np.nan)
-            if pd.notna(missing_target_p) and missing_target_p < 0.05:
+            missing_q = target_missing_q.get(clean_name, np.nan)
+            missing_effect = target_missing_tests.get(clean_name, {}).get("effet_primaire", 0)
+            informative_missing = pd.notna(missing_q) and missing_q <= .05 and missing_effect >= .10
+            if groups == "numeric" and informative_missing:
                 step_recs["missing"]["action"] = "MISSING_INDICATOR"
-                step_recs["missing"]["measure"] += f"; p_cible={missing_target_p:.3g}"
-                step_recs["missing"]["threshold"] = "p < 0,05"
+                step_recs["missing"]["measure"] += f"; q_cible={missing_q:.3g}; effet={missing_effect:.3g}"
+                step_recs["missing"]["threshold"] = "q ≤ 0,05 et effet ≥ 0,10"
                 step_recs["missing"]["explanation"] = (
-                    f"Le statut manquant est associé à la cible (p={missing_target_p:.3g} < 0,05); "
+                    f"Le statut manquant est associé à la cible (q={missing_q:.3g}, effet={missing_effect:.3g}); "
                     "un indicateur de manquant est recommandé."
                 )
             cleanup_total = false_missing + variant_count
@@ -2182,7 +2263,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 strength = 0.60
                 p_evidence = None
                 if step_name == "distribution":
-                    if kind_name.startswith("NUMERIC"):
+                    if groups == "numeric":
                         ratio = abs(skew) / max(self.config.skew_threshold, 1e-9)
                         if abs(skew) >= 2.0 or abs(skew) <= 0.20:
                             strength = 0.85
@@ -2203,7 +2284,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     else:
                         strength = 0.60
                     p_evidence = missing_target_p if pd.notna(missing_target_p) else None
-                elif step_name == "scaling" and kind_name.startswith("NUMERIC"):
+                elif step_name == "scaling" and groups == "numeric":
                     if zero_pct >= 50 or (stats_row.get("min", 0) >= 0 and stats_row.get("max", 1) <= 1) or outlier_pct > 10:
                         strength = 0.90
                     elif 4.5 <= outlier_pct <= 5.5:
@@ -2266,7 +2347,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 overall_strength = 0.90 if date_parse_rate >= 0.95 else 0.60
             elif kind_name == FeatureType.TEXT.value:
                 overall_strength = 0.85
-            elif kind_name.startswith("NUMERIC"):
+            elif groups == "numeric":
                 ratio = abs(skew) / max(self.config.skew_threshold, 1e-9)
                 if abs(skew) >= 2.0 or abs(skew) <= 0.20:
                     overall_strength = 0.85
@@ -2279,10 +2360,70 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
             confidence = recommendation_confidence(
                 sample_n, overall_strength,
-                normality_p if kind_name.startswith("NUMERIC") and pd.notna(normality_p) else None)
+                normality_p if groups == "numeric" and pd.notna(normality_p) else None)
             if action == Action.DROP and kind_name.startswith("DROP"):
                 confidence = "haute"
+            column_profile = profile(raw_s, s, kind_name, self.config.rare_category_threshold, self.config.random_state)
+            semantic = semantic_type(s, kind_name, column_profile)
+            target_evidence = {}
+            if y_arr is not None:
+                target_evidence = association(s, aligned_target, pd.api.types.is_numeric_dtype(s),
+                                              prep.task_resolved_ == "regression")
+            if clean_name in prep.num_cols_:
+                vals = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna().astype(float)
+                step_recs["distribution"]["comparaison"] = numerical_comparison(vals, self.config.random_state)
+                outlier_comparison, scaler_comparison = numerical_cleaning_comparison(
+                    vals, self.config.outlier_lower_quantile, self.config.outlier_upper_quantile,
+                    self.config.outlier_iqr_multiplier)
+                step_recs["outliers"]["comparaison"] = outlier_comparison
+                step_recs["scaling"]["comparaison"] = scaler_comparison
+                width = len(prep.num_cols_)
+                multivariate = 5 <= len(s) <= 10_000 and 2 <= width <= 50
+                modes = vals.mode()
+                step_recs["missing"]["comparaison"] = {
+                    "MEDIAN": {"valeur": float(vals.median()), "avantage": "Résiste aux valeurs extrêmes."},
+                    "MEAN": {"valeur": float(vals.mean()), "avertissement": "Sensible aux valeurs extrêmes."},
+                    "MODE": {"valeur": float(modes.iloc[0]) if len(modes) else np.nan,
+                             "avertissement": "Une valeur modale peut être arbitraire en cas d'ex æquo."},
+                    "CONSTANT": {"avertissement": "La constante doit être cohérente avec le domaine."},
+                    "MISSING_INDICATOR": {"avantage": "Conserve le signal associé au statut manquant."},
+                    "KNN": {"applicable": multivariate, "avertissement": "Exige 5 à 10 000 lignes et 2 à 50 colonnes numériques."},
+                    "ITERATIVE": {"applicable": multivariate, "avertissement": "Exige 5 à 10 000 lignes et 2 à 50 colonnes numériques."},
+                }
+            if groups in {"categorical_low", "categorical_high"}:
+                category_counts = nonnull.astype(str).value_counts()
+                frequent = int(category_counts.ge(len(s) * self.config.rare_category_threshold).sum())
+                width = frequent + int(frequent < len(category_counts)) + int(missing > 0)
+                binary_width = max(1, nunique.bit_length())
+                step_recs["encoding"]["comparaison"] = {
+                    "ONEHOT": {"largeur_estimee": width, "octets_float64_estimes": len(s) * width * 8,
+                               "inconnu": "vecteur nul ou groupe rare connu"},
+                    "ORDINAL": {"largeur_estimee": 1, "avertissement": "Ordre explicite ou ordre reconnu requis.",
+                                "inconnu": "−1"},
+                    "COUNT_ENCODE": {"largeur_estimee": 1, "inconnu": "0",
+                                     "avertissement": "Les catégories de même effectif partagent une valeur."},
+                    "FREQUENCY_ENCODE": {"largeur_estimee": 1, "inconnu": "0",
+                                         "avertissement": "Les catégories de même fréquence partagent une valeur."},
+                    "BINARY_ENCODE": {"largeur_estimee": binary_width, "inconnu": "bits nuls",
+                                      "avertissement": "Les bits codent une catégorie sans ordre métier."},
+                    "HASH_ENCODE": {"largeur_estimee": 8, "inconnu": "calcul du hachage",
+                                    "avertissement": "Des catégories différentes peuvent entrer en collision."},
+                    "MANUAL_MAP": {"largeur_estimee": 1, "inconnu": "0",
+                                   "avertissement": "Correspondances numériques explicites requises."},
+                }
+                if "TARGET_ENCODE" in step_recs["encoding"]["choices"]:
+                    can_encode = y_arr is not None and getattr(self.config, "supervised_encoding", True)
+                    step_recs["encoding"]["comparaison"]["TARGET_ENCODE"] = {
+                        "applicable": can_encode, "avertissement": (
+                            "Encodage hors pli sur le train." if can_encode else "Cible utilisable requise."),
+                    }
             rows.append({"colonne": str(col), "type": kind_name, "dtype": str(df[col].dtype),
+                         "profil": column_profile, "raison_type": meta.get("reason", ""),
+                         "type_semantique": semantic,
+                         "confiance_type": recommendation_confidence(len(nonnull), .85 if kind_name in {
+                             "TEXT", "DATETIME", "BINARY", "ORDINAL", "DROP_ID", "DROP_CONSTANT"} else .60),
+                         "diagnostic_manquants": missingness.get(clean_name, {}),
+                         "analyse_cible": target_evidence,
                          "manquants_pct": missing * 100, "uniques": nunique, "exemples": examples,
                          "faux_manquants": false_missing, "variantes_casse_espaces": variant_count,
                          "relation_cible": target_relation, "score_fuite": score,
@@ -2291,13 +2432,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                          "spearman_cible": target_spearman, "cramer_cible": target_cramer,
                          "information_mutuelle_cible": target_mi,
                          "p_manquants_cible": missing_target_p,
-                         "manquant_informatif": bool(pd.notna(missing_target_p) and missing_target_p < .05),
+                         "q_manquants_cible": missing_q, "effet_manquants_cible": missing_effect,
+                         "manquant_informatif": bool(informative_missing),
                          "est_cible": False,
                          **stats_row})
         # Paires de features fortement corrélées; ordre d'entrée = règle explicite du préprocesseur.
         numeric_df = raw.select_dtypes(include=[np.number]).drop(columns=[target] if target else [], errors="ignore")
         correlation_pairs = []
-        if numeric_df.shape[1] > 1:
+        if numeric_df.shape[1] > 500:
+            sample_note = (sample_note + " Analyse des paires corrélées désactivée au-delà de 500 colonnes numériques.").strip()
+        elif numeric_df.shape[1] > 1:
             corr = numeric_df.corr().abs()
             names = list(corr.columns)
             for i, left in enumerate(names):
@@ -2307,6 +2451,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         correlation_pairs.append({"gauche": str(left), "droite": str(right), "correlation_abs": float(score_corr),
                                                   "gardee_selon_ordre": str(left)})
         row_by_name = {r["colonne"]: r for r in rows}
+        corrected = adjusted_p_values({r["colonne"]: r.get("analyse_cible", {}).get("p_primaire", np.nan)
+                                       for r in rows})
+        for column, q in corrected.items():
+            row_by_name[column]["analyse_cible"]["q_primaire"] = q
         for pair in correlation_pairs:
             for col, other in ((pair["gauche"], pair["droite"]), (pair["droite"], pair["gauche"])):
                 if col in row_by_name:
@@ -2345,6 +2493,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X = pd.DataFrame(X)
 
         self._set_logging_level()
+        self.is_fitted_ = False
         self.warnings_ = []
         self.cleaning_decisions_ = {}
         self.numeric_string_cols_ = {}  # F2 : reinitialiser a chaque fit
@@ -2378,6 +2527,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self.column_override_params_ = {}
         self.categorical_imputers_ = {}
         self.frequency_override_cols_ = []
+        self.target_cat_encoder_ = None
+        self._te_oof_ = None
+        self.freq_encoding_maps_ = {}
+        self.count_encoding_cols_ = set()
+        self.compact_category_modes_ = {}
+        self.binary_category_maps_ = {}
         for raw_col, raw_override in (self.config.column_overrides or {}).items():
             col = str(raw_col)
             if col not in X_clean.columns:
@@ -2426,7 +2581,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 self.user_override_notes_[col] = "choix utilisateur : DROP"
                 continue
             dist = choices.get("distribution", action).upper()
-            if dist in {"YEO_JOHNSON", "LOG1P", "BOX_COX", "SQRT"} and not kind.startswith("NUMERIC"):
+            if dist in DISTRIBUTIONS[2:] and not kind.startswith("NUMERIC"):
                 raise ValueError(f"Override {dist} incompatible avec {col!r} (type détecté : {kind}); cette action exige une colonne numérique.")
             if choices.get("encoding", "").upper() == "ONEHOT" and kind == "NUMERIC_CONTINUOUS":
                 raise ValueError(f"Override ONEHOT incompatible avec {col!r} (numérique continu).")
@@ -2437,29 +2592,38 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 self.low_card_cols_.remove(col); self.ordinal_cols_.append(col)
             elif encoding == "ORDINAL" and col in self.high_card_cols_:
                 self.high_card_cols_.remove(col); self.ordinal_cols_.append(col)
-            elif encoding == "FREQUENCY_ENCODE" and col in self.low_card_cols_:
-                self.low_card_cols_.remove(col); self.frequency_override_cols_.append(col)
+            elif encoding == "COUNT_ENCODE" or (
+                    encoding == "FREQUENCY_ENCODE" and (col in self.low_card_cols_ or y_arr is not None)):
+                categorical = self.low_card_cols_ if col in self.low_card_cols_ else self.high_card_cols_
+                categorical.remove(col)
+                self.frequency_override_cols_.append(col)
+                if encoding == "COUNT_ENCODE":
+                    self.count_encoding_cols_.add(col)
+            elif encoding in {"BINARY_ENCODE", "HASH_ENCODE", "MANUAL_MAP"}:
+                categorical = self.low_card_cols_ if col in self.low_card_cols_ else self.high_card_cols_
+                categorical.remove(col)
+                self.compact_category_modes_[col] = encoding
             elif encoding == "TARGET_ENCODE" and col in self.low_card_cols_:
                 self.low_card_cols_.remove(col); self.high_card_cols_.append(col)
             elif encoding == "TARGET" and col in self.low_card_cols_:
                 self.low_card_cols_.remove(col); self.high_card_cols_.append(col)
-            if encoding == "FREQUENCY_ENCODE" and y_arr is not None:
-                raise ValueError(f"FREQUENCY_ENCODE sur {col!r} n'est disponible que sans cible; avec cible, utilisez TARGET_ENCODE.")
-            if encoding == "TARGET_ENCODE" and y_arr is None:
+            if encoding == "TARGET_ENCODE" and (y_arr is None or not getattr(self.config, "supervised_encoding", True)):
                 raise ValueError(f"TARGET_ENCODE sur {col!r} exige une cible; choisissez FREQUENCY_ENCODE.")
             if encoding:
                 self.user_override_notes_[col] = f"choix utilisateur : {encoding}"
-            if dist == "BOX_COX" and pd.to_numeric(X_clean[col], errors="coerce").dropna().le(0).any():
-                raise ValueError(f"Box-Cox impossible sur {col!r} : les valeurs doivent être strictement positives.")
-            if dist in {"YEO_JOHNSON", "LOG1P", "BOX_COX", "SQRT", "NONE"}:
+            if dist in DISTRIBUTIONS[2:] and col in self.num_cols_:
+                observed = pd.to_numeric(X_clean[col], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+                validate_distribution(observed, dist, col)
+            if dist in DISTRIBUTIONS[1:]:
                 self.column_distributions_[col] = dist
                 self.user_override_notes_[col] = f"choix utilisateur : {dist}"
             missing_action = choices.get("missing", "").upper()
-            if missing_action in {"MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR", "MISSING_CATEGORY"}:
+            if missing_action in {"MEDIAN", "MEAN", "MODE", "CONSTANT", "MISSING_INDICATOR", "MISSING_CATEGORY",
+                                  "KNN", "ITERATIVE"}:
                 self.column_missing_[col] = missing_action
                 self.user_override_notes_[col] = f"choix utilisateur : {missing_action} (valeurs manquantes)"
             outlier_action = choices.get("outliers", "").upper()
-            if outlier_action in {"NONE", "WINSORIZE", "IQR"}:
+            if outlier_action in OUTLIER_ACTIONS:
                 self.column_outliers_[col] = outlier_action
                 self.user_override_notes_[col] = f"choix utilisateur : {outlier_action} (valeurs extrêmes)"
             scale = choices.get("scaling", action).upper()
@@ -2473,14 +2637,27 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Un scaler statistique commun à analyze et fit: les seuils sont réestimés sur le train.
         for col in self.num_cols_:
             if col not in self.column_scalers_:
-                mode = (_recommend_scaler(X_clean[col])[0] if self.config.scaler_type == "standard"
-                        else self.config.scaler_type.upper())
+                if getattr(self.config, "model_family", None) in TREE_FAMILIES:
+                    mode = "NONE"
+                else:
+                    mode = (_recommend_scaler(X_clean[col])[0] if self.config.scaler_type == "standard"
+                            else self.config.scaler_type.upper())
                 self.column_scalers_[col] = mode
 
         # Filtrage des colonnes à exclure
         X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
+        self.suspected_leakage_cols_ = []
+        self.leakage_scores_ = {}
+        if y_arr is not None:
+            self._detect_leaky_columns(X_work, y_arr)
+            X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
+            self._detect_noise_columns(X_work, y_arr)
+            X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
+
         for col, mode in self.column_missing_.items():
-            if col not in X_work.columns or col not in self.binary_cols_ + self.ordinal_cols_ + self.low_card_cols_ + self.high_card_cols_:
+            categorical = (self.binary_cols_ + self.ordinal_cols_ + self.low_card_cols_ + self.high_card_cols_
+                           + self.frequency_override_cols_ + list(self.compact_category_modes_))
+            if col not in X_work.columns or col not in categorical:
                 continue
             if mode == "MODE":
                 modes = X_work[col].dropna().mode()
@@ -2494,20 +2671,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self.categorical_imputers_[col] = fill_value
             X_work[col] = X_work[col].fillna(fill_value)
 
-        # Détection de fuite de cible sur les colonnes brutes (avant tout encodage)
-        self.suspected_leakage_cols_ = []
-        self.leakage_scores_ = {}
-        self._te_oof_ = None
-        if y_arr is not None:
-            self._detect_leaky_columns(X_work, y_arr)
-            X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
-            # F1 : garde-fou contre les colonnes de bruit (date / haute cardinalité sans signal)
-            self._detect_noise_columns(X_work, y_arr)
-            X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
-
         # 1. Pipeline Numérique
         if self.num_cols_:
-            X_num = X_work[self.num_cols_].copy()
+            X_num = X_work[self.num_cols_].replace([np.inf, -np.inf], np.nan)
 
             # Missing Indicator
             self.missing_indicator_ = MissingIndicatorTransformer(
@@ -2526,25 +2692,22 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 iqr_multiplier=self.config.outlier_iqr_multiplier,
             )
             self.winsorizer_.fit(X_num)
+            self.winsorizer_.replacements_ = {}
             for col, mode in self.column_outliers_.items():
                 if col not in X_num:
                     continue
                 vals = X_num[col].dropna()
-                if mode == "NONE" or len(vals) == 0:
-                    self.winsorizer_.lower_bounds_[col] = -np.inf
-                    self.winsorizer_.upper_bounds_[col] = np.inf
-                elif mode == "IQR":
-                    q1, q3 = vals.quantile(.25), vals.quantile(.75)
-                    spread = q3 - q1
-                    self.winsorizer_.lower_bounds_[col] = float(q1 - self.config.outlier_iqr_multiplier * spread)
-                    self.winsorizer_.upper_bounds_[col] = float(q3 + self.config.outlier_iqr_multiplier * spread)
-                elif mode == "WINSORIZE":
-                    params = self.column_override_params_.get(col, {}).get("outliers", {})
-                    if isinstance(params, dict):
-                        lower = float(params.get("lower", self.config.outlier_lower_quantile))
-                        upper = float(params.get("upper", self.config.outlier_upper_quantile))
-                        self.winsorizer_.lower_bounds_[col] = float(vals.quantile(lower))
-                        self.winsorizer_.upper_bounds_[col] = float(vals.quantile(upper))
+                params = self.column_override_params_.get(col, {}).get("outliers", {})
+                if not isinstance(params, dict):
+                    raise ValueError(f"Paramètres d'outliers invalides pour {col!r}.")
+                lower = float(params.get("lower", self.config.outlier_lower_quantile))
+                upper = float(params.get("upper", self.config.outlier_upper_quantile))
+                if not 0 <= lower < upper <= 1:
+                    raise ValueError(f"Percentiles invalides pour {col!r}.")
+                low, high = outlier_plan(vals, mode, lower, upper, self.config.outlier_iqr_multiplier)
+                self.winsorizer_.lower_bounds_[col] = low
+                self.winsorizer_.upper_bounds_[col] = high
+                self.winsorizer_.replacements_[col] = (mode, vals.median())
             X_num_wins = self.winsorizer_.transform(X_num)
 
             # Imputation médiane ou moyenne
@@ -2558,48 +2721,53 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     value = modes.iloc[0] if len(modes) else 0.0
                 elif mode == "CONSTANT":
                     value = self.column_override_params_.get(col, {}).get("missing", 0.0)
+                    if not np.isfinite(float(value)):
+                        raise ValueError(f"Constante d'imputation non finie pour {col!r}.")
                 elif mode == "NONE":
                     value = X_num_wins[col].median()
                 else:
                     value = X_num_wins[col].median()
                 self.num_imputer_[col] = float(value) if pd.notna(value) else 0.0
 
-            X_num_imp = X_num_wins.fillna(self.num_imputer_)
+            self.multivariate_imputers_ = {}
+            for mode in ("KNN", "ITERATIVE"):
+                selected = [col for col in self.num_cols_ if self.column_missing_.get(col) == mode]
+                if not selected:
+                    continue
+                if X_num_wins.shape[1] < 2 or not 5 <= len(X_num_wins) <= 10_000 or X_num_wins.shape[1] > 50:
+                    raise ValueError(f"{mode} exige 5 à 10 000 lignes et 2 à 50 colonnes numériques.")
+                scaler = StandardScaler().fit(X_num_wins)
+                scaled = scaler.transform(X_num_wins)
+                estimator = (KNNImputer(n_neighbors=5, keep_empty_features=True) if mode == "KNN"
+                             else IterativeImputer(max_iter=10, random_state=self.config.random_state,
+                                                   keep_empty_features=True))
+                self.multivariate_imputers_[mode] = (selected, scaler, estimator.fit(scaled))
+            X_num_imp = self._impute_numeric(X_num_wins)
 
             # PowerTransformer pour asymétrie
             self.num_power_transformer_ = {}
             self.num_skewed_cols_ = []
             for col in self.num_cols_:
-                sk = float(stats.skew(X_num_imp[col].dropna()))
+                values = X_num_imp[col]
                 override_dist = self.column_distributions_.get(col)
-                if override_dist == "YEO_JOHNSON" or (override_dist not in {"NONE", "LOG1P", "SQRT", "BOX_COX"} and abs(sk) > self.config.skew_threshold):
-                    pt = PowerTransformer(method="yeo-johnson")
-                    pt.fit(X_num_imp[[col]])
-                    self.num_power_transformer_[col] = pt
-                    self.num_skewed_cols_.append(col)
-                    X_num_imp[col] = pt.transform(X_num_imp[[col]]).ravel()
-                elif override_dist in {"LOG1P", "SQRT", "BOX_COX"}:
-                    if override_dist == "LOG1P" and X_num_imp[col].le(-1).any():
-                        raise ValueError(f"LOG1P impossible sur {col!r} : des valeurs sont inférieures ou égales à -1.")
-                    if override_dist == "SQRT" and X_num_imp[col].lt(0).any():
-                        raise ValueError(f"Racine carrée impossible sur {col!r} : valeurs négatives détectées.")
-                    if override_dist == "BOX_COX":
-                        pt = PowerTransformer(method="box-cox").fit(X_num_imp[[col]])
-                        self.num_power_transformer_[col] = pt
-                        X_num_imp[col] = pt.transform(X_num_imp[[col]]).ravel()
-                    else:
-                        self.num_power_transformer_[col] = override_dist
-                        if override_dist == "LOG1P":
-                            X_num_imp[col] = np.log1p(X_num_imp[col])
-                        elif override_dist == "SQRT":
-                            X_num_imp[col] = np.sqrt(X_num_imp[col].clip(lower=0))
+                if override_dist is None and values.nunique() > 1:
+                    if abs(float(stats.skew(values))) > self.config.skew_threshold:
+                        override_dist = "YEO_JOHNSON"
+                if override_dist in DISTRIBUTIONS[2:]:
+                    transformer = fit_distribution(values, override_dist, self.config.random_state)
+                    X_num_imp[col] = apply_distribution(values, transformer, override_dist)
+                    self.num_power_transformer_[col] = transformer
+                    if override_dist == "YEO_JOHNSON":
+                        self.num_skewed_cols_.append(col)
 
             # Scaling
-            if self.config.scaler_type == "robust":
+            scaler_type = ("none" if getattr(self.config, "model_family", None) in TREE_FAMILIES
+                           else self.config.scaler_type)
+            if scaler_type == "robust":
                 self.num_scaler_ = RobustScaler()
-            elif self.config.scaler_type == "minmax":
+            elif scaler_type == "minmax":
                 self.num_scaler_ = MinMaxScaler()
-            elif self.config.scaler_type == "standard":
+            elif scaler_type == "standard":
                 self.num_scaler_ = StandardScaler()
             else:
                 self.num_scaler_ = None
@@ -2637,7 +2805,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 else:
                     order = self._match_ordinal_pattern(X_work[col].unique())
                     if order is None:
-                        order = list(X_work[col].dropna().unique())
+                        raise ValueError(f"Un ordre explicite est requis pour l'encodage ordinal de {col!r}.")
 
                 enc = OrdinalEncoder(
                     categories=[order],
@@ -2668,11 +2836,18 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 5. Pipeline Catégoriel Haute Cardinalité
         if self.high_card_cols_:
-            if y_arr is not None:
+            distinct_targets = len(np.unique(y_arr)) if y_arr is not None else 0
+            if (getattr(self.config, "supervised_encoding", True) and distinct_targets >= 2
+                    and (self.task_resolved_ == "regression" or distinct_targets < len(y_arr))):
                 # Target Encoding robuste Out-Of-Fold régularisé
+                cv = min(5, len(y_arr))
+                if self.task_resolved_ == "classification":
+                    max_class = int(pd.Series(y_arr).value_counts().max())
+                    cv = min(cv, max_class)
                 self.target_cat_encoder_ = TargetEncoder(
                     smooth="auto",
-                    cv=5,
+                    cv=cv,
+                    target_type="auto" if self.task_resolved_ == "classification" else "continuous",
                     random_state=self.config.random_state,
                 )
                 # fit_transform applique le cross-fitting interne (cv=5) : on garde la version
@@ -2689,7 +2864,20 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         for col in self.frequency_override_cols_:
             if col in X_work.columns:
-                self.freq_encoding_maps_[col] = X_work[col].astype(str).value_counts(normalize=True).to_dict()
+                self.freq_encoding_maps_[col] = X_work[col].astype(str).value_counts(
+                    normalize=col not in self.count_encoding_cols_).to_dict()
+        for col, mode in self.compact_category_modes_.items():
+            if mode == "BINARY_ENCODE" and col in X_work:
+                categories = sorted(X_work[col].dropna().astype(str).unique())
+                self.binary_category_maps_[col] = {value: i for i, value in enumerate(categories, start=1)}
+            elif mode == "MANUAL_MAP" and col in X_work:
+                params = self.column_override_params_[col].get("encoding")
+                mapping = params.get("mapping") if isinstance(params, dict) else None
+                if (not isinstance(mapping, dict) or not mapping or any(
+                        not isinstance(key, str) or type(value) not in (int, float) or not np.isfinite(value)
+                        for key, value in mapping.items())):
+                    raise ValueError(f"MANUAL_MAP exige une correspondance de chaînes vers nombres finis pour {col!r}.")
+                self.binary_category_maps_[col] = mapping.copy()
 
         # 6. Pipeline Dates
         if self.date_cols_:
@@ -2708,23 +2896,33 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 svd_components=self.config.text_svd_components,
                 random_state=self.config.random_state,
                 column_components=text_components,
+                column_modes={col: self._override_value(col, "text")[0] for col in self.text_cols_},
             )
             self.text_transformer_.fit(X_work[self.text_cols_])
 
         # Post-traitement sur le train : Sélection des colonnes, variance, corrélation et fuites
         X_trans_train = self._transform_components(X_clean)
+        self._use_oof_encoding(X_trans_train)
         self._fit_post_processing(X_trans_train, y_arr)
 
         self.is_fitted_ = True
         logger.info(f"AutoPreprocessor ajusté avec succès. Nb features finales : {len(self.final_feature_names_)}")
         return self
 
+    def _impute_numeric(self, values: pd.DataFrame) -> pd.DataFrame:
+        filled = values.fillna(self.num_imputer_)
+        for columns, scaler, imputer in getattr(self, "multivariate_imputers_", {}).values():
+            restored = scaler.inverse_transform(imputer.transform(scaler.transform(values)))
+            estimates = pd.DataFrame(restored, index=values.index, columns=values.columns)
+            filled[columns] = values[columns].fillna(estimates[columns]).fillna(self.num_imputer_)
+        return filled
+
     def _transform_components(self, X_clean: pd.DataFrame) -> pd.DataFrame:
+        """Applique les composants de transformation individuels et concatène le résultat."""
         X_clean = X_clean.copy()
         for col, value in self.categorical_imputers_.items():
             if col in X_clean.columns:
                 X_clean[col] = X_clean[col].fillna(value)
-        """Applique les composants de transformation individuels et concatène le résultat."""
         parts = []
 
         # 1. Numériques
@@ -2733,6 +2931,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X_num = pd.DataFrame(index=X_clean.index)
             for c in self.num_cols_:
                 X_num[c] = pd.to_numeric(X_clean[c], errors="coerce") if c in X_clean.columns else np.nan
+            X_num = X_num.replace([np.inf, -np.inf], np.nan)
 
             # Missing Indicator
             if self.missing_indicator_ is not None:
@@ -2744,18 +2943,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X_num_wins = self.winsorizer_.transform(X_num)
 
             # Imputation
-            X_num_imp = X_num_wins.fillna(self.num_imputer_)
+            X_num_imp = self._impute_numeric(X_num_wins)
 
             # PowerTransformer
             if self.num_power_transformer_:
                 for c, pt in self.num_power_transformer_.items():
                     if c in X_num_imp.columns:
-                        if isinstance(pt, str) and pt == "LOG1P":
-                            X_num_imp[c] = np.log1p(X_num_imp[c])
-                        elif isinstance(pt, str) and pt == "SQRT":
-                            X_num_imp[c] = np.sqrt(X_num_imp[c].clip(lower=0))
-                        else:
-                            X_num_imp[c] = pt.transform(X_num_imp[[c]]).ravel()
+                        action = pt if isinstance(pt, str) else getattr(self, "column_distributions_", {}).get(c, "AUTO")
+                        validate_distribution(X_num[c].dropna(), action, c, fitting=False)
+                        X_num_imp[c] = apply_distribution(X_num_imp[c], pt, action)
 
             # Scaling
             overridden = set(self.column_scalers_).intersection(self.num_cols_)
@@ -2796,9 +2992,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 4. Catégorielles Basse Cardinalité (OHE)
         if self.low_card_cols_ and self.rare_grouper_ is not None and self.ohe_encoder_ is not None:
+            ohe_cols = self.ohe_encoder_.get_feature_names_out(self.low_card_cols_)
+            if len(X_clean) * len(ohe_cols) > MAX_DENSE_CELLS:
+                raise ValueError("Encodage One-Hot trop volumineux. Réduisez la cardinalité ou choisissez un encodage compact.")
             df_grouped = self.rare_grouper_.transform(X_clean[self.low_card_cols_])
             ohe_arr = self.ohe_encoder_.transform(df_grouped)
-            ohe_cols = self.ohe_encoder_.get_feature_names_out(self.low_card_cols_)
             df_ohe = pd.DataFrame(ohe_arr, index=X_clean.index, columns=ohe_cols)
             parts.append(df_ohe)
 
@@ -2812,7 +3010,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 parts.append(df_te)
             elif self.freq_encoding_maps_:
                 fe_dict = {}
-                for col, fmap in self.freq_encoding_maps_.items():
+                for col in self.high_card_cols_:
+                    fmap = self.freq_encoding_maps_.get(col, {})
                     if col in X_clean.columns:
                         fe_dict[f"{col}_freq"] = X_clean[col].astype(str).map(fmap).fillna(0.0)
                     else:
@@ -2824,11 +3023,31 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             freq_data = {}
             for col in self.frequency_override_cols_:
                 fmap = self.freq_encoding_maps_.get(col, {})
+                suffix = "count" if col in getattr(self, "count_encoding_cols_", ()) else "freq"
                 if col in X_clean.columns:
-                    freq_data[f"{col}_freq"] = X_clean[col].astype(str).map(fmap).fillna(0.0)
+                    freq_data[f"{col}_{suffix}"] = X_clean[col].astype(str).map(fmap).fillna(0.0)
                 else:
-                    freq_data[f"{col}_freq"] = np.zeros(len(X_clean))
+                    freq_data[f"{col}_{suffix}"] = np.zeros(len(X_clean))
             parts.append(pd.DataFrame(freq_data, index=X_clean.index))
+
+        for col, mode in getattr(self, "compact_category_modes_", {}).items():
+            if col in self.columns_to_drop_:
+                continue
+            values = X_clean[col].astype("string") if col in X_clean else pd.Series(pd.NA, index=X_clean.index)
+            if mode == "HASH_ENCODE":
+                hasher = FeatureHasher(n_features=8, input_type="string", alternate_sign=False)
+                encoded = hasher.transform(([value] if pd.notna(value) else [] for value in values)).toarray()
+                names = [f"{col}_hash_{i}" for i in range(8)]
+            elif mode == "MANUAL_MAP":
+                encoded = values.map(self.binary_category_maps_[col]).fillna(0).to_numpy(dtype=float)
+                names = [f"{col}_mapped"]
+            else:
+                mapping = self.binary_category_maps_[col]
+                codes = values.map(mapping).fillna(0).to_numpy(dtype=np.int64)
+                width = max(1, len(mapping).bit_length())
+                encoded = ((codes[:, None] >> np.arange(width)) & 1).astype(np.float32)
+                names = [f"{col}_bit_{i}" for i in range(width)]
+            parts.append(pd.DataFrame(encoded, index=X_clean.index, columns=names))
 
         # 6. Dates
         if self.date_cols_ and self.datetime_extractor_ is not None:
@@ -2841,7 +3060,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             parts.append(df_txt)
 
         if parts:
+            if len(X_clean) * sum(part.shape[1] for part in parts) > MAX_DENSE_CELLS:
+                raise ValueError("Matrice transformée trop volumineuse pour une sortie dense.")
             result = pd.concat(parts, axis=1)
+            if not result.columns.is_unique:
+                raise ValueError("Des noms de features générées se chevauchent. Renommez les colonnes d'entrée concernées.")
         else:
             result = pd.DataFrame(index=X_clean.index)
 
@@ -2936,12 +3159,19 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X_fit, y_fit = X, y
         self.fit(X_fit, y_fit)
         X_out = self.transform(X_fit)
+        if duplicate_action == "DROP" and duplicate_count:
+            retained = keep.to_numpy().copy()
+            retained[retained] = self._last_keep_positions_
+            self._last_keep_positions_ = retained
+        self._use_oof_encoding(X_out)
+        return X_out
+
+    def _use_oof_encoding(self, X_out: pd.DataFrame) -> None:
         if self._te_oof_ is not None and self.target_cat_encoder_ is not None and len(X_out) == len(self._te_oof_):
             te_cols = list(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
             for j, c in enumerate(te_cols):
                 if c in X_out.columns:
                     X_out[c] = np.nan_to_num(self._te_oof_[:, j]).astype(np.float32)
-        return X_out
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Applique les transformations apprises sur un nouveau DataFrame (ex: jeu de test).
@@ -2957,9 +3187,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X = pd.DataFrame(X)
 
         # Nettoyage préalable (Étape 0)
+        retained = np.ones(len(X), dtype=bool)
         if self._dataset_duplicate_action() == "DROP":
-            X = X.loc[~X.duplicated(keep="first")]
+            retained = ~X.duplicated(keep="first").to_numpy()
+            X = X.iloc[retained]
         X_clean = self._preprocess_raw_dataframe(X)
+        retained[retained] = self._last_keep_positions_
+        self._last_keep_positions_ = retained
 
         # Transformation par composant
         X_trans = self._transform_components(X_clean)
@@ -3035,7 +3269,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self.dataset_cleaning_["doublons_detectes"] = n_dup
         self.dataset_cleaning_["action_doublons"] = duplicate_action
         if len(X_trans) != len(y_raw):
-            y_raw = y_raw.loc[X_trans.index]
+            y_raw = y_raw.iloc[np.flatnonzero(self._last_keep_positions_)]
         y_trans = self.transform_target(y_raw)
 
         return X_trans, y_trans
@@ -3053,7 +3287,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             y_raw = df[target_name]
             X_trans = self.transform(X_raw)
             if len(X_trans) != len(y_raw):
-                y_raw = y_raw.loc[X_trans.index]
+                y_raw = y_raw.iloc[np.flatnonzero(self._last_keep_positions_)]
             y_trans = self.transform_target(y_raw)
             return X_trans, y_trans
         else:
@@ -3180,7 +3414,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
     @classmethod
     def load(cls, path: str) -> AutoPreprocessor:
-        """Charge une instance d'AutoPreprocessor sauvegardée via joblib.
+        """Charge un fichier joblib de confiance. Joblib peut exécuter du code.
 
         Compatibilité ascendante (F2) : un fichier sauvegardé avant l'ajout de F2
         (sans attribut ``numeric_string_cols_``) se charge sans erreur avec un
@@ -3194,6 +3428,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             obj = payload
         else:
             raise TypeError(f"Le fichier '{path}' ne contient pas d'objet AutoPreprocessor valide.")
+        if not isinstance(obj, cls):
+            raise TypeError("Le contenu du modèle joblib est incompatible.")
         # F2 : compatibilite ascendante - attributs absents dans anciens fichiers joblib
         if not hasattr(obj, "numeric_string_cols_"):
             obj.numeric_string_cols_ = {}

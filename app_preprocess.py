@@ -20,6 +20,7 @@ import os
 import queue
 import threading
 import traceback
+import zipfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +33,22 @@ from auto_preprocessor import (Action, AnalysisResult, AutoPreprocessor, ColumnO
                                PreprocessConfig, recommendation_confidence)
 
 NO_TARGET_LABEL = "(aucune : sans cible)"
+MODEL_FAMILIES = {
+    "Statistique seule": None, "Modèle linéaire": "linear", "Régression logistique": "logistic",
+    "Arbre de décision": "decision_tree", "Forêt aléatoire": "random_forest",
+    "Boosting": "gradient_boosting", "XGBoost": "xgboost", "LightGBM": "lightgbm",
+    "Plus proches voisins": "knn", "SVM": "svm", "Réseau neuronal": "neural_network",
+}
+MAX_TABLE_BYTES = 100 * 1024 ** 2
+MAX_EXPANDED_EXCEL_BYTES = 300 * 1024 ** 2
+MAX_CHOICES_BYTES = 1024 ** 2
+
+
+def _check_local_file(path: str, limit: int) -> None:
+    if not os.path.isfile(path):
+        raise ValueError("Sélectionnez un fichier local ordinaire.")
+    if os.path.getsize(path) > limit:
+        raise ValueError(f"Fichier trop volumineux (limite de {limit // 1024 ** 2} Mio).")
 
 
 # =============================================================================
@@ -48,8 +65,14 @@ def _sniff_separator(sample: str) -> str:
 
 def read_table(path: str) -> pd.DataFrame:
     """Lit un fichier tabulaire : CSV/TXT/TSV (séparateur et encodage détectés), Excel, JSON, Parquet."""
+    _check_local_file(path, MAX_TABLE_BYTES)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xlsm", ".xls"):
+        if ext != ".xls":
+            with zipfile.ZipFile(path) as archive:
+                entries = archive.infolist()
+                if len(entries) > 10_000 or sum(entry.file_size for entry in entries) > MAX_EXPANDED_EXCEL_BYTES:
+                    raise ValueError("Classeur Excel trop volumineux après décompression.")
         try:
             return pd.read_excel(path)
         except ImportError as exc:
@@ -88,6 +111,7 @@ class Options:
     encode_discrete_as_categorical: bool = False
     random_state: int = 42
     column_overrides: Dict[str, ColumnOverride] = field(default_factory=dict)
+    model_family: Optional[str] = None
 
 
 def build_config(opts: Options) -> PreprocessConfig:
@@ -106,6 +130,7 @@ def build_config(opts: Options) -> PreprocessConfig:
         "random_state": opts.random_state,
         "verbose": 0,
         "column_overrides": opts.column_overrides,
+        "model_family": opts.model_family,
     }
     valid = {f.name for f in dataclasses.fields(PreprocessConfig)}
     return PreprocessConfig(**{k: v for k, v in wanted.items() if k in valid})
@@ -279,7 +304,7 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
         value = row.get(key, np.nan)
         if pd.notna(value):
             stats.append(f"{label}={float(value):.2f}" + ("%" if key == "outliers_pct" else ""))
-    header = f"{column} | type={row.get('type')} | " + " | ".join(stats)
+    header = f"{column} | type={row.get('type_semantique', row.get('type'))} | " + " | ".join(stats)
     selected = (choices or {}).get(column, {})
     if not isinstance(selected, dict):
         legacy_map = {"YEO_JOHNSON": ("distribution", "YEO_JOHNSON"), "LOG1P": ("distribution", "LOG1P"),
@@ -305,9 +330,14 @@ def build_analysis_detail(result: AnalysisResult, column: Optional[str],
         measure, threshold = str(detail.get("measure", "")), str(detail.get("threshold", ""))
         detail_rows.append({"etape": step, "recommandation": recommended, "preuve": f"{measure} ; seuil : {threshold}",
                             "explication": pedagogical_explanation(step, recommended, measure, threshold, row.get("type", "")),
+                            "confiance": detail.get("confidence", ""),
+                            "comparaison": detail.get("comparaison", {}),
                             "choix": action, "modifie": action != recommended,
                             "aide_choix": recommendation_help(step, action), "detail_analyse": row})
-    return {"header": header, "rows": detail_rows}
+    return {"header": header, "rows": detail_rows, "profil": row.get("profil", {}),
+            "raison_type": row.get("raison_type", ""), "confiance_type": row.get("confiance_type", ""),
+            "diagnostic_manquants": row.get("diagnostic_manquants", {}),
+            "analyse_cible": row.get("analyse_cible", {})}
 
 
 def format_analysis_value(column: str, value: Any) -> str:
@@ -377,6 +407,9 @@ def validate_step_choice(result: AnalysisResult, column: str, step: str, action:
     allowed = row["steps"][step]["choices"]
     if action not in allowed:
         raise ValueError(f"Action {action!r} invalide pour l'étape {step!r} de {column!r}; choix valides : {allowed}.")
+    comparison = row["steps"][step].get("comparaison", {}).get(action, {})
+    if comparison.get("applicable") is False:
+        raise ValueError(comparison["avertissement"])
     return action
 
 
@@ -391,7 +424,10 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
     if step == "missing" and action == "CONSTANT":
         if column_type.startswith("NUMERIC"):
             try:
-                return float(value)
+                number = float(value)
+                if not np.isfinite(number):
+                    raise ValueError("Constante non finie.")
+                return number
             except ValueError as exc:
                 raise ValueError("La constante d'imputation numérique doit être un nombre.") from exc
         if not value:
@@ -410,6 +446,12 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
         if len(order) < 2 or len(set(order)) != len(order):
             raise ValueError("L'ordre ordinal doit contenir au moins deux valeurs distinctes, séparées par des virgules.")
         return {"order": order}
+    if step == "encoding" and action == "MANUAL_MAP":
+        mapping = json.loads(value)
+        if not isinstance(mapping, dict) or not mapping or any(
+                type(number) not in (int, float) or not np.isfinite(number) for number in mapping.values()):
+            raise ValueError("Saisissez un objet JSON associant chaque modalité à un nombre fini.")
+        return {"mapping": mapping}
     if step == "encoding" and action == "ONEHOT" and value:
         try:
             threshold = float(value)
@@ -486,19 +528,49 @@ def export_user_choices(result: AnalysisResult, choices: Dict[str, str], path: s
 
 def import_user_choices(result: AnalysisResult, path: str) -> Dict[str, str]:
     """Importe les choix; signale les colonnes manquantes ou devenues absentes."""
-    with open(path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    _check_local_file(path, MAX_CHOICES_BYTES)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except RecursionError as exc:
+        raise ValueError("Fichier de choix trop profondément imbriqué.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Le fichier de choix doit contenir un objet JSON.")
+    if "choices" in payload and (type(payload.get("version", 1)) is not int or payload.get("version", 1) != 1):
+        raise ValueError("Version du fichier de choix non prise en charge.")
     choices = payload.get("choices", payload)
+    if not isinstance(choices, dict):
+        raise ValueError("Les choix doivent être organisés par colonne.")
     valid = {r["colonne"]: r for r in result.columns}
     missing = sorted(set(choices) - set(valid))
     if missing:
         raise ValueError("Colonnes du fichier de choix absentes du dataset : " + ", ".join(missing))
-    return {col: ({step: (validate_step_choice(result, col, step, value[0]), value[1])
-                            if isinstance(value, (tuple, list)) and len(value) == 2 else
-                            validate_step_choice(result, col, step, value)
-                   for step, value in action.items()}
-                  if isinstance(action, dict) else validate_column_choice(result, col, action))
-            for col, action in choices.items()}
+    validated = {}
+    for col, action in choices.items():
+        if isinstance(action, str):
+            validated[col] = validate_column_choice(result, col, action)
+            continue
+        if not isinstance(action, dict):
+            raise ValueError(f"Choix invalide pour {col!r}.")
+        steps = {}
+        for step, value in action.items():
+            if isinstance(value, str):
+                steps[step] = validate_step_choice(result, col, step, value)
+                continue
+            if not isinstance(value, list) or len(value) != 2 or not isinstance(value[0], str):
+                raise ValueError(f"Paramètres invalides pour {col!r}/{step}.")
+            name, params = value
+            validate_step_choice(result, col, step, name)
+            try:
+                raw = App._format_step_parameter(step, name, params, valid[col])
+            except TypeError as exc:
+                raise ValueError(f"Paramètres invalides pour {col!r}/{step}.") from exc
+            parsed = parse_step_parameters(step, name, raw, valid[col]["type"])
+            if parsed is None or parsed != params:
+                raise ValueError(f"Paramètres invalides pour {col!r}/{step}.")
+            steps[step] = (name, parsed)
+        validated[col] = steps
+    return validated
 
 
 @dataclass
@@ -726,6 +798,7 @@ class App:
         self.v_transform_target = tk.BooleanVar(value=True)
         self.v_drop_leaky = tk.BooleanVar(value=False)
         self.v_discrete_cat = tk.BooleanVar(value=False)
+        self.v_model_family = tk.StringVar(value="Statistique seule")
         self.v_status = tk.StringVar(value="Ouvrez un fichier pour commencer.")
 
     # ------------------------------------------------------------------ mise en page
@@ -832,6 +905,38 @@ class App:
         self.cb_analysis_action.pack(side="left")
         ttk.Button(edit, text="Appliquer aux colonnes sélectionnées", command=self._apply_analysis_choice).pack(side="left", padx=5)
         ttk.Button(edit, text="Réinitialiser la colonne", command=self._reset_analysis_selection).pack(side="left")
+        ttk.Button(edit, text="Profil et comparaison", command=self._show_analysis_comparison).pack(side="left", padx=5)
+
+    def _show_analysis_comparison(self) -> None:
+        selected = self.tree_analysis.selection()
+        if self.analysis is None or not selected:
+            return
+        window = self.tk.Toplevel(self.root)
+        window.title("Profils statistiques et comparaison")
+        output = self.tk.Text(window, wrap="word", width=110, height=32)
+        scroll = self.ttk.Scrollbar(window, command=output.yview)
+        output.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        output.pack(side="left", fill="both", expand=True)
+        for item in selected:
+            column = str(self.tree_analysis.item(item, "values")[0])
+            detail = build_analysis_detail(self.analysis, column, self.choices)
+            output.insert("end", detail["header"] + "\n")
+            output.insert("end", f"{detail.get('raison_type', '')}  Confiance {detail.get('confiance_type', '')}\n")
+            for title, key in (("Profil", "profil"), ("Diagnostic des manquants", "diagnostic_manquants"),
+                               ("Association avec la cible", "analyse_cible")):
+                for metric, value in detail.get(key, {}).items():
+                    output.insert("end", f"{title} · {metric.replace('_', ' ')} = {value}\n")
+            for row in detail["rows"]:
+                output.insert("end", f"\n{row['etape']} · {row['recommandation']} · confiance {row['confiance']}\n"
+                                     f"{row['preuve']}\n")
+                for action, comparison in row["comparaison"].items():
+                    evidence = ", ".join(f"{key.replace('_', ' ')} = {value:.4g}" if isinstance(value, float)
+                                         else f"{key.replace('_', ' ')} = {value}"
+                                         for key, value in comparison.items())
+                    output.insert("end", f"  {action} · {evidence}\n")
+            output.insert("end", "\n" + "─" * 60 + "\n")
+        output.configure(state="disabled")
 
     def _analysis_selection(self, _event=None) -> None:
         if self.analysis is None:
@@ -874,7 +979,7 @@ class App:
                 rec_text = f"✎ modifié — recommandation : {rec_text}"
             self.ttk.Label(self.detail_rows_frame, text=step, wraplength=100, padding=4).grid(
                 row=index, column=0, sticky="nw")
-            self.ttk.Label(self.detail_rows_frame, text=rec_text, wraplength=165, padding=4).grid(
+            self.ttk.Label(self.detail_rows_frame, text=f"{rec_text}\nConfiance {item['confiance']}", wraplength=165, padding=4).grid(
                 row=index, column=1, sticky="nw")
             self.ttk.Label(self.detail_rows_frame, text=item["preuve"], wraplength=230,
                            justify="left", padding=4).grid(row=index, column=2, sticky="nw")
@@ -888,13 +993,16 @@ class App:
             choice_frame = self.ttk.Frame(self.detail_rows_frame, padding=2)
             choice_frame.grid(row=index, column=4, sticky="nsew")
             variable = self.tk.StringVar(value=saved_action)
-            combo = self.ttk.Combobox(choice_frame, textvariable=variable, values=detail_step["choices"],
+            applicable = [action for action in detail_step["choices"]
+                          if detail_step.get("comparaison", {}).get(action, {}).get("applicable") is not False]
+            combo = self.ttk.Combobox(choice_frame, textvariable=variable, values=applicable,
                                       state="readonly", width=19)
             combo.grid(row=0, column=0, sticky="w")
             default_param = self._format_step_parameter(step, saved_action, saved_params, source_row)
             param_var = self.tk.StringVar(value=default_param)
             param_entry = self.ttk.Entry(choice_frame, textvariable=param_var, width=18)
-            param_entry.configure(state="normal" if default_param else "disabled")
+            param_entry.configure(state="normal" if default_param or (step == "encoding" and saved_action in {"ORDINAL", "MANUAL_MAP"})
+                                  else "disabled")
             param_entry.grid(row=0, column=1, sticky="w", padx=3)
             help_var = self.tk.StringVar(value=recommendation_help(
                 step, saved_action, detail_step.get("measure", ""), detail_step.get("threshold", "")))
@@ -947,6 +1055,10 @@ class App:
     def _step_action_changed(self, column: str, step: str, action_var, param_var, param_entry, row) -> None:
         default = self._format_step_parameter(step, action_var.get(), None, row)
         param_var.set(default)
+        if step == "encoding" and action_var.get() in {"ORDINAL", "MANUAL_MAP"} and not default:
+            param_entry.configure(state="normal")
+            param_entry.focus_set()
+            return
         param_entry.configure(state="normal" if default else "disabled")
         self._apply_step_value(column, step, action_var.get(), default, row["type"])
 
@@ -962,11 +1074,15 @@ class App:
             return f"{p.get('lower', 0.01)}, {p.get('upper', 0.99)}"
         if step == "encoding" and action == "ORDINAL":
             p = params if isinstance(params, dict) else {}
-            values = p.get("order", row.get("natural_order") or row.get("exemples", []))
+            values = p.get("order", row.get("natural_order") or [])
             return ", ".join(map(str, values))
         if step == "encoding" and action == "ONEHOT":
             p = params if isinstance(params, dict) else {}
             return str(p.get("rare_threshold", 0.01))
+        if step == "encoding" and action == "MANUAL_MAP":
+            if isinstance(params, dict) and "mapping" in params:
+                return json.dumps(params["mapping"], ensure_ascii=False)
+            return ""
         if step == "text" and action == "TFIDF_SVD":
             p = params if isinstance(params, dict) else {}
             return str(p.get("components", 4))
@@ -1161,7 +1277,8 @@ class App:
         if self.v_target.get() == NO_TARGET_LABEL:
             self.v_analysis_warning.set("analyse sans cible : relations, fuites et encodage supervisé indisponibles")
         else:
-            self.v_analysis_warning.set("Cible sélectionnée : relations et alertes de fuite estimées sur les données chargées.")
+            self.v_analysis_warning.set("Analyse descriptive du fichier entier. Pour choisir une configuration à évaluer, "
+                                        "analysez uniquement les données d’entraînement.")
 
     def _build_tab_params(self) -> None:
         ttk = self.ttk
@@ -1179,6 +1296,9 @@ class App:
             row=2, column=1, sticky="w", padx=6, pady=3)
         ttk.Label(box, text="Le préprocesseur est ajusté sur le train seulement (aucune fuite vers le test).",
                   foreground="#555").grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Label(box, text="Famille de modèles").grid(row=4, column=0, sticky="w")
+        ttk.Combobox(box, textvariable=self.v_model_family, state="readonly", width=23,
+                     values=list(MODEL_FAMILIES)).grid(row=4, column=1, sticky="w", padx=6, pady=3)
 
         opt = ttk.LabelFrame(self.tab_params, text="Nettoyage et transformations", padding=8)
         opt.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
@@ -1261,6 +1381,7 @@ class App:
 
         return Options(
             task=self.v_task.get(),
+            model_family=MODEL_FAMILIES[self.v_model_family.get()],
             test_size_pct=max(0, min(50, num(self.v_test, int, 20))),
             scaler_type=self.v_scaler.get(),
             outlier_method=self.v_outlier.get(),
@@ -1416,6 +1537,13 @@ class App:
 
     def _do_load_preprocessor(self, path: str) -> None:
         try:
+            _check_local_file(path, MAX_TABLE_BYTES)
+            if not self.messagebox.askyesno(
+                "Confiance requise",
+                "Un fichier joblib peut exécuter du code au chargement. "
+                "Confirmez que vous avez créé ce fichier ou que vous faites confiance à sa provenance.",
+            ):
+                return
             self.prep = AutoPreprocessor.load(path)
         except Exception as exc:  # noqa: BLE001
             self.messagebox.showerror("Chargement impossible", str(exc))

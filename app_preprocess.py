@@ -2133,11 +2133,11 @@ class App:
     def _do_load_preprocessor(self, path: str) -> None:
         try:
             _check_local_file(path, MAX_TABLE_BYTES)
-            if not self.messagebox.askyesno(
+            if self.messagebox.askyesno(
                 "Confiance requise",
                 "Un fichier joblib peut exécuter du code au chargement. "
                 "Confirmez que vous avez créé ce fichier ou que vous faites confiance à sa provenance.",
-            ):
+            ) is not True:
                 return
             self.prep = AutoPreprocessor.load(path)
         except Exception as exc:  # noqa: BLE001

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse, warnings
 # pyrefly: ignore[missing-import]
 import numpy as np, pandas as pd
+from scipy import sparse
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -20,9 +21,6 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from auto_preprocessor import AutoPreprocessor
-
-warnings.filterwarnings("ignore")
-
 
 def baseline(X: pd.DataFrame) -> ColumnTransformer:
     num = X.select_dtypes(include="number").columns.tolist()
@@ -39,12 +37,19 @@ def cv_scores(X, y, make_prep, model_fn, seed=0):
     for a, b in StratifiedKFold(5, shuffle=True, random_state=seed).split(X, y):
         p = make_prep(X.iloc[a])
         Xa, Xb = p.fit_transform(X.iloc[a], y[a]), p.transform(X.iloc[b])
-        Xa = np.nan_to_num(np.asarray(Xa.todense() if hasattr(Xa, "todense") else Xa, float))
-        Xb = np.nan_to_num(np.asarray(Xb.todense() if hasattr(Xb, "todense") else Xb, float))
+        Xa, Xb = (_finite_model_matrix(matrix) for matrix in (Xa, Xb))
         m = model_fn().fit(Xa, y[a])
         s = m.predict_proba(Xb)[:, 1]
         aucs.append(roc_auc_score(y[b], s)); aps.append(average_precision_score(y[b], s))
     return np.mean(aucs), np.std(aucs), np.mean(aps)
+
+
+def _finite_model_matrix(matrix):
+    if sparse.issparse(matrix):
+        matrix = matrix.astype(float, copy=True)
+        np.nan_to_num(matrix.data, copy=False)
+        return matrix
+    return np.nan_to_num(np.asarray(matrix, dtype=float))
 
 
 class _Auto:
@@ -60,6 +65,7 @@ class _Base:
 
 
 def main() -> None:
+    warnings.filterwarnings("ignore")
     ap = argparse.ArgumentParser()
     ap.add_argument("csv"); ap.add_argument("target"); ap.add_argument("--sep", default=None)
     a = ap.parse_args()

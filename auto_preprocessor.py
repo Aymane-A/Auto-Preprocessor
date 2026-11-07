@@ -24,10 +24,9 @@ import numpy as np
 # pyrefly: ignore[missing-import]
 import pandas as pd
 # pyrefly: ignore[missing-import]
-from scipy import stats
+from scipy import sparse, stats
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer, TfidfVectorizer
-from sklearn.feature_extraction import FeatureHasher
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction import FeatureHasher
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
@@ -53,8 +52,6 @@ from sklearn.preprocessing import (
 
 # Configuration du logger
 logger = logging.getLogger("AutoPreprocessor")
-TREE_FAMILIES = {"decision_tree", "random_forest", "gradient_boosting", "xgboost", "lightgbm"}
-MAX_DENSE_CELLS = 20_000_000
 if not logger.handlers:
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
@@ -64,6 +61,56 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+
+
+TREE_FAMILIES = {"decision_tree", "random_forest", "gradient_boosting", "xgboost", "lightgbm"}
+MAX_DENSE_CELLS = 20_000_000
+DEFAULT_MAX_DENSE_BYTES = MAX_DENSE_CELLS * np.dtype(np.float64).itemsize
+MAX_FEATURE_COLUMNS = 100_000
+
+
+def check_dense_allocation(rows: int, columns: int, dtype, max_bytes: int, operation: str) -> None:
+    """Reject an oversized dense allocation using its projected shape and dtype."""
+    if isinstance(max_bytes, (bool, np.bool_)) or not isinstance(max_bytes, (int, np.integer)) or max_bytes <= 0:
+        raise ValueError("max_dense_bytes doit être un entier strictement positif.")
+    cells = int(rows) * int(columns)
+    size = cells * np.dtype(dtype).itemsize
+    if cells > MAX_DENSE_CELLS or size > max_bytes:
+        raise ValueError(
+            f"{operation} trop volumineux pour une sortie dense "
+            f"({rows:,} × {columns:,}, {cells:,} cellules, {size:,} octets estimés). "
+            f"Limites : {MAX_DENSE_CELLS:,} cellules et {max_bytes:,} octets (max_dense_bytes). "
+            "Réduisez le nombre de lignes, de termes ou de colonnes encodées."
+        )
+
+
+def _check_feature_width(columns: int, operation: str) -> None:
+    if columns > MAX_FEATURE_COLUMNS:
+        raise ValueError(f"{operation} dépasse {MAX_FEATURE_COLUMNS:,} colonnes. Réduisez la taille du vocabulaire ou du hachage.")
+
+
+def _text_matrix_frame(matrix, index, names, sparse_output, budget):
+    if sparse_output:
+        # Preserve implicit zeros across pandas versions, including float64 columns.
+        matrix = matrix.tocsc()
+        return pd.DataFrame(
+            {name: pd.arrays.SparseArray.from_spmatrix(matrix[:, [i]]) for i, name in enumerate(names)},
+            index=index,
+        )
+    check_dense_allocation(*matrix.shape, matrix.dtype, budget, "Vectorisation de texte")
+    return pd.DataFrame(matrix.toarray(), index=index, columns=names)
+
+
+def _empty_text_column(index, name, sparse_output):
+    if sparse_output:
+        return pd.DataFrame({name: pd.arrays.SparseArray.from_spmatrix(sparse.csc_matrix((len(index), 1)))},
+                            index=index)
+    return pd.DataFrame({name: np.zeros(len(index))}, index=index)
+
+
+def _onehot_width(encoder) -> int:
+    dropped = encoder.drop_idx_
+    return sum(map(len, encoder.categories_)) - (sum(i is not None for i in dropped) if dropped is not None else 0)
 
 
 class FeatureType(str, Enum):
@@ -980,6 +1027,7 @@ class PreprocessConfig:
     model_family: Optional[str] = None
     preserve_rows: bool = False
     supervised_encoding: bool = True
+    max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES
 
 
 
@@ -1311,12 +1359,15 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
 
     def __init__(self, max_features: int = 15, svd_components: int = 4, random_state: int = 42,
                  column_components: Optional[Dict[str, int]] = None,
-                 column_modes: Optional[Dict[str, str]] = None):
+                 column_modes: Optional[Dict[str, str]] = None,
+                 max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES, sparse_output: bool = False):
         self.max_features = max_features
         self.svd_components = svd_components
         self.random_state = random_state
         self.column_components = column_components
         self.column_modes = column_modes
+        self.max_dense_bytes = max_dense_bytes
+        self.sparse_output = sparse_output
         self.columns_: List[str] = []
         self.vectorizers_: Dict[str, TfidfVectorizer] = {}
         self.svd_models_: Dict[str, Optional[TruncatedSVD]] = {}
@@ -1335,6 +1386,7 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
                 mode = "TFIDF_SVD"
             token_pattern = r"(?u)\b\w+\b"
             if mode == "HASH":
+                _check_feature_width(len(self.output_names_) + self.max_features, "Hachage de texte")
                 vec = HashingVectorizer(n_features=self.max_features, token_pattern=token_pattern,
                                         alternate_sign=False, norm=None)
                 self.vectorizers_[col] = vec
@@ -1360,21 +1412,35 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
             if components < 0:
                 raise ValueError(f"Nombre de composantes SVD négatif pour {col!r}.")
             if components > 0 and n_features > components:
+                _check_feature_width(len(self.output_names_) + components, "Sortie SVD texte")
                 svd = TruncatedSVD(n_components=components, random_state=self.random_state)
+                budget = getattr(self, "max_dense_bytes", DEFAULT_MAX_DENSE_BYTES)
+                rows, width = tfidf_mat.shape
+                check_dense_allocation(rows, components, np.float64, budget, f"SVD texte {col!r}")
+                check_dense_allocation(max(rows, width), components + svd.n_oversamples,
+                                       np.float64, budget, f"Espace de travail SVD texte {col!r}")
                 svd.fit(tfidf_mat)
                 self.svd_models_[col] = svd
-                col_names = [f"{col}_svd_{i}" for i in range(components)]
+                col_names = [f"{col}_svd_{i}" for i in range(svd.components_.shape[0])]
             else:
                 self.svd_models_[col] = None
+                _check_feature_width(len(self.output_names_) + n_features, "Vocabulaire texte")
                 feature_names = vec.get_feature_names_out()
                 prefix = "count" if mode == "COUNT" else "tfidf"
                 col_names = [f"{col}_{prefix}_{fn}" for fn in feature_names]
 
             self.output_names_.extend(col_names)
 
+        _check_feature_width(len(self.output_names_), "Schéma texte")
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        sparse_output = getattr(self, "sparse_output", False)
+        budget = getattr(self, "max_dense_bytes", DEFAULT_MAX_DENSE_BYTES)
+        _check_feature_width(len(self.output_names_), "Schéma texte")
+        dense_width = (sum(model.components_.shape[0] for model in self.svd_models_.values() if model is not None)
+                       if sparse_output else len(self.output_names_))
+        check_dense_allocation(len(X), dense_width, np.float64, budget, "Sortie texte")
         all_dfs = []
 
         for col in self.columns_:
@@ -1387,28 +1453,30 @@ class RobustTextTransformer(BaseEstimator, TransformerMixin):
             svd = self.svd_models_.get(col)
 
             if vec is None:
-                zero_df = pd.DataFrame(np.zeros((len(X), 1)), index=X.index, columns=[f"{col}_text_0"])
+                zero_df = _empty_text_column(X.index, f"{col}_text_0", sparse_output)
                 all_dfs.append(zero_df)
                 continue
 
-            tfidf_mat = vec.transform(text_series)
+            if len(X) == 0:
+                tfidf_mat = sparse.csr_matrix((0, getattr(vec, "n_features", len(getattr(vec, "vocabulary_", {})))))
+            else:
+                tfidf_mat = vec.transform(text_series)
             if tfidf_mat.shape[1] == 0:
-                zero_df = pd.DataFrame(np.zeros((len(X), 1)), index=X.index, columns=[f"{col}_text_0"])
+                zero_df = _empty_text_column(X.index, f"{col}_text_0", sparse_output)
                 all_dfs.append(zero_df)
                 continue
 
             if svd is not None:
-                reduced = svd.transform(tfidf_mat)
+                reduced = svd.transform(tfidf_mat) if len(X) else np.empty((0, svd.components_.shape[0]))
                 cols = [f"{col}_svd_{i}" for i in range(reduced.shape[1])]
                 df_out = pd.DataFrame(reduced, index=X.index, columns=cols)
             else:
-                dense = tfidf_mat.toarray()
                 if isinstance(vec, HashingVectorizer):
-                    cols = [f"{col}_hash_{i}" for i in range(dense.shape[1])]
+                    cols = [f"{col}_hash_{i}" for i in range(tfidf_mat.shape[1])]
                 else:
                     prefix = "count" if isinstance(vec, CountVectorizer) and not isinstance(vec, TfidfVectorizer) else "tfidf"
                     cols = [f"{col}_{prefix}_{fn}" for fn in vec.get_feature_names_out()]
-                df_out = pd.DataFrame(dense, index=X.index, columns=cols)
+                df_out = _text_matrix_frame(tfidf_mat, X.index, cols, sparse_output, budget)
 
             all_dfs.append(df_out)
 
@@ -1432,11 +1500,14 @@ class NgramTextTransformer(BaseEstimator, TransformerMixin):
     METHODS = ("TFIDF_NGRAMS", "COUNT_VECTORIZER", "HASH_TEXT")
 
     def __init__(self, methods: Optional[Dict[str, str]] = None, params: Optional[Dict[str, Dict[str, Any]]] = None,
-                 default_max_features: int = 15, default_n_features: int = 16):
+                 default_max_features: int = 15, default_n_features: int = 16,
+                 max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES, sparse_output: bool = False):
         self.methods = methods
         self.params = params
         self.default_max_features = default_max_features
         self.default_n_features = default_n_features
+        self.max_dense_bytes = max_dense_bytes
+        self.sparse_output = sparse_output
         self.vectorizers_: Dict[str, Any] = {}
         self.output_names_: Dict[str, List[str]] = {}
         self.columns_: List[str] = []
@@ -1467,6 +1538,7 @@ class NgramTextTransformer(BaseEstimator, TransformerMixin):
                 n_features = int(params.get("n_features", self.default_n_features))
                 if n_features < 1:
                     raise ValueError(f"n_features doit être ≥ 1 pour {col!r}.")
+                _check_feature_width(sum(map(len, self.output_names_.values())) + n_features, "Hachage de texte")
                 self.vectorizers_[col] = HashingVectorizer(n_features=n_features, ngram_range=ngram_range,
                                                            alternate_sign=False, norm="l2", token_pattern=r"(?u)\b\w+\b")
                 self.output_names_[col] = [f"{col}_texthash_{i}" for i in range(n_features)]
@@ -1482,6 +1554,7 @@ class NgramTextTransformer(BaseEstimator, TransformerMixin):
                 self.vectorizers_[col] = None
                 self.output_names_[col] = [f"{col}_text_0"]
                 continue
+            _check_feature_width(sum(map(len, self.output_names_.values())) + len(vec.vocabulary_), "Vocabulaire texte")
             prefix = "tfidf" if method == "TFIDF_NGRAMS" else "cnt"
             names, seen = [], set()
             for term in vec.get_feature_names_out():
@@ -1492,19 +1565,27 @@ class NgramTextTransformer(BaseEstimator, TransformerMixin):
                 names.append(name)
             self.vectorizers_[col] = vec
             self.output_names_[col] = names
+        _check_feature_width(sum(map(len, self.output_names_.values())), "Schéma texte")
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        sparse_output = getattr(self, "sparse_output", False)
+        budget = getattr(self, "max_dense_bytes", DEFAULT_MAX_DENSE_BYTES)
+        width = sum(map(len, self.output_names_.values()))
+        _check_feature_width(width, "Schéma texte")
+        if not sparse_output:
+            dtype = np.float64 if any(vec is None for vec in self.vectorizers_.values()) else np.float32
+            check_dense_allocation(len(X), width, dtype, budget, "Sortie texte avec n-grammes")
         frames = []
         for col in self.columns_:
             names = self.output_names_[col]
             text = X[col].fillna("").astype(str) if col in X.columns else pd.Series([""] * len(X), index=X.index)
             vec = self.vectorizers_.get(col)
             if vec is None:
-                frames.append(pd.DataFrame(np.zeros((len(X), 1)), index=X.index, columns=names))
+                frames.append(_empty_text_column(X.index, names[0], sparse_output))
                 continue
-            matrix = vec.transform(text).toarray().astype(np.float32)
-            frames.append(pd.DataFrame(matrix, index=X.index, columns=names))
+            matrix = vec.transform(text) if len(X) else sparse.csr_matrix((0, len(names)))
+            frames.append(_text_matrix_frame(matrix.astype(np.float32, copy=False), X.index, names, sparse_output, budget))
         return pd.concat(frames, axis=1) if frames else pd.DataFrame(index=X.index)
 
     def get_feature_names_out(self, input_features=None) -> np.ndarray:
@@ -2104,7 +2185,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
 
             # 3. Colonne dupliquée (exactement même contenu)
-            content_hash = hash(tuple(series.head(50).astype(object).fillna("__NA__")))
+            sample = series.head(50).astype(object)
+            content_hash = hash(tuple(sample.where(sample.notna(), "__NA__")))
             if content_hash in seen_contents:
                 dup_col = seen_contents[content_hash]
                 if series.equals(X[dup_col]):
@@ -2293,6 +2375,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     est = tree
                 else:
                     v = s.astype(str).to_numpy().reshape(-1, 1)
+                    if is_clf and len(counts) > 2:
+                        check_dense_allocation(len(y_d), len(counts), np.float64, self.config.max_dense_bytes,
+                                               "Diagnostic de fuite par encodage de cible")
                     est = make_pipeline(TargetEncoder(smooth="auto", cv=5, random_state=rs), tree)
                 score = float(cross_val_score(est, v, y_d, cv=cv, scoring=scoring).mean())
             except Exception as exc:  # petit effectif, classe rare, etc. : on ignore la colonne
@@ -3648,6 +3733,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 1. Pipeline Numérique
         if self.num_cols_:
+            check_dense_allocation(len(X_work), len(self.num_cols_), np.float64,
+                                   self.config.max_dense_bytes, "Ajustement numérique")
             X_num = X_work[self.num_cols_].replace([np.inf, -np.inf], np.nan)
 
             # Missing Indicator
@@ -3831,6 +3918,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 sparse_output=False,
             )
             self.ohe_encoder_.fit(X_low_grouped)
+            _check_feature_width(_onehot_width(self.ohe_encoder_), "Encodage One-Hot")
 
         # 5. Pipeline Catégoriel Haute Cardinalité
         if self.high_card_cols_:
@@ -3850,6 +3938,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 )
                 # fit_transform applique le cross-fitting interne (cv=5) : on garde la version
                 # "hors pli" du train, utilisée par fit_transform() pour éviter le surapprentissage.
+                target_width = len(self.high_card_cols_) * (distinct_targets if
+                    self.task_resolved_ == "classification" and distinct_targets > 2 else 1)
+                _check_feature_width(target_width, "Encodage de cible")
+                check_dense_allocation(len(X_work), target_width, np.float64,
+                                       self.config.max_dense_bytes, "Encodage de cible")
                 self._te_oof_ = self.target_cat_encoder_.fit_transform(
                     X_work[self.high_card_cols_].astype(str), y_arr
                 )
@@ -3908,6 +4001,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 n_components = int(params.get("n_components", 8))
                 if n_components < 1:
                     raise ValueError(f"n_components doit être ≥ 1 pour {col!r}.")
+                _check_feature_width(n_components, f"Hachage catégoriel {col!r}")
                 self.custom_encoders_[col] = {"method": method, "n_components": n_components}
 
         # 6. Pipeline Dates
@@ -3928,6 +4022,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 random_state=self.config.random_state,
                 column_components=text_components,
                 column_modes={col: self._override_value(col, "text")[0] for col in self.text_cols_},
+                max_dense_bytes=self.config.max_dense_bytes,
             )
             self.text_transformer_.fit(X_work[self.text_cols_])
 
@@ -3935,6 +4030,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             ngram_params = {c: (self.column_override_params_.get(c, {}).get("text") or {}) for c in self.ngram_text_cols_}
             self.ngram_text_transformer_ = NgramTextTransformer(
                 methods=dict(self.ngram_text_cols_), params={c: p for c, p in ngram_params.items() if isinstance(p, dict)},
+                max_dense_bytes=self.config.max_dense_bytes,
                 default_max_features=self.config.max_text_features)
             self.ngram_text_transformer_.fit(X_work[list(self.ngram_text_cols_)])
 
@@ -4010,8 +4106,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         return loo.astype(float)
 
     @staticmethod
-    def _apply_custom_encoder(col: str, state: Dict[str, Any], X_clean: pd.DataFrame) -> pd.DataFrame:
+    def _apply_custom_encoder(col: str, state: Dict[str, Any], X_clean: pd.DataFrame,
+                              max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES) -> pd.DataFrame:
         """Applique un encodage Count / Binary / Hash appris sur le train (modalités inconnues : 0)."""
+        width = state.get("n_components", state.get("n_bits", 1))
+        _check_feature_width(width, f"Encodage catégoriel {col!r}")
+        check_dense_allocation(len(X_clean), width, np.float64, max_dense_bytes, f"Encodage catégoriel {col!r}")
         values = X_clean[col].astype(str) if col in X_clean.columns else pd.Series(["__MISSING__"] * len(X_clean), index=X_clean.index)
         if state["method"] == "COUNT_ENCODE":
             return pd.DataFrame({f"{col}_count": values.map(state["counts"]).fillna(0).astype(float)}, index=X_clean.index)
@@ -4026,11 +4126,35 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             bits = {f"{col}_bin_{i}": ((codes >> i) & 1).astype(float) for i in range(state["n_bits"])}
             return pd.DataFrame(bits, index=X_clean.index)
         hasher = FeatureHasher(n_features=state["n_components"], input_type="string", alternate_sign=False)
-        matrix = hasher.transform([[f"{col}={v}"] for v in values]).toarray()
+        matrix = hasher.transform(([f"{col}={v}"] for v in values)).toarray()
         return pd.DataFrame(matrix, index=X_clean.index, columns=[f"{col}_hash_{i}" for i in range(state["n_components"])])
 
     def _transform_components(self, X_clean: pd.DataFrame) -> pd.DataFrame:
         """Applique les composants de transformation individuels et concatène le résultat."""
+        budget = self.config.max_dense_bytes
+        width = len(self.num_cols_) + len(self.binary_cols_) + len(self.ordinal_cols_)
+        if self.num_cols_ and self.missing_indicator_ is not None:
+            width += len(self.missing_indicator_.indicator_cols_)
+        if self.low_card_cols_ and self.ohe_encoder_ is not None:
+            width += _onehot_width(self.ohe_encoder_)
+        if self.high_card_cols_:
+            width += (len(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
+                      if self.target_cat_encoder_ is not None else len(self.high_card_cols_))
+        width += len(self.frequency_override_cols_)
+        for col, mode in getattr(self, "compact_category_modes_", {}).items():
+            if col not in self.columns_to_drop_:
+                width += (8 if mode == "HASH_ENCODE" else 1 if mode == "MANUAL_MAP"
+                          else max(1, len(self.binary_category_maps_[col]).bit_length()))
+        width += sum(state.get("n_components", state.get("n_bits", 1))
+                     for state in (self.custom_encoders_ or {}).values())
+        if self.date_cols_ and self.datetime_extractor_ is not None:
+            width += len(self.datetime_extractor_.output_feature_names_)
+        if self.text_cols_ and self.text_transformer_ is not None:
+            width += len(self.text_transformer_.output_names_)
+        if self.ngram_text_cols_ and self.ngram_text_transformer_ is not None:
+            width += sum(map(len, self.ngram_text_transformer_.output_names_.values()))
+        _check_feature_width(width, "Matrice transformée")
+        check_dense_allocation(len(X_clean), width, np.float64, budget, "Matrice transformée")
         X_clean = X_clean.copy()
         for col, value in self.categorical_imputers_.items():
             if col in X_clean.columns:
@@ -4105,8 +4229,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # 4. Catégorielles Basse Cardinalité (OHE)
         if self.low_card_cols_ and self.rare_grouper_ is not None and self.ohe_encoder_ is not None:
             ohe_cols = self.ohe_encoder_.get_feature_names_out(self.low_card_cols_)
-            if len(X_clean) * len(ohe_cols) > MAX_DENSE_CELLS:
-                raise ValueError("Encodage One-Hot trop volumineux. Réduisez la cardinalité ou choisissez un encodage compact.")
+            check_dense_allocation(len(X_clean), len(ohe_cols), self.ohe_encoder_.dtype, budget, "Encodage One-Hot")
             df_grouped = self.rare_grouper_.transform(X_clean[self.low_card_cols_])
             ohe_arr = self.ohe_encoder_.transform(df_grouped)
             df_ohe = pd.DataFrame(ohe_arr, index=X_clean.index, columns=ohe_cols)
@@ -4147,6 +4270,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
             values = X_clean[col].astype("string") if col in X_clean else pd.Series(pd.NA, index=X_clean.index)
             if mode == "HASH_ENCODE":
+                check_dense_allocation(len(X_clean), 8, np.float64, budget, f"Hachage catégoriel {col!r}")
                 hasher = FeatureHasher(n_features=8, input_type="string", alternate_sign=False)
                 encoded = hasher.transform(([value] if pd.notna(value) else [] for value in values)).toarray()
                 names = [f"{col}_hash_{i}" for i in range(8)]
@@ -4161,7 +4285,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 names = [f"{col}_bit_{i}" for i in range(width)]
             parts.append(pd.DataFrame(encoded, index=X_clean.index, columns=names))
         for col, state in (self.custom_encoders_ or {}).items():
-            parts.append(self._apply_custom_encoder(col, state, X_clean))
+            parts.append(self._apply_custom_encoder(col, state, X_clean, budget))
 
         # 6. Dates
         if self.date_cols_ and self.datetime_extractor_ is not None:
@@ -4176,8 +4300,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             parts.append(self.ngram_text_transformer_.transform(X_clean))
 
         if parts:
-            if len(X_clean) * sum(part.shape[1] for part in parts) > MAX_DENSE_CELLS:
-                raise ValueError("Matrice transformée trop volumineuse pour une sortie dense.")
+            check_dense_allocation(len(X_clean), sum(part.shape[1] for part in parts), np.float64,
+                                   budget, "Concaténation des features")
             result = pd.concat(parts, axis=1)
             if not result.columns.is_unique:
                 raise ValueError("Des noms de features générées se chevauchent. Renommez les colonnes d'entrée concernées.")
@@ -4209,6 +4333,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 2. Détection de colinéarité (|r| > correlation_threshold)
         if len(retained_after_var) >= max(2, self.config.min_features_for_collinearity) and len(X_curr) > 1:
+            width = len(retained_after_var)
+            check_dense_allocation(width, width, np.float64, self.config.max_dense_bytes, "Matrice de corrélation")
             corr_mat = X_curr.corr().abs()
             to_drop_collinear = set()
 
@@ -4304,6 +4430,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         X_trans = self._transform_components(X_clean)
 
         # Aligner strictement sur les colonnes retenues au fit
+        check_dense_allocation(len(X_clean), len(self.final_feature_names_), np.float64,
+                               self.config.max_dense_bytes, "Sortie finale")
         out_df = pd.DataFrame(index=X_clean.index)
         for col in self.final_feature_names_:
             if col in X_trans.columns:
@@ -4558,7 +4686,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
     @classmethod
     def load(cls, path: str) -> AutoPreprocessor:
-        """Charge un fichier joblib de confiance. Joblib peut exécuter du code.
+        """Charge uniquement un fichier joblib de confiance.
+
+        Joblib peut exécuter du code arbitraire pendant la désérialisation.
+        Ne jamais utiliser cette méthode pour un fichier non fiable ou un téléversement.
 
         Compatibilité ascendante (F2) : un fichier sauvegardé avant l'ajout de F2
         (sans attribut ``numeric_string_cols_``) se charge sans erreur avec un

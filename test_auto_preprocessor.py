@@ -7,12 +7,35 @@ Vérifie la robustesse, l'absence de fuite de données, la persistance et les ca
 import os
 import re
 import tempfile
+from copy import deepcopy
+from functools import lru_cache
 # pyrefly: ignore[missing-import]
 import numpy as np
 import pandas as pd
 # pyrefly: ignore[missing-import]
 import pytest
 from auto_preprocessor import AutoPreprocessor, PreprocessConfig, FeatureType
+
+
+DEMO_PATHS = ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv", "data/fraud_signal_demo.csv")
+
+
+@pytest.fixture(scope="module")
+def demo_analysis():
+    """Share deterministic analysis setup while isolating each test's inputs."""
+    from app_preprocess import read_table
+
+    @lru_cache(maxsize=None)
+    def analyze(path, target, identifier_threshold):
+        frame = read_table(path)
+        config = PreprocessConfig(verbose=0, identifier_unique_threshold=identifier_threshold)
+        return frame, AutoPreprocessor(config).analyze(frame, target=target)
+
+    def get_case(path, target=None, identifier_threshold=PreprocessConfig.identifier_unique_threshold):
+        frame, result = analyze(path, target, identifier_threshold)
+        return frame.copy(deep=True), deepcopy(result)
+
+    return get_case
 
 
 @pytest.fixture
@@ -487,27 +510,20 @@ def test_analyze_does_not_mutate_input():
     assert len(result.to_dataframe()) == 2
 
 
-def test_analysis_demo_recommendations():
-    from auto_preprocessor import AutoPreprocessor
-    from app_preprocess import read_table
-
-    prep = AutoPreprocessor()
-    churn = prep.analyze(read_table("data/churn_telecom_demo.csv")).to_dataframe().set_index("colonne")
+def test_analysis_demo_recommendations(demo_analysis):
+    churn = demo_analysis(DEMO_PATHS[0])[1].to_dataframe().set_index("colonne")
     assert churn.loc["facture_mensuelle", "type"] == "NUMERIC_CONTINUOUS"
-    fraud = prep.analyze(read_table("data/fraud_signal_demo.csv")).to_dataframe().set_index("colonne")
+    fraud = demo_analysis(DEMO_PATHS[2])[1].to_dataframe().set_index("colonne")
     assert fraud.loc["heure", "action"] == "DATE_FEATURES"
-    housing = prep.analyze(read_table("data/immobilier_demo.csv")).to_dataframe().set_index("colonne")
+    housing = demo_analysis(DEMO_PATHS[1])[1].to_dataframe().set_index("colonne")
     assert housing.loc["prix_dh", "action"] in {"LOG1P", "SQRT", "YEO_JOHNSON"}
 
 
 @pytest.mark.parametrize("path", ["data/churn_telecom_demo.csv", "data/immobilier_demo.csv", "data/fraud_signal_demo.csv"])
-def test_accept_analysis_recommendations_is_noop(path):
+def test_accept_analysis_recommendations_is_noop(path, demo_analysis):
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig, ColumnOverride
-    from app_preprocess import read_table
-
-    frame = read_table(path)
+    frame, analysis = demo_analysis(path)
     baseline = AutoPreprocessor(PreprocessConfig(verbose=0)).fit_transform(frame)
-    analysis = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
     overrides = {row["colonne"]: ColumnOverride(row["action"]) for row in analysis.columns}
     accepted = AutoPreprocessor(PreprocessConfig(verbose=0, column_overrides=overrides)).fit_transform(frame)
     pd.testing.assert_frame_equal(baseline, accepted)
@@ -616,12 +632,8 @@ def test_supported_categorical_missing_frequency_and_ordinal_overrides():
     assert list(ordinal["level"].head(3)) == [0.0, 1.0, 2.0]
 
 
-def test_identifier_name_is_dropped_and_explained():
-    from auto_preprocessor import AutoPreprocessor
-    from app_preprocess import read_table
-
-    frame = read_table("data/fraud_signal_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame).to_dataframe().set_index("colonne")
+def test_identifier_name_is_dropped_and_explained(demo_analysis):
+    result = demo_analysis(DEMO_PATHS[2])[1].to_dataframe().set_index("colonne")
     assert result.loc["client_id", "action"] == "DROP"
     assert "94.7%" in result.loc["client_id", "raison"]
     assert "90.0%" in result.loc["client_id", "raison"]
@@ -812,11 +824,10 @@ def test_analysis_cleaning_counts_and_prelaunch_summary():
     assert summary["user_columns"] == ["value"]
 
 
-def test_churn_target_relations_are_populated_for_every_feature():
-    from app_preprocess import build_analysis_table, read_table
+def test_churn_target_relations_are_populated_for_every_feature(demo_analysis):
+    from app_preprocess import build_analysis_table
 
-    frame = read_table("data/churn_telecom_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="churn")
+    _, result = demo_analysis(DEMO_PATHS[0], target="churn")
     table = result.to_dataframe()
     target_row = table.loc[table["colonne"] == "churn"].iloc[0]
     features = table.loc[table["colonne"] != "churn"]
@@ -907,11 +918,10 @@ def test_analysis_recommendations_explanations_and_csv_export(tmp_path):
     assert exported.loc[exported["Colonne"] == "amount", "Explication — Distribution"].notna().all()
 
 
-def test_dropped_column_detail_shows_only_keep_or_drop_stage():
-    from app_preprocess import build_analysis_detail, read_table
+def test_dropped_column_detail_shows_only_keep_or_drop_stage(demo_analysis):
+    from app_preprocess import build_analysis_detail
 
-    frame = read_table("data/fraud_signal_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    _, result = demo_analysis(DEMO_PATHS[2], target="is_fraud")
     detail = build_analysis_detail(result, "transaction_id", show_all=True)
     assert len(detail["rows"]) == 1
     assert detail["rows"][0]["etape_label"] == "Garder / Supprimer"
@@ -932,11 +942,10 @@ def test_empty_cleanup_steps_are_hidden_and_counted():
     assert hidden_cleaning.issubset({row["etape"] for row in expanded["rows"]})
 
 
-def test_visible_analysis_labels_do_not_expose_internal_identifiers():
-    from app_preprocess import build_analysis_detail, format_analysis_value, read_table
+def test_visible_analysis_labels_do_not_expose_internal_identifiers(demo_analysis):
+    from app_preprocess import build_analysis_detail, format_analysis_value
 
-    frame = read_table("data/fraud_signal_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+    _, result = demo_analysis(DEMO_PATHS[2], target="is_fraud")
     from app_preprocess import label_action, label_step
     texts = [format_analysis_value("type", "DROP_ID"), label_action("TO_NAN"),
              label_step("clean_missing_tokens")]
@@ -952,11 +961,10 @@ def test_visible_analysis_labels_do_not_expose_internal_identifiers():
     assert "aucune" in visible.lower()
 
 
-def test_display_explanation_does_not_repeat_proof_measure():
-    from app_preprocess import build_analysis_detail, read_table
+def test_display_explanation_does_not_repeat_proof_measure(demo_analysis):
+    from app_preprocess import build_analysis_detail
 
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
-        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    _, result = demo_analysis(DEMO_PATHS[2], target="is_fraud")
     for row in result.columns:
         detail = build_analysis_detail(result, row["colonne"], show_all=True)
         for item in detail["rows"]:
@@ -1002,13 +1010,11 @@ def test_tk_smoke_load_analyze_and_treeview_count():
             pass
 
 
-def test_target_provided_populates_relation_cible_for_all_features():
+def test_target_provided_populates_relation_cible_for_all_features(demo_analysis):
     """Test (a) : cible fournie -> relation_cible rempli pour toutes les features."""
-    from app_preprocess import build_analysis_table, read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import build_analysis_table
 
-    frame = read_table("data/churn_telecom_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="churn")
+    _, result = demo_analysis(DEMO_PATHS[0], target="churn")
     table = result.to_dataframe()
     target_row = table.loc[table["colonne"] == "churn"].iloc[0]
     features = table.loc[table["colonne"] != "churn"]
@@ -1033,12 +1039,11 @@ def test_target_provided_populates_relation_cible_for_all_features():
     assert display.loc["churn", "choix_final"] == "cible"
 
 
-def test_facture_mensuelle_stats_match_independent_pandas():
+def test_facture_mensuelle_stats_match_independent_pandas(demo_analysis):
     """Test (b) : facture_mensuelle : stats identiques à un calcul pandas indépendant."""
-    from app_preprocess import read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from auto_preprocessor import AutoPreprocessor
 
-    df = read_table("data/churn_telecom_demo.csv")
+    df, res = demo_analysis(DEMO_PATHS[0], target="churn")
     cleaned_vals = df["facture_mensuelle"].map(AutoPreprocessor._clean_numeric_str_value).dropna()
     expected_skew = float(cleaned_vals.skew())
     expected_min = float(cleaned_vals.min())
@@ -1048,8 +1053,6 @@ def test_facture_mensuelle_stats_match_independent_pandas():
     iqr = q3 - q1
     expected_outliers_pct = float(((cleaned_vals < q1 - 1.5 * iqr) | (cleaned_vals > q3 + 1.5 * iqr)).mean() * 100)
 
-    prep = AutoPreprocessor(PreprocessConfig(verbose=0))
-    res = prep.analyze(df, target="churn")
     row = next(r for r in res.columns if r["colonne"] == "facture_mensuelle")
 
     assert row["type"] == "NUMERIC_CONTINUOUS"
@@ -1060,10 +1063,9 @@ def test_facture_mensuelle_stats_match_independent_pandas():
     assert row["mean"] == pytest.approx(expected_mean, abs=1e-5)
 
 
-def test_analysis_formatting_no_nan_headers_and_sorting():
+def test_analysis_formatting_no_nan_headers_and_sorting(demo_analysis):
     """Test (c) : formatage : pas de 'nan', unités dans les en-têtes, tri correct."""
-    from app_preprocess import analysis_sort_key, build_analysis_table, format_analysis_value, read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import analysis_sort_key, build_analysis_table, format_analysis_value
 
     assert format_analysis_value("skew", np.nan) == "—"
     assert format_analysis_value("relation_cible", float("nan")) == "—"
@@ -1075,8 +1077,7 @@ def test_analysis_formatting_no_nan_headers_and_sorting():
     assert format_analysis_value("outliers_pct", 0.0) == "0.0%"
     assert format_analysis_value("skew", 1.23456) == "1.23"
 
-    df = read_table("data/churn_telecom_demo.csv")
-    res = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(df, target="churn")
+    _, res = demo_analysis(DEMO_PATHS[0], target="churn")
     table = build_analysis_table(res)
     for col in ["manquants_pct", "outliers_pct", "skew", "relation_cible", "confiance"]:
         if col in table.columns:
@@ -1117,14 +1118,11 @@ def test_three_confidence_levels_statistical_rules():
     assert analysis_small.columns[0]["confiance"] == "faible"
 
 
-def test_every_recommendation_step_separates_explanation_and_evidence():
+def test_every_recommendation_step_separates_explanation_and_evidence(demo_analysis):
     """Chaque recommandation expose séparément son explication et sa preuve."""
-    from app_preprocess import read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
     for path in ["data/churn_telecom_demo.csv", "data/immobilier_demo.csv"]:
-        df = read_table(path)
-        res = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(df)
+        _, res = demo_analysis(path)
         for row in res.columns:
             if row.get("est_cible"):
                 continue
@@ -1176,12 +1174,8 @@ def test_drop_evidence_uses_the_actual_configured_thresholds():
     assert "0.200" in analysis_recommendation_summary(leakage)["preuve"]
 
 
-def test_identifier_target_relations_are_hidden_and_other_methods_are_named():
-    from app_preprocess import read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
-
-    frame = read_table("data/fraud_signal_demo.csv")
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame, target="is_fraud")
+def test_identifier_target_relations_are_hidden_and_other_methods_are_named(demo_analysis):
+    _, result = demo_analysis(DEMO_PATHS[2], target="is_fraud")
     rows = {row["colonne"]: row for row in result.columns}
     for name in ("transaction_id", "client_id"):
         assert pd.isna(rows[name]["relation_cible"])
@@ -1207,15 +1201,13 @@ def test_analysis_main_table_order_and_parameter_field_visibility():
     assert step_parameter_visible("outliers", "WINSORIZE")
 
 
-def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos():
+def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos(demo_analysis):
     from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
-                                read_table, recommendation_step)
+                                recommendation_step)
 
     for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
                  "data/fraud_signal_demo.csv"):
-        frame = read_table(path)
-        config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
-        result = AutoPreprocessor(config).analyze(frame)
+        _, result = demo_analysis(path, identifier_threshold=.90)
         for row in result.columns:
             if row.get("est_cible"):
                 continue
@@ -1231,14 +1223,10 @@ def test_analysis_detail_proof_is_identical_to_primary_recommendation_for_demos(
                            ("encoding=", "distribution=", "type=", "dates="))
 
 
-def test_identifier_panel_proof_uses_unique_ratio_and_config_threshold():
+def test_identifier_panel_proof_uses_unique_ratio_and_config_threshold(demo_analysis):
     from app_preprocess import analysis_recommendation_summary, build_analysis_detail
-    from app_preprocess import read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
-    frame = read_table("data/fraud_signal_demo.csv")
-    config = PreprocessConfig(verbose=0, identifier_unique_threshold=.90)
-    result = AutoPreprocessor(config).analyze(frame)
+    _, result = demo_analysis(DEMO_PATHS[2], identifier_threshold=.90)
     row = next(item for item in result.columns if item["colonne"] == "client_id")
     summary = analysis_recommendation_summary(row)
     detail = build_analysis_detail(result, "client_id")
@@ -1248,13 +1236,12 @@ def test_identifier_panel_proof_uses_unique_ratio_and_config_threshold():
     assert "cardinalite" not in summary["preuve"].lower()
 
 
-def test_analysis_reasons_use_selected_stage_measure_and_date_details():
-    from app_preprocess import analysis_recommendation_summary, read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+def test_analysis_reasons_use_selected_stage_measure_and_date_details(demo_analysis):
+    from app_preprocess import analysis_recommendation_summary
 
     for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
                  "data/fraud_signal_demo.csv"):
-        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(path))
+        _, result = demo_analysis(path)
         for row in result.columns:
             if row.get("est_cible"):
                 continue
@@ -1268,10 +1255,9 @@ def test_analysis_reasons_use_selected_stage_measure_and_date_details():
                 assert "granularite" in reason.lower() or "granularité" in reason.lower()
 
 
-def test_phase1_source_encoding_and_demo_recommendation_text():
+def test_phase1_source_encoding_and_demo_recommendation_text(demo_analysis):
     from pathlib import Path
-    from app_preprocess import analysis_recommendation_summary, read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+    from app_preprocess import analysis_recommendation_summary
 
     mojibake = re.compile(r"(?:Ã[©-ÿ]|â€|Â\s)")
     for filename in ("auto_preprocessor.py", "app_preprocess.py"):
@@ -1282,7 +1268,7 @@ def test_phase1_source_encoding_and_demo_recommendation_text():
     technical = re.compile(r"\b(?:skew|cardinality|normality_p|p_cible|IQR|MAD)=\S", re.I)
     for filename in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
                      "data/fraud_signal_demo.csv"):
-        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(read_table(filename))
+        _, result = demo_analysis(filename)
         for row in result.columns:
             summary = analysis_recommendation_summary(row)
             for text in (summary["raison"], summary["preuve"], summary["explication"]):
@@ -1292,12 +1278,10 @@ def test_phase1_source_encoding_and_demo_recommendation_text():
                 assert not technical.search(text), (filename, row["colonne"], text)
 
 
-def test_phase1_montant_proof_and_csv_export_keep_unicode_and_p_value(tmp_path):
-    from app_preprocess import analysis_recommendation_summary, export_analysis_csv, read_table
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+def test_phase1_montant_proof_and_csv_export_keep_unicode_and_p_value(tmp_path, demo_analysis):
+    from app_preprocess import analysis_recommendation_summary, export_analysis_csv
 
-    result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(
-        read_table("data/fraud_signal_demo.csv"), target="is_fraud")
+    _, result = demo_analysis(DEMO_PATHS[2], target="is_fraud")
     row = next(item for item in result.columns if item["colonne"] == "montant")
     proof = analysis_recommendation_summary(row)["preuve"]
     assert "|skew| > 1" in proof
@@ -1339,15 +1323,13 @@ def test_phase1_time_only_features_do_not_depend_on_current_date(monkeypatch):
     pd.testing.assert_frame_equal(first, second)
 
 
-def test_phase2_recommendation_matches_report_action_on_demo_datasets():
-    from app_preprocess import read_table
+def test_phase2_recommendation_matches_report_action_on_demo_datasets(demo_analysis):
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
 
     for path in ("data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
                  "data/fraud_signal_demo.csv"):
-        frame = read_table(path)
+        frame, analysis = demo_analysis(path)
         prep = AutoPreprocessor(PreprocessConfig(verbose=0))
-        analysis = prep.analyze(frame)
         prep.fit_transform(frame)
         report = prep.report()["colonnes_detaillees"].set_index("Colonne")
         for row in analysis.columns:
@@ -1423,16 +1405,10 @@ def test_phase2_save_load_transform_keeps_overrides_and_unknown_category_behavio
     assert "choix utilisateur" in report.loc["amount", "Choix utilisateur"]
 
 
-def invariant_validation_frames():
+def additional_invariant_frames():
     """Jeux variés indépendants des noms de colonnes et règles métier particulières."""
     from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
-    from app_preprocess import read_table
-
-    frames = [read_table(path) for path in (
-        "data/churn_telecom_demo.csv", "data/immobilier_demo.csv",
-        "data/fraud_signal_demo.csv")]
-    frames.extend(loader(as_frame=True).data for loader in
-                  (load_wine, load_breast_cancer, load_diabetes))
+    frames = [loader(as_frame=True).data for loader in (load_wine, load_breast_cancer, load_diabetes)]
     for seed in (310, 311, 312):
         rng = np.random.default_rng(seed)
         size = 160
@@ -1459,6 +1435,20 @@ def invariant_validation_frames():
     return frames
 
 
+@pytest.fixture(scope="module")
+def shared_invariant_cases(demo_analysis):
+    cases = [demo_analysis(path) for path in DEMO_PATHS]
+    for frame in additional_invariant_frames():
+        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+        cases.append((frame, result))
+    return cases
+
+
+@pytest.fixture
+def invariant_cases(shared_invariant_cases):
+    return deepcopy(shared_invariant_cases)
+
+
 def _display_texts_for_analysis(frame):
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
     from app_preprocess import analysis_recommendation_summary
@@ -1473,15 +1463,14 @@ def _display_texts_for_analysis(frame):
     return result, texts
 
 
-def test_invariant_c1_recommendation_text_is_single_source_across_outputs(tmp_path):
+def test_invariant_c1_recommendation_text_is_single_source_across_outputs(tmp_path, invariant_cases):
     from auto_preprocessor import AutoPreprocessor, PreprocessConfig
     from app_preprocess import (analysis_recommendation_summary, build_analysis_detail,
                                 build_analysis_table, export_analysis_csv, report_text, RunResult)
 
     forbidden = re.compile(r"Ã[©-ÿ]|â€|Â\s|\w+=\S|[{}\[\]]|\bNone\b|\bnan\b|\bTO_NAN\b|\bDEFAULT_NA_VALUES\b|\bclean_\w+", re.I)
-    for frame in invariant_validation_frames():
+    for frame, result in invariant_cases:
         prep = AutoPreprocessor(PreprocessConfig(verbose=0))
-        result = prep.analyze(frame)
         prep.analysis_result_ = result
         fitted = prep.fit_transform(frame)
         report = prep.report()["colonnes_detaillees"].set_index("Colonne")
@@ -1517,12 +1506,8 @@ def test_invariant_c1_recommendation_text_is_single_source_across_outputs(tmp_pa
         assert exported["Raison"].tolist() == table["raison"].tolist()
 
 
-def test_invariant_c2_each_decision_exposes_its_evaluated_rule():
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
-
-    config = PreprocessConfig(verbose=0)
-    for frame in invariant_validation_frames():
-        result = AutoPreprocessor(config).analyze(frame)
+def test_invariant_c2_each_decision_exposes_its_evaluated_rule(invariant_cases):
+    for _, result in invariant_cases:
         for row in result.columns:
             for step, recommendation in row.get("steps", {}).items():
                 if len(recommendation.get("choices", [])) <= 1:
@@ -1537,13 +1522,11 @@ def test_invariant_c2_each_decision_exposes_its_evaluated_rule():
                 assert recommendation["rule"]["domain"] == row["type"]
 
 
-def test_invariant_c3_explanations_are_measure_consistent_and_step_free():
-    from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+def test_invariant_c3_explanations_are_measure_consistent_and_step_free(invariant_cases):
     from app_preprocess import LABELS
 
     step_labels = [label for label, _ in LABELS["steps"].values()]
-    for frame in invariant_validation_frames():
-        result = AutoPreprocessor(PreprocessConfig(verbose=0)).analyze(frame)
+    for _, result in invariant_cases:
         for row in result.columns:
             for step, recommendation in row.get("steps", {}).items():
                 explanation = recommendation.get("explanation", "")

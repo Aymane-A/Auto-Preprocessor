@@ -725,7 +725,18 @@ def _recommend_imputation(values: pd.Series, config: PreprocessConfig,
     return "MEDIAN", measure, "asymétrie, extrêmes ou normalité rejetée : médiane robuste"
 
 
-def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessConfig) -> Dict[str, Dict[str, Any]]:
+def _preview_yeo_johnson(frame: pd.DataFrame, preview: Optional[Dict[str, np.ndarray]]) -> np.ndarray:
+    """Reuse the fit for the same treated column within a single analysis."""
+    if preview is not None and "yeo-johnson" in preview:
+        return preview["yeo-johnson"]
+    result = PowerTransformer(method="yeo-johnson").fit_transform(frame)
+    if preview is not None:
+        preview["yeo-johnson"] = result
+    return result
+
+
+def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessConfig,
+                                        preview: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, Dict[str, Any]]:
     """Évalue toutes les transformations de distribution sur les valeurs réelles de la colonne.
 
     Pour chacune : validité mathématique (domaine), asymétrie obtenue et perte d'information.
@@ -758,7 +769,7 @@ def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessCon
     add("CBRT", True, "défini sur tous les réels", lambda: np.cbrt(x))
     add("BOX_COX", lo > 0, "valeurs strictement positives requises" if lo <= 0 else "valeurs > 0",
         lambda: PowerTransformer(method="box-cox").fit_transform(frame))
-    add("YEO_JOHNSON", True, "défini sur tous les réels", lambda: PowerTransformer(method="yeo-johnson").fit_transform(frame))
+    add("YEO_JOHNSON", True, "défini sur tous les réels", lambda: _preview_yeo_johnson(frame, preview))
     add("QUANTILE", len(x) >= 10, "au moins 10 observations requises" if len(x) < 10 else "≥ 10 observations",
         lambda: QuantileTransformer(n_quantiles=n_q, output_distribution="normal", random_state=config.random_state).fit_transform(frame),
         "écrase les distances entre valeurs (seul l'ordre est conservé)")
@@ -768,7 +779,8 @@ def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessCon
     return result
 
 
-def _recommend_distribution(values: pd.Series, config: PreprocessConfig) -> Tuple[str, str, str]:
+def _recommend_distribution(values: pd.Series, config: PreprocessConfig,
+                            preview: Optional[Dict[str, np.ndarray]] = None) -> Tuple[str, str, str]:
     """Choisit NONE / SQRT / LOG1P / YEO_JOHNSON en comparant l'asymétrie obtenue après chaque transformation.
 
     ``values`` doit déjà avoir subi le traitement des extrêmes. Sous le seuil d'asymétrie : NONE. Sinon, les
@@ -791,7 +803,7 @@ def _recommend_distribution(values: pd.Series, config: PreprocessConfig) -> Tupl
         scores["SQRT"] = abs(float(stats.skew(np.sqrt(x))))
         scores["LOG1P"] = abs(float(stats.skew(np.log1p(x))))
     try:
-        scores["YEO_JOHNSON"] = abs(float(stats.skew(PowerTransformer(method="yeo-johnson").fit_transform(x.to_frame()).ravel())))
+        scores["YEO_JOHNSON"] = abs(float(stats.skew(_preview_yeo_johnson(x.to_frame(), preview).ravel())))
     except Exception:
         pass
     if not scores:
@@ -2771,7 +2783,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             nonnull = s.dropna()
             nunique = int(nonnull.nunique())
             missing = float(s.isna().mean()) if len(s) else 0.0
-            examples = nonnull.astype(str).head(5).tolist()
+            examples = nonnull.head(5).astype(str).tolist()
             text_values = raw_s.dropna().astype(str).str.strip()
             false_missing = int(text_values.str.lower().isin(DEFAULT_NA_VALUES).sum())
             normalized_values = text_values.str.casefold()
@@ -2782,11 +2794,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             else:
                 variant_count = 0
             rule_recs: Dict[str, Tuple[str, str, str]] = {}
+            distribution_preview: Dict[str, np.ndarray] = {}
             if kind_name.startswith("NUMERIC"):
                 outlier_rule = _recommend_outliers(s, self.config)
                 treated_values = _treat_outliers(s, outlier_rule[0], self.config)
                 rule_recs = {"outliers": outlier_rule,
-                             "distribution": _recommend_distribution(treated_values, self.config),
+                             "distribution": _recommend_distribution(treated_values, self.config, distribution_preview),
                              "missing": _recommend_imputation(
                                  s, self.config, clean[[c for c in prep.num_cols_ if c != clean_name and c in clean.columns]])}
             action, confidence = Action.ONEHOT, "moyenne"
@@ -3004,7 +3017,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 step_recs["distribution"] = rec(dist_action if dist_action != "NONE" else "NONE",
                     f"{dist_measure}; {normality_text}", dist_limit, dist_text,
                     ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT", "CBRT", "QUANTILE", "RANK"])
-                step_recs["distribution"]["evaluations"] = _evaluate_distribution_alternatives(treated_values, self.config)
+                step_recs["distribution"]["evaluations"] = _evaluate_distribution_alternatives(
+                    treated_values, self.config, distribution_preview)
             else:
                 step_recs["distribution"] = rec("AUTO", "colonne non numérique", "aucun", distribution_explanation,
                     ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT"])
@@ -3187,14 +3201,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     "un indicateur de manquant est recommandé."
                 )
             cleanup_total = false_missing + variant_count
-            if pd.api.types.is_object_dtype(raw_s) or pd.api.types.is_string_dtype(raw_s):
-                parsed_numeric = raw_s.dropna().map(self._clean_numeric_str_value)
-                numeric_text_count = int(parsed_numeric.notna().sum()) if len(parsed_numeric) else 0
-                numeric_text_ratio = numeric_text_count / max(len(nonnull), 1)
-                if numeric_text_ratio >= self.config.numeric_string_threshold:
-                    cleanup_total += numeric_text_count
-            else:
-                numeric_text_count = 0
+            numeric_text_count = int(numeric_converted.count())
+            numeric_text_ratio = numeric_text_count / max(len(nonnull), 1)
+            if numeric_text_ratio >= self.config.numeric_string_threshold:
+                cleanup_total += numeric_text_count
             date_format_count = 0
             if kind_name == "DATETIME":
                 patterns = text_values.map(lambda value: (
@@ -4521,6 +4531,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             X_trans = self.transform(X_raw)
             if len(X_trans) != len(y_raw):
                 y_raw = y_raw.iloc[np.flatnonzero(self._last_keep_positions_)]
+            if self.target_col_ is not None:
+                # fit_transform_xy cleaned the target before fitting its encoder.
+                y_raw = self._clean_string_and_na(y_raw.to_frame(name=self.target_col_))[self.target_col_]
             y_trans = self.transform_target(y_raw)
             return X_trans, y_trans
         else:

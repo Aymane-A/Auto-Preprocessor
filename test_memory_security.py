@@ -1,5 +1,6 @@
 import warnings
 from unittest.mock import Mock
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ import pytest
 from scipy import sparse
 
 import auto_preprocessor as ap
+import app_preprocess as gui
 from app_preprocess import App
 from signal_check import _finite_model_matrix
 
@@ -183,3 +185,78 @@ def test_trusted_model_loads_only_after_prompt(tmp_path, monkeypatch):
     app.messagebox.showerror.assert_not_called()
     app._set_status.assert_called_once()
     pd.testing.assert_frame_equal(app.prep.transform(frame), prep.transform(frame))
+
+
+def test_file_size_and_local_path_checks_precede_parsing(tmp_path, monkeypatch):
+    path = tmp_path / "table with spaces.csv"
+    path.write_text("number,label\n1,alpha\n", encoding="utf-8")
+    assert gui.read_table(path).iloc[0].tolist() == [1, "alpha"]
+    for invalid in (tmp_path, tmp_path / "missing.csv", "https://example.invalid/table.csv"):
+        with pytest.raises(ValueError, match="fichier local ordinaire"):
+            gui.read_table(invalid)
+    monkeypatch.setattr(gui, "MAX_TABLE_BYTES", path.stat().st_size - 1)
+    parser = Mock(side_effect=AssertionError("Oversized input reached the CSV parser"))
+    monkeypatch.setattr(gui.pd, "read_csv", parser)
+    with pytest.raises(ValueError, match="Fichier trop volumineux"):
+        gui.read_table(path)
+    parser.assert_not_called()
+
+
+def test_choices_size_limit_precedes_json_parsing(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.json"
+    path.write_bytes(b" " * 65)
+    monkeypatch.setattr(gui, "MAX_CHOICES_BYTES", 64)
+    parser = Mock(side_effect=AssertionError("Oversized choices reached the JSON parser"))
+    monkeypatch.setattr(gui.json, "load", parser)
+    with pytest.raises(ValueError, match="Fichier trop volumineux"):
+        gui.import_user_choices(ap.AnalysisResult([]), path)
+    parser.assert_not_called()
+
+
+def test_excel_archive_limit_precedes_workbook_parsing(tmp_path, monkeypatch):
+    frame = pd.DataFrame({"number": [1, 2]})
+    workbook = tmp_path / "workbook with spaces.xlsx"
+    frame.to_excel(workbook, engine="openpyxl", index=False)
+    pd.testing.assert_frame_equal(gui.read_table(workbook), frame)
+    expanded = tmp_path / "expanded.xlsx"
+    with ZipFile(expanded, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", b"x" * 2_048)
+    monkeypatch.setattr(gui, "MAX_EXPANDED_EXCEL_BYTES", 1_024)
+    parser = Mock(side_effect=AssertionError("Oversized archive reached the Excel parser"))
+    monkeypatch.setattr(gui.pd, "read_excel", parser)
+    with pytest.raises(ValueError, match="après décompression"):
+        gui.read_table(expanded)
+    parser.assert_not_called()
+
+
+def test_empty_dataset_has_an_empty_fitted_schema():
+    frame = pd.DataFrame({"measurement": pd.Series(dtype=float)})
+    prep = ap.AutoPreprocessor(ap.PreprocessConfig(verbose=0))
+    assert prep.analyze(frame).columns[0]["profil"]["effectif"] == 0
+    result = prep.fit_transform(frame)
+    assert result.shape == (0, 0)
+    assert result.index.equals(frame.index)
+    assert prep.get_feature_names_out().size == 0
+
+
+def test_large_categorical_vocabulary_keeps_a_bounded_schema():
+    train = pd.DataFrame({"label": [f"category_{i}" for i in range(1_024)] * 2})
+    config = ap.PreprocessConfig(verbose=0, preserve_rows=True, column_overrides={
+        "label": {"type": "FORCE_CATEGORICAL", "encoding": ("HASH_ENCODE", {"n_components": 32})}})
+    prep = ap.AutoPreprocessor(config)
+    fitted = prep.fit_transform(train)
+    new = prep.transform(pd.DataFrame({"label": ["unseen", "category_1023"]}, index=[5, 5]))
+    assert fitted.shape == (2_048, 32)
+    assert new.columns.equals(fitted.columns)
+    assert new.index.tolist() == [5, 5]
+    assert np.isfinite(new.to_numpy()).all()
+
+
+def test_holdout_uses_training_target_normalization_and_retains_unknown_labels():
+    train = pd.DataFrame({"value": [2., 4., 6., 8.], "target": ["Non", "Oui", "Non", "Oui"]})
+    holdout = pd.DataFrame({"value": [3., 5., 7.], "label": [" NON ", "Oui", "other"]}, index=[9, 9, 3])
+    prep = ap.AutoPreprocessor(ap.PreprocessConfig(verbose=0), task="classification")
+    prep.fit_transform_xy(train, "target")
+    X, y = prep.transform_xy(holdout, "label")
+    assert X.index.equals(holdout.index)
+    assert y.tolist() == [0, 1, -1]

@@ -77,6 +77,7 @@ def numerical_comparison(values, random_state):
     if values.empty:
         return {}
     sample = values.sample(5000, random_state=random_state) if len(values) > 5000 else values
+    sample_skew, sample_variance, sample_unique = float(sample.skew()), float(sample.var()), sample.nunique()
     results = {}
     for action in DISTRIBUTIONS[1:]:
         try:
@@ -86,12 +87,13 @@ def numerical_comparison(values, random_state):
             else:
                 fitted = fit_distribution(sample, action, random_state)
                 transformed = pd.Series(apply_distribution(sample, fitted, action))
+            transformed_unique = transformed.nunique()
             results[action] = {
-                "applicable": True, "effectif": len(sample), "asymetrie_avant": float(sample.skew()),
-                "asymetrie_apres": float(transformed.skew()), "variance_avant": float(sample.var()),
+                "applicable": True, "effectif": len(sample), "asymetrie_avant": sample_skew,
+                "asymetrie_apres": float(transformed.skew()), "variance_avant": sample_variance,
                 "variance_apres": float(transformed.var()),
-                "perte_valeurs_distinctes": max(0, sample.nunique() - transformed.nunique()),
-                "resultat_constant": transformed.nunique() == 1,
+                "perte_valeurs_distinctes": max(0, sample_unique - transformed_unique),
+                "resultat_constant": transformed_unique == 1,
             }
         except (ValueError, FloatingPointError, OverflowError) as exc:
             results[action] = {"applicable": False, "avertissement": str(exc)}
@@ -123,22 +125,25 @@ def apply_outlier_plan(values, action, bounds, median):
 def numerical_cleaning_comparison(values, lower, upper, multiplier):
     if values.empty:
         return {}, {}
+    variance, skew, unique = float(values.var()), float(values.skew()), values.nunique()
+    median = values.median()
     outliers = {}
     for action in OUTLIER_ACTIONS:
         bounds = outlier_plan(values, action, lower, upper, multiplier)
-        transformed = apply_outlier_plan(values, action, bounds, values.median())
+        transformed = apply_outlier_plan(values, action, bounds, median)
         outliers[action] = {
             "bornes": bounds, "pct_modifie": float((values != transformed).mean() * 100),
-            "variance_avant": float(values.var()), "variance_apres": float(transformed.var()),
-            "asymetrie_avant": float(values.skew()), "asymetrie_apres": float(transformed.skew()),
-            "perte_valeurs_distinctes": max(0, values.nunique() - transformed.nunique()),
+            "variance_avant": variance, "variance_apres": float(transformed.var()),
+            "asymetrie_avant": skew, "asymetrie_apres": float(transformed.skew()),
+            "perte_valeurs_distinctes": max(0, unique - transformed.nunique()),
         }
     scalers = {}
+    frame = values.to_frame()
     for action, scaler in SCALERS.items():
-        transformed = pd.Series(scaler().fit_transform(values.to_frame()).ravel())
+        transformed = pd.Series(scaler().fit_transform(frame).ravel())
         scalers[action] = {
             "min_apres": float(transformed.min()), "max_apres": float(transformed.max()),
-            "variance_avant": float(values.var()), "variance_apres": float(transformed.var()),
+            "variance_avant": variance, "variance_apres": float(transformed.var()),
         }
     return outliers, scalers
 

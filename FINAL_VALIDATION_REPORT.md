@@ -126,3 +126,43 @@ The Excel ZIP guard streams actual decompressed bytes, checks a 1,000:1 per-entr
 The full run with warnings enabled collected **215 tests**. **215 passed, 0 failed, 0 skipped and 0 warnings**, in **74.13 s**. The strict hardening subset passed 10 tests with FutureWarnings treated as errors on scikit-learn 1.9.1. The three encoder regressions also passed under the same warning policy on 1.8.0. Validation used Windows x64, Python 3.13.15, pytest 8.0.0, scikit-learn 1.9.1, pandas 3.0.6, NumPy 2.5.3, SciPy 1.18.1, joblib 1.6.0, PyArrow 26.0.1 and openpyxl 3.1.5.
 
 The subprocess is a resource limit, not a security sandbox. It has filesystem and network access, and the parent deserializes results with pickle. Handle untrusted inputs in a separately restricted environment. Direct `AutoPreprocessor.load()` invokes joblib without GUI confirmation and is for trusted files only. The 1 GiB default worker limit remains unvalidated on a 100 MB CSV. The earlier stress runs used 1.5 GiB and 2 GiB.
+
+## Web application
+
+AutoPrépa a été exécuté sous Windows avec Python 3.13.15 et Node.js 24.21.0. FastAPI servait le build React sur `127.0.0.1:8000`. Les traitements utilisaient le moteur AutoPreprocessor et l’isolation de processus du projet.
+
+### Démonstrations sur le serveur local
+
+| Jeu de données | Cible | Entrée | Train exporté | Test exporté | Vérification |
+|---|---|---:|---:|---:|---|
+| `fraud_signal_demo.csv` | `is_fraud` | 1 000 × 14 | 800 × 50 | 200 × 50 | Playwright sur Edge Chromium, avec les quatre téléchargements |
+| `churn_telecom_demo.csv` | `churn` | 3 015 × 12 | 2 412 × 34 | 603 × 34 | Requêtes HTTP réelles, contrôles du schéma et ouverture du classeur |
+
+La démonstration fraude a conservé `transaction_id` brut et appliqué une mise à l’échelle MinMax à `montant`. La démonstration churn a conservé `id_client` brut et choisi l’encodage par effectif pour `contrat`. Les tests API comparent la colonne « Transformation appliquée » du classeur au rapport JSON et à `AutoPreprocessor.report()` pour les features gérées par le moteur. Le contrôle de fuite injecte un décalage dans le test et vérifie que la moyenne du scaler correspond au train et que la cible reste alignée dans les deux exports.
+
+Les captures ont été prises à 1 440 px de largeur sur les quatre étapes et vérifiées visuellement.
+
+- [Import et configuration](docs/web-validation/01-import.png)
+- [Exploration des données](docs/web-validation/02-eda.png)
+- [Prétraitement et comparaison](docs/web-validation/03-pretraitement.png)
+- [Exécution et export](docs/web-validation/04-execution.png)
+
+### Test de charge
+
+`web_smoke.py --dataset large` a généré un CSV déterministe de **285 000 lignes × 31 colonnes numériques**, avec **2 673 positifs (0,938 %)**. Le fichier pesait **159 029 805 octets (151,66 Mio)**. Le serveur a utilisé `AUTOPREP_MAX_TABLE_MB=200`, `AUTOPREP_WORKER_MB=2048` et `AUTOPREP_TIMEOUT_SECONDS=600`.
+
+| Opération | Temps HTTP | Temps du worker | Pic RSS du worker |
+|---|---:|---:|---:|
+| Import et aperçu | 10,70 s | 9,566 s | 561 352 704 octets (535,35 Mio) |
+| Configuration de la cible | 9,63 s | — | — |
+| Ajustement, transformation et génération des exports | 379,01 s | 378,871 s | 776 323 072 octets (740,36 Mio) |
+
+Le train exporté mesurait **228 000 × 31** et le test **57 000 × 31**. Le rapport JSON et le classeur ont été téléchargés et le nombre de lignes de la feuille `Features` a été contrôlé avec openpyxl. Les CSV volumineux ont été générés côté serveur. Les trois téléchargements CSV ont été vérifiés sur les deux jeux de démonstration. Le RSS mesure le processus isolé, et d’autres validations tournaient sur la même machine pendant une partie de la mesure.
+
+### Tests automatisés et compatibilité
+
+- `python -m pytest -ra` a collecté **221 tests**. **221 réussis, 0 échec, 0 ignoré, 8 avertissements**, en **268,01 s**. Les avertissements viennent des interfaces dépréciées de Starlette et HTTPX. Le lancement utilisait scikit-learn 1.9.1, joblib 1.6.0 et PyArrow 26.0.1.
+- `npm run build` a compilé TypeScript et construit l’interface avec Vite 7.3.7. Vite a signalé un bundle JavaScript minifié de 622,98 kB.
+- `npm test` a réussi **4 tests sur 4** avec Vitest 4.1.12. `npm audit` a signalé zéro vulnérabilité.
+- Le contrôle Playwright à 390 px a validé l’import, la configuration non supervisée et l’EDA sans débordement horizontal de la page.
+- La fenêtre Tkinter a été initialisée et fermée avec succès. La compilation des nouveaux modules Python et `git diff --check` ont également réussi.

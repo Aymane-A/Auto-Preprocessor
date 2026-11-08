@@ -750,3 +750,90 @@ Un agent qui écrit du code sans écran ne voit pas l'interface : toujours ouvri
 ### Remarque
 
 Les corrections plus anciennes (détection de fuite par colonne avec règle d'écart, target encoding out-of-fold, désactivation de l'encodage des entiers discrets et de `"none"` comme faux manquant suite au cas credit_g) ont été faites en dialogue à partir des résultats réels ; elles sont déjà intégrées dans le code livré. `ablation_credit_g.py` est produit par le prompt de l'étape 3.
+
+## Application web locale · React et FastAPI
+
+L’atelier **AutoPrépa** propose quatre étapes. Importez un tableau, configurez la cible ou le mode sans cible, explorez les statistiques, puis comparez les traitements avant d’exporter les résultats. L’application Tkinter se lance toujours avec `python app_preprocess.py`.
+
+### Installation et lancement
+
+Exécutez les commandes depuis la racine du projet. Python et Node.js 20.19+ ou 22.12+ sont requis.
+
+```powershell
+python -m pip install -r requirements-web.txt
+Set-Location frontend
+npm install
+npm run build
+Set-Location ..
+python serve.py
+```
+
+Ouvrez [AutoPrépa](http://127.0.0.1:8000). Pour développer l’interface, laissez `python serve.py` tourner et lancez `npm run dev` dans `frontend` depuis un second terminal. Ouvrez alors [Vite](http://localhost:5173).
+
+Les formats importés sont CSV, TSV, TXT, XLSX, XLS, JSON et Parquet. Le classeur de rapport est produit au format XLSX. Le CSV complet concatène le train puis le test. En mode supervisé, l’export contient aussi la cible alignée sur les lignes retenues.
+
+### API locale
+
+| Méthode et route | Fonction |
+|---|---|
+| `POST /api/upload` | Import multipart via le champ `file`, schéma, aperçu et identifiant de session |
+| `POST /api/config` | Mode `supervised` ou `unsupervised`, cible éventuelle et tâche |
+| `GET /api/eda/{session_id}` | Statistiques, doublons, extrêmes, matrices et relations avec la cible |
+| `GET /api/eda/{session_id}/feature/{column}` | Histogramme ou modalités, boîte à moustaches et bornes |
+| `POST /api/analyze` | Recommandations et preuves issues d’AutoPreprocessor |
+| `POST /api/preview` | Comparaison de la colonne pour le choix proposé |
+| `POST /api/preprocess` | Ajustement sur le train, transformation du test, génération des exports |
+| `GET /api/report/{session_id}` | Rapport JSON par feature et rapport du moteur |
+| `GET /api/download/{session_id}/{train|test|full|report_xlsx}` | CSV ou classeur Excel |
+
+Les requêtes JSON POST incluent `session_id`. Les choix sont indexés par nom de colonne. `recommended` suit le moteur, `none` conserve les valeurs brutes et les autres identifiants sont ceux renvoyés par `/api/analyze`. Les colonnes laissées brutes sont réintégrées par identifiant de ligne et peuvent contenir du texte ou des cellules manquantes. En présence de ces colonnes, les doublons sont conservés par défaut pour éviter d’éliminer des lignes qui diffèrent sur une valeur brute.
+
+L’EDA utilise au plus 40 colonnes numériques pour Pearson et 12 colonnes catégorielles pour le V de Cramér, dans l’ordre du fichier. Le V de Cramér et les relations à la cible utilisent au plus 20 000 lignes échantillonnées de façon déterministe. L’aperçu de transformation est un diagnostic par feature, ajusté sur un échantillon d’aperçu. Les décisions finales et les paramètres d’export sont appris sur le train, puis appliqués au test.
+
+### Architecture et limites
+
+```text
+Navigateur React + Recharts
+    │ HTTP, multipart et JSON
+FastAPI sur 127.0.0.1:8000
+    ├── session aléatoire → dossier temporaire privé → téléchargement
+    └── run_isolated → read_table / AutoPreprocessor / run_preprocessing
+                     → statistiques, aperçus, CSV, classeur openpyxl
+```
+
+Le service écoute sur la boucle locale. CORS autorise l’origine de développement `http://localhost:5173`. Les dossiers de session expirent après 30 minutes d’inactivité. Les fichiers sont référencés par des identifiants générés côté serveur. Le service web n’expose aucun chargement joblib. Les chaînes de rapport qui commencent par `=`, `+`, `-` ou `@` sont protégées dans le classeur Excel. Les processus isolés limitent le temps et la mémoire, sans constituer un bac à sable de sécurité.
+
+| Variable d’environnement | Défaut | Effet |
+|---|---:|---|
+| `AUTOPREP_MAX_TABLE_MB` | 100 | Limite du fichier importé, en Mio |
+| `AUTOPREP_WORKER_MB` | 1024 | Budget mémoire par processus isolé, en Mio |
+| `AUTOPREP_TIMEOUT_SECONDS` | 120 | Délai maximal d’une opération isolée, en secondes |
+
+Les fichiers de fraude réels peuvent dépasser 100 Mio. Ajustez les budgets avant de démarrer le serveur. Les protections de lecture Excel et Parquet s’appliquent également aux formats compressés.
+
+### Démonstrations et tests
+
+Dans l’interface, importez `data/fraud_signal_demo.csv` avec la cible `is_fraud`, puis `data/churn_telecom_demo.csv` avec la cible `churn`. Pour reproduire les vérifications HTTP, laissez le serveur en cours d’exécution et lancez les commandes suivantes.
+
+```powershell
+python web_smoke.py --dataset fraud
+python web_smoke.py --dataset churn
+```
+
+Pour reproduire le test de charge, démarrez le serveur avec les budgets suivants, puis lancez `python web_smoke.py --dataset large` dans un autre terminal.
+
+```powershell
+$env:AUTOPREP_MAX_TABLE_MB = "200"
+$env:AUTOPREP_WORKER_MB = "2048"
+$env:AUTOPREP_TIMEOUT_SECONDS = "600"
+python serve.py
+```
+
+```powershell
+python -m pytest -ra
+Set-Location frontend
+npm test
+npm run build
+```
+
+Les mesures et captures figurent dans [le rapport de validation](FINAL_VALIDATION_REPORT.md#web-application).

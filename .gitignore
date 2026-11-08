@@ -7,3 +7,5 @@ dist/
 resultats/
 *.joblib
 .venv/
+.webdeps/
+frontend/node_modules/

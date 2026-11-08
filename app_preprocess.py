@@ -131,9 +131,10 @@ def _check_excel_archive(path) -> None:
 
 
 def read_table(path: str, *, max_parquet_rows: int = MAX_PARQUET_ROWS,
-               max_parquet_bytes: int = MAX_UNCOMPRESSED_PARQUET_BYTES) -> pd.DataFrame:
+               max_parquet_bytes: int = MAX_UNCOMPRESSED_PARQUET_BYTES,
+               max_table_bytes: Optional[int] = None) -> pd.DataFrame:
     """Lit un fichier tabulaire : CSV/TXT/TSV (séparateur et encodage détectés), Excel, JSON, Parquet."""
-    _check_local_file(path, MAX_TABLE_BYTES)
+    _check_local_file(path, MAX_TABLE_BYTES if max_table_bytes is None else max_table_bytes)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xlsm", ".xls"):
         try:

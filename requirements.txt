@@ -1,9 +1,11 @@
 numpy
 pandas
-scikit-learn>=1.4.2
+scikit-learn>=1.4.2,<1.11
+packaging
 scipy
 joblib>=1.6.0
 psutil
 openpyxl
+pyarrow
 matplotlib
 pytest

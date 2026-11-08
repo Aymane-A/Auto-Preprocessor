@@ -114,3 +114,15 @@ Both full runs used joblib 1.6.0, included Tcl/Tk and Windows Job Object tests, 
 ### Windows executable
 
 PyInstaller 6.22.3 built the final Windows x64 one-file application. The built executable passed `--smoke-test data\churn_telecom_demo.csv` with exit code 0, exercising Tkinter and isolated CSV loading and sparse preprocessing. The verified file is `dist\AutoPreprocessor.exe`, 86,327,916 bytes, SHA-256 `DECC574A646EF29C74DE615EC181D6A450BD35EFB17918D9E6D0CD2491DF557C`. The executable was exercised on the build host. A clean-machine installation, signing, and distribution were outside the test scope.
+
+## Follow-up — TargetEncoder and file expansion guards
+
+**Verdict — READY FOR CONTROLLED PILOT**
+
+On scikit-learn 1.9 and later, TargetEncoder receives the corresponding seeded, shuffled CV splitter. Earlier versions retain integer CV and the existing seed. The singleton-class path retains its fold-local one-vs-rest calculation. The dependency range is now `scikit-learn>=1.4.2,<1.11`, with `joblib>=1.6.0`. [scikit-learn 1.9 release notes](https://scikit-learn.org/stable/whats_new/v1.9.html#sklearn-preprocessing)
+
+The Excel ZIP guard streams actual decompressed bytes, checks a 1,000:1 per-entry compression limit and accepts up to 10,000 entries. A forged central directory and a high-ratio archive were rejected before the workbook parser. A normal workbook still loaded. Parquet checks row count and estimated uncompressed bytes from PyArrow metadata before parsing, with defaults of 2,000,000 rows and 300 MiB. The 100 MiB input size limit continues to reject oversized JSON before parsing. JSON can expand in memory, and Parquet footer estimates do not guarantee peak memory.
+
+The full run with warnings enabled collected **215 tests**. **215 passed, 0 failed, 0 skipped and 0 warnings**, in **74.13 s**. The strict hardening subset passed 10 tests with FutureWarnings treated as errors on scikit-learn 1.9.1. The three encoder regressions also passed under the same warning policy on 1.8.0. Validation used Windows x64, Python 3.13.15, pytest 8.0.0, scikit-learn 1.9.1, pandas 3.0.6, NumPy 2.5.3, SciPy 1.18.1, joblib 1.6.0, PyArrow 26.0.1 and openpyxl 3.1.5.
+
+The subprocess is a resource limit, not a security sandbox. It has filesystem and network access, and the parent deserializes results with pickle. Handle untrusted inputs in a separately restricted environment. Direct `AutoPreprocessor.load()` invokes joblib without GUI confirmation and is for trusted files only. The 1 GiB default worker limit remains unvalidated on a 100 MB CSV. The earlier stress runs used 1.5 GiB and 2 GiB.

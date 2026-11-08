@@ -10,7 +10,7 @@ py -m pip install -r requirements.txt
 
 `requirements.txt` regroupe tout. `openpyxl` n'est nécessaire que pour lire les fichiers Excel, `matplotlib` que pour le graphique du benchmark.
 
-Le projet requiert scikit-learn ≥ 1.4.2 pour l'encodage de cible multiclasse et joblib ≥ 1.6.0 pour la compatibilité avec NumPy récent.
+Le projet requiert scikit-learn ≥ 1.4.2 et < 1.11, ainsi que joblib ≥ 1.6.0. Les fichiers Parquet sont lus avec PyArrow.
 
 ## Fichiers
 
@@ -18,7 +18,7 @@ Le projet requiert scikit-learn ≥ 1.4.2 pour l'encodage de cible multiclasse e
 |-----------------------------|----------------------------------------------------------------------------------------------------|
 | `auto_preprocessor.py`      | Le module (classe `AutoPreprocessor`, compatible scikit-learn, `analyze()`, `column_overrides`)    |
 | `app_preprocess.py`         | Application Tkinter (interface graphique, onglet Analyse)                                          |
-| `test_auto_preprocessor.py` | 54 tests automatiques                                                                              |
+| `test_*.py`                 | Suites de tests du moteur, de l'interface, de la sécurité et de l'isolation                         |
 | `signal_check.py`           | Vérifie si un dataset contient du signal et si AutoPreprocessor aide (AUC, PR-AUC, cible mélangée) |
 | `benchmark_multi.py`        | Benchmark sur plusieurs datasets (naïf, sklearn standard, AutoPreprocessor)                        |
 | `credit_g_check.py`         | Analyse des variantes d'options sur le dataset credit_g                                            |
@@ -44,15 +44,17 @@ py app_preprocess.py
 
 ### Chargement des modèles et limites mémoire
 
-Chargez uniquement des modèles joblib de confiance, créés par vous ou obtenus auprès d'une source fiable. L'ouverture d'un joblib peut exécuter du code arbitraire. L'interface demande une confirmation explicite et l'API Python `AutoPreprocessor.load()` est réservée aux fichiers de confiance. Les fichiers téléversés ou de provenance inconnue ne doivent jamais être transmis à ce chargeur.
+Chargez uniquement des modèles joblib de confiance. `AutoPreprocessor.load()` appelle `joblib.load()`, qui peut exécuter du code arbitraire. Seule l'interface demande une confirmation. L'appel Python direct ouvre le fichier sans confirmation.
 
 `PreprocessConfig(max_dense_bytes=160_000_000)` fixe le budget d'une allocation dense estimée. La limite de 20 000 000 cellules s'applique également, même avec un budget plus élevé. Le moteur estime la sortie agrégée en float64 avant de construire ses blocs et vérifie les grosses allocations intermédiaires, notamment la SVD et la matrice de corrélation. La largeur du schéma est limitée à 100 000 colonnes. Si une limite est atteinte, le message indique l'opération, et pour une allocation dense, les dimensions et les octets estimés.
 
 Par défaut, la sortie reste un DataFrame numérique dense. L'option **Sortie creuse pour texte et catégories**, ou `PreprocessConfig(sparse_output=True)`, conserve le One-Hot, le hachage et les vecteurs de texte en colonnes pandas creuses, y compris pendant la sélection des features. Les mesures numériques, la SVD et les encodages intrinsèquement denses gardent leur représentation et leurs limites. `to_sparse_matrix(frame)` convertit ce DataFrame en CSR sans densifier la matrice complète. L'évaluation croisée utilise cette conversion en mode creux.
 
-L'interface lit les tables, les analyse et les transforme dans un processus séparé. Sous Windows, un Job Object impose par défaut **1 Gio de mémoire engagée** et le parent impose un **délai de 120 s**. L'API `run_isolated(..., limits=ProcessLimits(...))` permet de régler ces limites. L'isolation limite les ressources du worker. Elle ne constitue pas une frontière de sécurité pour les fichiers hostiles, et le parent garde en mémoire les tables affichées et les résultats reçus. Les modèles joblib restent réservés aux fichiers de confiance.
+L'interface lit les tables, les analyse et les transforme dans un processus séparé. Sous Windows, un Job Object impose par défaut **1 Gio de mémoire engagée** et le parent impose un **délai de 120 s**. L'API `run_isolated(..., limits=ProcessLimits(...))` permet de régler ces limites. Ce processus limite uniquement la mémoire et le temps. **Ce n'est pas un bac à sable de sécurité.** Le worker conserve les accès au système de fichiers et au réseau, et le parent reçoit le résultat par pickle. Une exploitation du parseur dans le worker peut donc compromettre le parent. Les fichiers non fiables exigent un environnement séparé avec des accès restreints.
 
-Pour reproduire la mesure de charge sous Windows, exécutez `python stress_processing.py --directory .pytest_cache`. Le script mesure le pic de mémoire résidente du worker avec le compteur Windows de working set. Le build `dist\AutoPreprocessor.exe` peut être contrôlé avec `--smoke-test data\churn_telecom_demo.csv`. Un code de retour nul indique que Tkinter, la lecture isolée et le pipeline creux ont fonctionné.
+Les essais de charge ont utilisé **1,5 Gio** et **2 Gio**. La limite par défaut de 1 Gio n'a pas été validée avec un CSV de 100 Mo. Le script `python stress_processing.py --directory .pytest_cache --memory-mib 1536` mesure le pic de mémoire résidente du worker. Le build `dist\AutoPreprocessor.exe` peut être contrôlé avec `--smoke-test data\churn_telecom_demo.csv`.
+
+Les entrées tabulaires sont limitées à 100 Mio sur disque. Pour Excel au format ZIP, le lecteur vérifie le flux décompressé (300 Mio, 10 000 entrées et un ratio de 1 000 par entrée au maximum). Parquet est contrôlé sur les métadonnées avant lecture (2 millions de lignes et 300 Mio décompressés par défaut, réglables avec `max_parquet_rows` et `max_parquet_bytes`). JSON est contrôlé par taille avant parsing. Le parseur JSON peut consommer beaucoup plus de mémoire que la taille du fichier.
 
 ### 2. Analyse & Recommandations (onglet « 2. Analyse »)
 
@@ -117,7 +119,7 @@ Les noms exacts des étapes et des actions acceptées sont dans `SUPPORTED_ACTIO
 py -m pytest
 ```
 
-Résultat attendu : `54 passed`.
+La suite contient 215 cas collectés. Voir le rapport de validation pour les résultats par environnement.
 
 ## Vérifier si un dataset contient du signal
 
@@ -199,7 +201,7 @@ L'exécutable n'est pas versionné dans Git (voir `.gitignore`) : le publier dan
 | Identifiants        | `client_id` (94,7 % de valeurs uniques) est recommandée `DROP` avec confiance haute ; `heure` (date) n'est pas prise pour un identifiant.                                                                                                                              |
 | Confiance           | Niveau haute / moyenne / faible calculé selon l'effectif non manquant, la distance de la mesure au seuil et la p-value.                                                                                                                                                |
 | Interface Analyse   | Onglet « 2. Analyse » : thread de calcul, sélecteur de cible, tableau triable (« — » en fin de tri, unités dans les en-têtes), infobulle sur la raison, panneau de détail redimensionnable, export `analyse_colonnes.csv` et `choix_utilisateur.json`.                  |
-| Tests               | 54 tests (`py -m pytest`).                                                                                                                                                                                                                                             |
+| Tests               | 215 cas collectés (`python -m pytest`). |
 
 ## Historique des prompts utilisés pour construire ce projet
 

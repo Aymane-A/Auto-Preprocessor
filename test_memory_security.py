@@ -1,4 +1,5 @@
 import warnings
+import struct
 from unittest.mock import Mock
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse
+from sklearn import model_selection
 
 import auto_preprocessor as ap
 import app_preprocess as gui
@@ -227,6 +229,95 @@ def test_excel_archive_limit_precedes_workbook_parsing(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="après décompression"):
         gui.read_table(expanded)
     parser.assert_not_called()
+
+
+def test_excel_guard_counts_past_forged_declared_size(tmp_path, monkeypatch):
+    path = tmp_path / "forged.xlsx"
+    with ZipFile(path, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", b"x" * 4096)
+    raw = bytearray(path.read_bytes())
+    central = raw.index(b"PK\x01\x02")
+    struct.pack_into("<I", raw, central + 24, 10)
+    path.write_bytes(raw)
+    with ZipFile(path) as archive:
+        assert archive.infolist()[0].file_size == 10
+    monkeypatch.setattr(gui, "MAX_EXPANDED_EXCEL_BYTES", 1024)
+    parser = Mock(side_effect=AssertionError("Forged archive reached the workbook parser"))
+    monkeypatch.setattr(gui.pd, "read_excel", parser)
+    with pytest.raises(ValueError, match="après décompression"):
+        gui.read_table(path)
+    parser.assert_not_called()
+
+
+def test_excel_guard_rejects_extreme_compression_ratio(tmp_path, monkeypatch):
+    path = tmp_path / "high-ratio.xlsx"
+    with ZipFile(path, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", b"x" * 2_000_000)
+    parser = Mock(side_effect=AssertionError("High-ratio archive reached the workbook parser"))
+    monkeypatch.setattr(gui.pd, "read_excel", parser)
+    with pytest.raises(ValueError, match="compression Excel trop élevé"):
+        gui.read_table(path)
+    parser.assert_not_called()
+
+
+@pytest.mark.parametrize(("limits", "reason"), [
+    ({"max_parquet_rows": 3}, "lignes"),
+    ({"max_parquet_bytes": 1}, "octets décompressés"),
+])
+def test_parquet_guard_rejects_metadata_before_read(tmp_path, monkeypatch, limits, reason):
+    path = tmp_path / "oversized.parquet"
+    pd.DataFrame({"value": [1, 2, 3, 4]}).to_parquet(path, engine="pyarrow", row_group_size=2)
+    parser = Mock(side_effect=AssertionError("Oversized Parquet reached the table parser"))
+    monkeypatch.setattr(gui.pd, "read_parquet", parser)
+    with pytest.raises(ValueError, match=reason):
+        gui.read_table(path, **limits)
+    parser.assert_not_called()
+
+
+def test_normal_parquet_preserves_pandas_index(tmp_path):
+    frame = pd.DataFrame({"value": [1, 2]}, index=pd.Index([5, 9], name="row"))
+    path = tmp_path / "normal.parquet"
+    frame.to_parquet(path, engine="pyarrow")
+    pd.testing.assert_frame_equal(gui.read_table(path), frame)
+
+
+def test_oversized_json_table_rejected_before_read(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.json"
+    path.write_text('[{"value": 1}]', encoding="utf-8")
+    monkeypatch.setattr(gui, "MAX_TABLE_BYTES", 8)
+    parser = Mock(side_effect=AssertionError("Oversized JSON reached the table parser"))
+    monkeypatch.setattr(gui.pd, "read_json", parser)
+    with pytest.raises(ValueError, match="Fichier trop volumineux"):
+        gui.read_table(path)
+    parser.assert_not_called()
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+@pytest.mark.parametrize("case", ["classification", "regression", "singleton"])
+def test_target_encoding_paths_without_future_warnings(case, monkeypatch):
+    rng = np.random.default_rng(5)
+    frame = pd.DataFrame({"city": [f"city_{i % 17}" for i in range(100)]})
+    y = rng.normal(size=100) if case == "regression" else np.arange(100) % 2
+    if case == "singleton":
+        y[-1] = 2
+    real_score = model_selection.cross_val_score
+    completed = []
+
+    def score(estimator, *args, **kwargs):
+        values = real_score(estimator, *args, **kwargs, error_score="raise")
+        assert np.isfinite(values).all()
+        completed.append(estimator)
+        return values
+
+    monkeypatch.setattr(model_selection, "cross_val_score", score)
+    prep = ap.AutoPreprocessor(ap.PreprocessConfig(verbose=0, preserve_rows=True),
+                               task="regression" if case == "regression" else "classification")
+    transformed = prep.fit_transform(frame, y)
+    assert prep._te_oof_.shape == (100, 3 if case == "singleton" else 1)
+    assert np.isfinite(transformed.to_numpy()).all()
+    assert np.isfinite(prep.transform(frame).to_numpy()).all()
+    if case != "singleton":
+        assert len(completed) == 3  # leakage, real noise score and permuted noise score
 
 
 def test_empty_dataset_has_an_empty_fitted_schema():

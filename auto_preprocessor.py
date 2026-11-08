@@ -20,6 +20,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 # pyrefly: ignore[missing-import]
 import joblib
+from packaging.version import Version
+from sklearn import __version__ as sklearn_version
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.utils.multiclass import type_of_target
 # pyrefly: ignore[missing-import]
 import numpy as np
 # pyrefly: ignore[missing-import]
@@ -125,18 +129,24 @@ def to_sparse_matrix(frame: pd.DataFrame, dtype=np.float32) -> sparse.csr_matrix
     ], format="csr", dtype=dtype)
 
 
-def _crossfit_singleton_classes(encoder, frame, y, classes):
-    """Fit fold-local class means even when a singleton is absent from a fold."""
-    from sklearn.model_selection import KFold
+def _target_encoder(n_splits=5, seed=None, *, target_type="auto", stratified=False):
+    if Version(sklearn_version).release[:2] >= (1, 9):
+        splitter = StratifiedKFold if stratified else KFold
+        return TargetEncoder(smooth="auto", target_type=target_type,
+                             cv=splitter(n_splits, shuffle=True, random_state=seed))
+    return TargetEncoder(smooth="auto", target_type=target_type, cv=n_splits, random_state=seed)
 
+
+def _crossfit_singleton_classes(encoder, frame, y, classes, n_splits, seed):
+    """Fit fold-local class means even when a singleton is absent from a fold."""
     encoder.fit(frame, y)
     multiclass = len(classes) > 2
     labels = classes if multiclass else classes[-1:]
     result = np.empty((len(y), frame.shape[1] * len(labels)), dtype=float)
-    cv = KFold(n_splits=encoder.cv, shuffle=True, random_state=encoder.random_state)
+    cv = KFold(n_splits, shuffle=True, random_state=seed)
     for train, validation in cv.split(frame):
         for i, label in enumerate(labels):
-            fold = TargetEncoder(smooth=encoder.smooth, target_type="continuous")
+            fold = _target_encoder(seed=seed, target_type="continuous")
             fold.fit(frame.iloc[train], (y[train] == label).astype(float))
             result[validation, i::len(labels)] = fold.transform(frame.iloc[validation])
     return result
@@ -2431,7 +2441,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     if is_clf and len(counts) > 2:
                         check_dense_allocation(len(y_d), len(counts), np.float64, self.config.max_dense_bytes,
                                                "Diagnostic de fuite par encodage de cible")
-                    est = make_pipeline(TargetEncoder(smooth="auto", cv=5, random_state=rs), tree)
+                    est = make_pipeline(_target_encoder(seed=rs, stratified=type_of_target(y_d) != "continuous"), tree)
                 score = float(cross_val_score(est, v, y_d, cv=cv, scoring=scoring).mean())
             except Exception as exc:  # petit effectif, classe rare, etc. : on ignore la colonne
                 logger.debug(f"Test de fuite ignoré pour '{col}' : {exc}")
@@ -2589,10 +2599,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     est_real = tree_real
                     est_perm = tree_perm
                 else:
-                    from sklearn.preprocessing import TargetEncoder as _TE
                     v = s.astype(str).to_numpy().reshape(-1, 1)
-                    est_real = make_pipeline(_TE(smooth="auto", cv=5, random_state=rs), tree_real)
-                    est_perm = make_pipeline(_TE(smooth="auto", cv=5, random_state=rs), tree_perm)
+                    stratified = type_of_target(y_d) != "continuous"
+                    est_real = make_pipeline(_target_encoder(seed=rs, stratified=stratified), tree_real)
+                    est_perm = make_pipeline(_target_encoder(seed=rs, stratified=stratified), tree_perm)
 
                 score_real = float(cross_val_score(est_real, v, y_d if is_clf else y_d, cv=cv, scoring=scoring).mean())
                 score_perm = float(cross_val_score(est_perm, v, y_permuted, cv=cv, scoring=scoring).mean())
@@ -3983,11 +3993,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     classes, class_counts = np.unique(y_arr, return_counts=True)
                     singleton_classes = class_counts.min() == 1
                     cv = min(cv, int(class_counts.max() if singleton_classes else class_counts.min()))
-                self.target_cat_encoder_ = TargetEncoder(
-                    smooth="auto",
-                    cv=cv,
+                self.target_cat_encoder_ = _target_encoder(
+                    cv, self.config.random_state,
                     target_type="auto" if self.task_resolved_ == "classification" else "continuous",
-                    random_state=self.config.random_state,
+                    stratified=self.task_resolved_ == "classification" and not singleton_classes,
                 )
                 # fit_transform applique le cross-fitting interne (cv=5) : on garde la version
                 # "hors pli" du train, utilisée par fit_transform() pour éviter le surapprentissage.
@@ -3998,7 +4007,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                                        self.config.max_dense_bytes, "Encodage de cible")
                 categories = X_work[self.high_card_cols_].astype(str)
                 if singleton_classes:
-                    self._te_oof_ = _crossfit_singleton_classes(self.target_cat_encoder_, categories, y_arr, classes)
+                    self._te_oof_ = _crossfit_singleton_classes(
+                        self.target_cat_encoder_, categories, y_arr, classes, cv, self.config.random_state)
                 else:
                     self._te_oof_ = self.target_cat_encoder_.fit_transform(categories, y_arr)
             else:

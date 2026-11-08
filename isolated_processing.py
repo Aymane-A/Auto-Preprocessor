@@ -1,4 +1,11 @@
-"""Bounded subprocess execution for trusted application functions and local inputs."""
+"""Limit worker memory and elapsed time for trusted application functions.
+
+This is not a security sandbox. The worker has no filesystem or network
+restrictions, and a parser exploit could compromise the parent through the
+pickled result. Handle untrusted files in a separate, restricted environment.
+The 1 GiB default was not validated on a 100 MB CSV. The large stress runs
+used 1.5 GiB and 2 GiB via stress_processing.py --memory-mib.
+"""
 
 from dataclasses import dataclass
 import multiprocessing as mp

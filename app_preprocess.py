@@ -14,6 +14,7 @@ est dans la classe App, en seconde moitié.
 from __future__ import annotations
 
 import csv
+from copy import copy
 import dataclasses
 import datetime
 import json
@@ -48,6 +49,9 @@ MODEL_FAMILIES = {
 }
 MAX_TABLE_BYTES = 100 * 1024 ** 2
 MAX_EXPANDED_EXCEL_BYTES = 300 * 1024 ** 2
+MAX_EXCEL_COMPRESSION_RATIO = 1_000
+MAX_PARQUET_ROWS = 2_000_000
+MAX_UNCOMPRESSED_PARQUET_BYTES = 300 * 1024 ** 2
 MAX_CHOICES_BYTES = 1024 ** 2
 
 
@@ -96,24 +100,65 @@ def _sniff_separator(sample: str) -> str:
         return ","
 
 
-def read_table(path: str) -> pd.DataFrame:
+def _check_excel_archive(path) -> None:
+    total = 0
+    chunk_size = 64 * 1024
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > 10_000:
+                raise ValueError("Classeur Excel trop volumineux après décompression : trop d’entrées.")
+            for entry in entries:
+                if entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                    raise ValueError("Méthode de compression Excel non prise en charge.")
+                # ZipExtFile otherwise truncates reads at the declared file_size.
+                stream_entry = copy(entry)
+                # Leave headroom for ZipExtFile's internal read-ahead and CRC validation.
+                stream_entry.file_size = MAX_EXPANDED_EXCEL_BYTES + 2 * chunk_size
+                actual = 0
+                with archive.open(stream_entry) as stream:
+                    while chunk := stream.read(min(chunk_size, MAX_EXPANDED_EXCEL_BYTES - total + 1)):
+                        actual += len(chunk)
+                        total += len(chunk)
+                        if total > MAX_EXPANDED_EXCEL_BYTES:
+                            raise ValueError("Classeur Excel trop volumineux après décompression.")
+                        if actual > MAX_EXCEL_COMPRESSION_RATIO * max(entry.compress_size, 1):
+                            raise ValueError("Taux de compression Excel trop élevé.")
+                if actual != entry.file_size:
+                    raise ValueError("Taille décompressée Excel incohérente avec l’en-tête.")
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Archive Excel invalide.") from exc
+
+
+def read_table(path: str, *, max_parquet_rows: int = MAX_PARQUET_ROWS,
+               max_parquet_bytes: int = MAX_UNCOMPRESSED_PARQUET_BYTES) -> pd.DataFrame:
     """Lit un fichier tabulaire : CSV/TXT/TSV (séparateur et encodage détectés), Excel, JSON, Parquet."""
     _check_local_file(path, MAX_TABLE_BYTES)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xlsm", ".xls"):
-        if ext != ".xls":
-            with zipfile.ZipFile(path) as archive:
-                entries = archive.infolist()
-                if len(entries) > 10_000 or sum(entry.file_size for entry in entries) > MAX_EXPANDED_EXCEL_BYTES:
-                    raise ValueError("Classeur Excel trop volumineux après décompression.")
         try:
-            return pd.read_excel(path)
+            if ext == ".xls":
+                return pd.read_excel(path)
+            with open(path, "rb") as handle:
+                _check_excel_archive(handle)
+                handle.seek(0)
+                return pd.read_excel(handle)
         except ImportError as exc:
             raise RuntimeError("Lecture Excel impossible : installez openpyxl (py -m pip install openpyxl).") from exc
     if ext == ".json":
         return pd.read_json(path)
     if ext == ".parquet":
-        return pd.read_parquet(path)
+        import pyarrow.parquet as pq
+
+        with open(path, "rb") as handle:
+            metadata = pq.read_metadata(handle)
+            if metadata.num_rows > max_parquet_rows:
+                raise ValueError(f"Fichier Parquet trop volumineux : limite de {max_parquet_rows:,} lignes.")
+            uncompressed = sum(metadata.row_group(i).total_byte_size for i in range(metadata.num_row_groups))
+            if uncompressed > max_parquet_bytes:
+                raise ValueError(f"Fichier Parquet trop volumineux : limite de {max_parquet_bytes:,} octets décompressés.")
+            handle.seek(0)
+            return pd.read_parquet(handle, engine="pyarrow")
 
     last_error: Optional[Exception] = None
     for encoding in ("utf-8-sig", "latin-1"):

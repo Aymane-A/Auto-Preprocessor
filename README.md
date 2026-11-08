@@ -10,6 +10,8 @@ py -m pip install -r requirements.txt
 
 `requirements.txt` regroupe tout. `openpyxl` n'est nécessaire que pour lire les fichiers Excel, `matplotlib` que pour le graphique du benchmark.
 
+Le projet requiert scikit-learn ≥ 1.4.2 pour l'encodage de cible multiclasse et joblib ≥ 1.6.0 pour la compatibilité avec NumPy récent.
+
 ## Fichiers
 
 | Fichier                     | Rôle                                                                                               |
@@ -46,7 +48,11 @@ Chargez uniquement des modèles joblib de confiance, créés par vous ou obtenus
 
 `PreprocessConfig(max_dense_bytes=160_000_000)` fixe le budget d'une allocation dense estimée. La limite de 20 000 000 cellules s'applique également, même avec un budget plus élevé. Le moteur estime la sortie agrégée en float64 avant de construire ses blocs et vérifie les grosses allocations intermédiaires, notamment la SVD et la matrice de corrélation. La largeur du schéma est limitée à 100 000 colonnes. Si une limite est atteinte, le message indique l'opération, et pour une allocation dense, les dimensions et les octets estimés.
 
-La sortie principale reste un DataFrame numérique dense. Utilisés séparément, `RobustTextTransformer(sparse_output=True)` et `NgramTextTransformer(sparse_output=True)` renvoient les colonnes vectorisées sous forme de colonnes pandas creuses. La réduction SVD reste dense. Le budget ne borne pas la mémoire totale du processus, le vocabulaire temporaire ni les données creuses.
+Par défaut, la sortie reste un DataFrame numérique dense. L'option **Sortie creuse pour texte et catégories**, ou `PreprocessConfig(sparse_output=True)`, conserve le One-Hot, le hachage et les vecteurs de texte en colonnes pandas creuses, y compris pendant la sélection des features. Les mesures numériques, la SVD et les encodages intrinsèquement denses gardent leur représentation et leurs limites. `to_sparse_matrix(frame)` convertit ce DataFrame en CSR sans densifier la matrice complète. L'évaluation croisée utilise cette conversion en mode creux.
+
+L'interface lit les tables, les analyse et les transforme dans un processus séparé. Sous Windows, un Job Object impose par défaut **1 Gio de mémoire engagée** et le parent impose un **délai de 120 s**. L'API `run_isolated(..., limits=ProcessLimits(...))` permet de régler ces limites. L'isolation limite les ressources du worker. Elle ne constitue pas une frontière de sécurité pour les fichiers hostiles, et le parent garde en mémoire les tables affichées et les résultats reçus. Les modèles joblib restent réservés aux fichiers de confiance.
+
+Pour reproduire la mesure de charge sous Windows, exécutez `python stress_processing.py --directory .pytest_cache`. Le script mesure le pic de mémoire résidente du worker avec le compteur Windows de working set. Le build `dist\AutoPreprocessor.exe` peut être contrôlé avec `--smoke-test data\churn_telecom_demo.csv`. Un code de retour nul indique que Tkinter, la lecture isolée et le pipeline creux ont fonctionné.
 
 ### 2. Analyse & Recommandations (onglet « 2. Analyse »)
 

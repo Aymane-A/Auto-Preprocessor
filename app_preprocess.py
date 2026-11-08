@@ -17,12 +17,15 @@ import csv
 import dataclasses
 import datetime
 import json
+import multiprocessing
 import os
 import queue
+import sys
 import re
 import threading
 import traceback
 import zipfile
+from isolated_processing import run_isolated
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -142,6 +145,7 @@ class Options:
     random_state: int = 42
     column_overrides: Dict[str, ColumnOverride] = field(default_factory=dict)
     model_family: Optional[str] = None
+    sparse_output: bool = False
 
 
 def build_config(opts: Options) -> PreprocessConfig:
@@ -161,6 +165,7 @@ def build_config(opts: Options) -> PreprocessConfig:
         "verbose": 0,
         "column_overrides": opts.column_overrides,
         "model_family": opts.model_family,
+        "sparse_output": opts.sparse_output,
     }
     valid = {f.name for f in dataclasses.fields(PreprocessConfig)}
     return PreprocessConfig(**{k: v for k, v in wanted.items() if k in valid})
@@ -1023,6 +1028,10 @@ def apply_to_new_data(prep: AutoPreprocessor, df: pd.DataFrame) -> pd.DataFrame:
     return prep.transform(df)
 
 
+def _apply_input_file(prep, path):
+    return apply_to_new_data(prep, read_table(path))
+
+
 def report_text(result: RunResult) -> str:
     """Rapport lisible : résumé, décisions colonne par colonne, fuites, classes de la cible."""
     prep = result.prep
@@ -1186,6 +1195,7 @@ class App:
         self.v_drop_leaky = tk.BooleanVar(value=False)
         self.v_discrete_cat = tk.BooleanVar(value=False)
         self.v_model_family = tk.StringVar(value="Statistique seule")
+        self.v_sparse_output = tk.BooleanVar(value=False)
         self.v_status = tk.StringVar(value="Ouvrez un fichier pour commencer.")
         self.v_show_all_steps = tk.BooleanVar(value=False)
         self.v_masked_steps = tk.StringVar(value="")
@@ -1746,7 +1756,7 @@ class App:
         config = build_config(options)
         self.progress.start(12); self._set_status("Analyse en cours...")
         def work():
-            try: self._queue.put(("analysis_ok", AutoPreprocessor(config, task=options.task).analyze(df, target)))
+            try: self._queue.put(("analysis_ok", run_isolated(AutoPreprocessor(config, task=options.task).analyze, df, target)))
             except Exception as exc: self._queue.put(("analysis_err", f"{exc}\n\n{traceback.format_exc()}"))
         threading.Thread(target=work, daemon=True).start()
         self.root.after(150, self._poll_analysis)
@@ -1880,6 +1890,8 @@ class App:
         ttk.Label(box, text="Famille de modèles").grid(row=4, column=0, sticky="w")
         ttk.Combobox(box, textvariable=self.v_model_family, state="readonly", width=23,
                      values=list(MODEL_FAMILIES)).grid(row=4, column=1, sticky="w", padx=6, pady=3)
+        ttk.Checkbutton(box, text="Sortie creuse pour texte et catégories",
+                        variable=self.v_sparse_output).grid(row=5, column=0, columnspan=2, sticky="w")
 
         opt = ttk.LabelFrame(self.tab_params, text="Nettoyage et transformations", padding=8)
         opt.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
@@ -1963,6 +1975,7 @@ class App:
         return Options(
             task=self.v_task.get(),
             model_family=MODEL_FAMILIES[self.v_model_family.get()],
+            sparse_output=self.v_sparse_output.get(),
             test_size_pct=max(0, min(50, num(self.v_test, int, 20))),
             scaler_type=self.v_scaler.get(),
             outlier_method=self.v_outlier.get(),
@@ -1987,7 +2000,7 @@ class App:
 
     def _load_path(self, path: str) -> None:
         try:
-            df = read_table(path)
+            df = run_isolated(read_table, path)
         except Exception as exc:  # noqa: BLE001 - message affiché à l'utilisateur
             self.messagebox.showerror("Lecture impossible", str(exc))
             return
@@ -2063,7 +2076,7 @@ class App:
 
         def work() -> None:
             try:
-                self._queue.put(("ok", run_preprocessing(df, target, opts)))
+                self._queue.put(("ok", run_isolated(run_preprocessing, df, target, opts)))
             except Exception as exc:  # noqa: BLE001 - remonté à l'interface
                 self._queue.put(("err", f"{exc}\n\n{traceback.format_exc()}"))
 
@@ -2159,7 +2172,7 @@ class App:
 
     def _do_apply_new_file(self, path: str, out_path: str) -> None:
         try:
-            out = apply_to_new_data(self.prep, read_table(path))
+            out = run_isolated(_apply_input_file, self.prep, path)
             out.to_csv(out_path, index=False, encoding="utf-8-sig")
         except Exception as exc:  # noqa: BLE001
             self.messagebox.showerror("Transformation impossible", str(exc))
@@ -2177,8 +2190,19 @@ def main() -> None:
         app = App()
     except ModuleNotFoundError as exc:
         raise SystemExit(f"Tkinter est introuvable ({exc}). Réinstallez Python depuis python.org avec l'option tcl/tk.")
+    if len(sys.argv) == 3 and sys.argv[1] == "--smoke-test":
+        app.root.withdraw()
+        try:
+            frame = run_isolated(read_table, sys.argv[2])
+            result = run_isolated(run_preprocessing, frame, None, Options(sparse_output=True))
+            if result.X_train.empty or not any(isinstance(dtype, pd.SparseDtype) for dtype in result.X_train.dtypes):
+                raise RuntimeError("Le test de démarrage n'a produit aucune feature creuse.")
+        finally:
+            app.root.destroy()
+        return
     app.run()
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

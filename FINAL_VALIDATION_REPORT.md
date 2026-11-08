@@ -75,3 +75,42 @@ The edge-case exercise used duplicate indexes, both signs of infinity, invalid d
 - `test_auto_preprocessor.py` — shared deterministic demo and invariant analysis setup.
 - `test_memory_security.py` — six additional target-alignment, resource, path, Excel, JSON, and empty-input checks.
 - `FINAL_VALIDATION_REPORT.md` — measurements and validation record.
+
+## Follow-up — sparse processing and Windows worker isolation
+
+Sparse mode retains pandas sparse columns through One-Hot encoding, text vectorization, categorical hashing, feature selection and output alignment. The Python API converts mixed feature frames directly to CSR for compatible estimators. Numeric processing, target encoding and SVD retain bounded dense blocks. The default pipeline still returns dense output for compatibility. Sparse correlation screening avoids a dense correlation matrix. Its comparison count can still be quadratic in feature width, so the stress runs disabled correlation pruning with a threshold of 1.
+
+The GUI reads tables, analyzes features and runs preprocessing in separate spawned workers. A Windows Job Object enforces process and aggregate job commit limits and terminates the job on close. The parent enforces a wall-clock timeout. The default worker limits are 1 GiB and 120 seconds. Automated tests verified distinct process IDs, a forced timeout and a memory-limit rejection. The parent holds the data and returned results for the interface. The worker boundary limits resources and does not sandbox hostile code or make joblib safe for untrusted models.
+
+### Large CSV stress runs
+
+| Input bytes | Rows × output features | CSR nonzeros | Worker peak resident RAM | Elapsed | Worker commit cap |
+|---:|---:|---:|---:|---:|---:|
+| 75,359,496 | 900,000 × 2,075 | 18,886,815 | 939,630,592 bytes (896 Mio) | 58.18 s | 1.5 GiB |
+| 100,479,326 | 1,200,000 × 2,075 | 25,182,422 | 1,197,875,200 bytes (1,142 Mio) | 69.20 s | 2 GiB |
+
+Peak RAM comes from the Windows worker's peak working-set counter, including CSV parsing, preprocessing and CSR conversion. The figures exclude the parent process. A separate 104,857,601-byte file was rejected by the isolated reader before parsing. The input cap is 100 MiB.
+
+### Analysis of the 14 previous warnings
+
+| Prior count | Cause | Resolution |
+|---:|---|---|
+| 2 | Stratified target encoding with a singleton class | Limit stratified folds to the smallest eligible class. When a singleton prevents stratification, compute fold-local one-vs-rest target means and keep the full-training encoder for inference. |
+| 6 | Joblib setting a NumPy array's shape during loading | Require joblib 1.6.0 or later and rerun serialization tests with 1.6.0. |
+| 2 | SciPy precision loss on nearly constant transformed values | Center values before calculating skew when their magnitude makes cancellation likely. |
+| 4 | Expected One-Hot notices for unknown categories | Keep the all-zero policy and filter that exact message only inside the encoder call. |
+
+Compatibility testing identified two additional issues in the older stack. Iterative imputation now excludes entirely missing predictors before fitting and retains the univariate fallback for those features. Unscaled clipped values round inward when float32 cannot represent a train bound exactly. The minimum scikit-learn version is 1.4.2 after the 1.3.2 probe showed that it lacks multiclass target encoding.
+
+### Final compatibility matrix
+
+| Python | pandas | scikit-learn | NumPy / SciPy | Passed | Failed | Skipped | Warnings | Elapsed |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| 3.13.15 | 3.0.6 | 1.8.0 | 2.5.3 / 1.18.1 | 206 | 0 | 0 | 0 | 150.88 s |
+| 3.12.16 | 2.2.3 | 1.4.2 | 1.26.4 / 1.15.3 | 206 | 0 | 0 | 15 | 130.70 s |
+
+Both full runs used joblib 1.6.0, included Tcl/Tk and Windows Job Object tests, and enabled warnings. The older stack emitted 12 pandas clipping downcast warnings, two NumPy masked-array warnings during KNN, and one overflow warning during the Yeo–Johnson search. These are separate from the previous 14 warnings on the primary stack. Python compilation and the diff whitespace check passed. The matrix describes the two combinations tested.
+
+### Windows executable
+
+PyInstaller 6.22.3 built the final Windows x64 one-file application. The built executable passed `--smoke-test data\churn_telecom_demo.csv` with exit code 0, exercising Tkinter and isolated CSV loading and sparse preprocessing. The verified file is `dist\AutoPreprocessor.exe`, 86,327,916 bytes, SHA-256 `DECC574A646EF29C74DE615EC181D6A450BD35EFB17918D9E6D0CD2491DF557C`. The executable was exercised on the build host. A clean-machine installation, signing, and distribution were outside the test scope.

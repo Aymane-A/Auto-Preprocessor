@@ -119,6 +119,8 @@ def apply_outlier_plan(values, action, bounds, median):
     if action in {"MEDIAN_REPLACE", "TO_MISSING"}:
         return values.mask(values.lt(bounds[0]) | values.gt(bounds[1]),
                            median if action == "MEDIAN_REPLACE" else np.nan)
+    if pd.api.types.is_integer_dtype(values) and any(np.isfinite(bound) and bound % 1 for bound in bounds):
+        values = values.astype(float)
     return values.clip(*bounds)
 
 

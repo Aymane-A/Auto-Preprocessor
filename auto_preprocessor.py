@@ -13,6 +13,7 @@ import datetime
 import logging
 import re
 import unicodedata
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -111,6 +112,34 @@ def _empty_text_column(index, name, sparse_output):
 def _onehot_width(encoder) -> int:
     dropped = encoder.drop_idx_
     return sum(map(len, encoder.categories_)) - (sum(i is not None for i in dropped) if dropped is not None else 0)
+
+
+def to_sparse_matrix(frame: pd.DataFrame, dtype=np.float32) -> sparse.csr_matrix:
+    """Convert a mixed numeric/sparse feature frame without a dense matrix intermediate."""
+    if frame.shape[1] == 0:
+        return sparse.csr_matrix(frame.shape, dtype=dtype)
+    return sparse.hstack([
+        frame[[col]].sparse.to_coo() if isinstance(series.dtype, pd.SparseDtype)
+        else sparse.csc_matrix(series.to_numpy(dtype=dtype)[:, None])
+        for col, series in frame.items()
+    ], format="csr", dtype=dtype)
+
+
+def _crossfit_singleton_classes(encoder, frame, y, classes):
+    """Fit fold-local class means even when a singleton is absent from a fold."""
+    from sklearn.model_selection import KFold
+
+    encoder.fit(frame, y)
+    multiclass = len(classes) > 2
+    labels = classes if multiclass else classes[-1:]
+    result = np.empty((len(y), frame.shape[1] * len(labels)), dtype=float)
+    cv = KFold(n_splits=encoder.cv, shuffle=True, random_state=encoder.random_state)
+    for train, validation in cv.split(frame):
+        for i, label in enumerate(labels):
+            fold = TargetEncoder(smooth=encoder.smooth, target_type="continuous")
+            fold.fit(frame.iloc[train], (y[train] == label).astype(float))
+            result[validation, i::len(labels)] = fold.transform(frame.iloc[validation])
+    return result
 
 
 class FeatureType(str, Enum):
@@ -439,10 +468,12 @@ def _recommend_scaler(values: pd.Series, config: Optional[PreprocessConfig] = No
     mad = float(np.median(np.abs(x - np.median(x))))
     mad_pct = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
     kurt = float(x.kurt()) if len(x) > 3 else 0.0
-    try:
-        p_normal = float(stats.normaltest(x.sample(min(len(x), 5000), random_state=42)).pvalue)
-    except Exception:
-        p_normal = float("nan")
+    p_normal = float("nan")
+    if len(x) >= 20:
+        try:
+            p_normal = float(stats.normaltest(x.sample(min(len(x), 5000), random_state=42)).pvalue)
+        except Exception:
+            pass
     zero_pct = float((x == 0).mean() * 100)
     if zero_pct >= config.scaler_zero_threshold * 100:
         return "MAXABS", f"zéros : {zero_pct:.1f}%", f"zéros ≥ {config.scaler_zero_threshold:.1%}"
@@ -538,7 +569,7 @@ def _numeric_profile(values: pd.Series, config: PreprocessConfig) -> Dict[str, f
     mad = float(np.median(np.abs(x - np.median(x))))
     if mad:
         profile["mad_pct"] = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100)
-    if n >= 8:
+    if n >= 20:
         try:
             profile["normal_p"] = float(stats.normaltest(x.sample(min(n, 5000), random_state=42)).pvalue)
         except Exception:
@@ -735,6 +766,15 @@ def _preview_yeo_johnson(frame: pd.DataFrame, preview: Optional[Dict[str, np.nda
     return result
 
 
+def _distribution_skew(values) -> float:
+    """Center near-constant values before measuring their skew."""
+    values = np.asarray(values, dtype=float)
+    mean = values.mean()
+    if np.isfinite(mean) and np.max(np.abs(values - mean)) < abs(mean) * (10 * np.finfo(float).eps):
+        values = values - values[0]
+    return float(stats.skew(values))
+
+
 def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessConfig,
                                         preview: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, Dict[str, Any]]:
     """Évalue toutes les transformations de distribution sur les valeurs réelles de la colonne.
@@ -754,7 +794,7 @@ def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessCon
             try:
                 after = np.asarray(fn(), dtype=float).ravel()
                 if np.isfinite(after).all() and len(after) > 2:
-                    entry["skew_after"] = float(stats.skew(after))
+                    entry["skew_after"] = _distribution_skew(after)
                 else:
                     entry["valid"], entry["reason"] = False, "résultat non fini"
             except Exception as exc:
@@ -803,7 +843,7 @@ def _recommend_distribution(values: pd.Series, config: PreprocessConfig,
         scores["SQRT"] = abs(float(stats.skew(np.sqrt(x))))
         scores["LOG1P"] = abs(float(stats.skew(np.log1p(x))))
     try:
-        scores["YEO_JOHNSON"] = abs(float(stats.skew(_preview_yeo_johnson(x.to_frame(), preview).ravel())))
+        scores["YEO_JOHNSON"] = abs(_distribution_skew(_preview_yeo_johnson(x.to_frame(), preview).ravel()))
     except Exception:
         pass
     if not scores:
@@ -1040,6 +1080,7 @@ class PreprocessConfig:
     preserve_rows: bool = False
     supervised_encoding: bool = True
     max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES
+    sparse_output: bool = False
 
 
 
@@ -3925,7 +3966,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self.ohe_encoder_ = OneHotEncoder(
                 handle_unknown="ignore",
                 drop="if_binary",
-                sparse_output=False,
+                sparse_output=self.config.sparse_output,
             )
             self.ohe_encoder_.fit(X_low_grouped)
             _check_feature_width(_onehot_width(self.ohe_encoder_), "Encodage One-Hot")
@@ -3937,9 +3978,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     and (self.task_resolved_ == "regression" or distinct_targets < len(y_arr))):
                 # Target Encoding robuste Out-Of-Fold régularisé
                 cv = min(5, len(y_arr))
+                singleton_classes = False
                 if self.task_resolved_ == "classification":
-                    max_class = int(pd.Series(y_arr).value_counts().max())
-                    cv = min(cv, max_class)
+                    classes, class_counts = np.unique(y_arr, return_counts=True)
+                    singleton_classes = class_counts.min() == 1
+                    cv = min(cv, int(class_counts.max() if singleton_classes else class_counts.min()))
                 self.target_cat_encoder_ = TargetEncoder(
                     smooth="auto",
                     cv=cv,
@@ -3953,9 +3996,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 _check_feature_width(target_width, "Encodage de cible")
                 check_dense_allocation(len(X_work), target_width, np.float64,
                                        self.config.max_dense_bytes, "Encodage de cible")
-                self._te_oof_ = self.target_cat_encoder_.fit_transform(
-                    X_work[self.high_card_cols_].astype(str), y_arr
-                )
+                categories = X_work[self.high_card_cols_].astype(str)
+                if singleton_classes:
+                    self._te_oof_ = _crossfit_singleton_classes(self.target_cat_encoder_, categories, y_arr, classes)
+                else:
+                    self._te_oof_ = self.target_cat_encoder_.fit_transform(categories, y_arr)
             else:
                 # Non supervisé : Frequency Encoding
                 self.freq_encoding_maps_ = {}
@@ -4033,6 +4078,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 column_components=text_components,
                 column_modes={col: self._override_value(col, "text")[0] for col in self.text_cols_},
                 max_dense_bytes=self.config.max_dense_bytes,
+                sparse_output=self.config.sparse_output,
             )
             self.text_transformer_.fit(X_work[self.text_cols_])
 
@@ -4041,6 +4087,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self.ngram_text_transformer_ = NgramTextTransformer(
                 methods=dict(self.ngram_text_cols_), params={c: p for c, p in ngram_params.items() if isinstance(p, dict)},
                 max_dense_bytes=self.config.max_dense_bytes,
+                sparse_output=self.config.sparse_output,
                 default_max_features=self.config.max_text_features)
             self.ngram_text_transformer_.fit(X_work[list(self.ngram_text_cols_)])
 
@@ -4060,6 +4107,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         dépendent de l'échelle). Seules les cellules manquantes des colonnes demandées sont remplacées.
         """
         self.multivariate_imputers_ = {}
+        self.iterative_predictor_mask_ = None
         for method in ("KNN", "ITERATIVE"):
             cols = [c for c in self.num_cols_ if self.column_missing_.get(c) == method and c in X_num_wins.columns]
             if not cols:
@@ -4067,6 +4115,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             data = X_num_wins[self.num_cols_].astype(float)
             mu = data.mean().fillna(0.0).to_numpy()
             sd = data.std(ddof=0).replace(0, 1.0).fillna(1.0).to_numpy()
+            standardized = (data.to_numpy() - mu) / sd
             try:
                 if method == "KNN":
                     k = 5
@@ -4079,9 +4128,14 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         raise ValueError("n_neighbors doit être ≥ 1.")
                     imputer = KNNImputer(n_neighbors=k, keep_empty_features=True)
                 else:
-                    imputer = IterativeImputer(max_iter=10, random_state=self.config.random_state,
-                                               keep_empty_features=True)
-                imputer.fit((data.to_numpy() - mu) / sd)
+                    # Older sklearn masks all observations with keep_empty_features=True.
+                    mask = data.notna().any(axis=0).to_numpy()
+                    if not mask.any():
+                        continue
+                    self.iterative_predictor_mask_ = mask
+                    standardized = standardized[:, mask]
+                    imputer = IterativeImputer(max_iter=10, random_state=self.config.random_state)
+                imputer.fit(standardized)
             except ValueError:
                 raise
             except Exception as exc:  # échec numérique : retombe sur l'imputation univariée (médiane)
@@ -4094,9 +4148,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         out = X_num_wins.copy()
         for method, (imputer, cols, mu, sd) in (getattr(self, "multivariate_imputers_", {}) or {}).items():
             arr = (X_num_wins[self.num_cols_].astype(float).to_numpy() - mu) / sd
-            filled = pd.DataFrame(imputer.transform(arr) * sd + mu, index=X_num_wins.index, columns=self.num_cols_)
+            mask = getattr(self, "iterative_predictor_mask_", None) if method == "ITERATIVE" else None
+            names = self.num_cols_
+            if mask is not None:
+                arr, mu, sd = arr[:, mask], mu[mask], sd[mask]
+                names = np.asarray(names)[mask]
+            filled = pd.DataFrame(imputer.transform(arr) * sd + mu, index=X_num_wins.index, columns=names)
             for col in cols:
-                out[col] = X_num_wins[col].where(X_num_wins[col].notna(), filled[col])
+                if col in filled:
+                    out[col] = X_num_wins[col].where(X_num_wins[col].notna(), filled[col])
         return out.fillna(self.num_imputer_)
 
     def _loo_train_values(self, values: pd.Series, y: np.ndarray, state: Dict[str, Any]) -> np.ndarray:
@@ -4117,11 +4177,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
     @staticmethod
     def _apply_custom_encoder(col: str, state: Dict[str, Any], X_clean: pd.DataFrame,
-                              max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES) -> pd.DataFrame:
+                              max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES,
+                              sparse_output: bool = False) -> pd.DataFrame:
         """Applique un encodage Count / Binary / Hash appris sur le train (modalités inconnues : 0)."""
         width = state.get("n_components", state.get("n_bits", 1))
         _check_feature_width(width, f"Encodage catégoriel {col!r}")
-        check_dense_allocation(len(X_clean), width, np.float64, max_dense_bytes, f"Encodage catégoriel {col!r}")
+        if state["method"] != "HASH_ENCODE" or not sparse_output:
+            check_dense_allocation(len(X_clean), width, np.float64, max_dense_bytes, f"Encodage catégoriel {col!r}")
         values = X_clean[col].astype(str) if col in X_clean.columns else pd.Series(["__MISSING__"] * len(X_clean), index=X_clean.index)
         if state["method"] == "COUNT_ENCODE":
             return pd.DataFrame({f"{col}_count": values.map(state["counts"]).fillna(0).astype(float)}, index=X_clean.index)
@@ -4136,17 +4198,22 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             bits = {f"{col}_bin_{i}": ((codes >> i) & 1).astype(float) for i in range(state["n_bits"])}
             return pd.DataFrame(bits, index=X_clean.index)
         hasher = FeatureHasher(n_features=state["n_components"], input_type="string", alternate_sign=False)
-        matrix = hasher.transform(([f"{col}={v}"] for v in values)).toarray()
-        return pd.DataFrame(matrix, index=X_clean.index, columns=[f"{col}_hash_{i}" for i in range(state["n_components"])])
+        matrix = hasher.transform(([f"{col}={v}"] for v in values))
+        return _text_matrix_frame(matrix, X_clean.index, [f"{col}_hash_{i}" for i in range(width)],
+                                  sparse_output, max_dense_bytes)
 
     def _transform_components(self, X_clean: pd.DataFrame) -> pd.DataFrame:
         """Applique les composants de transformation individuels et concatène le résultat."""
         budget = self.config.max_dense_bytes
+        sparse_output = self.config.sparse_output
+        sparse_width = 0
         width = len(self.num_cols_) + len(self.binary_cols_) + len(self.ordinal_cols_)
         if self.num_cols_ and self.missing_indicator_ is not None:
             width += len(self.missing_indicator_.indicator_cols_)
         if self.low_card_cols_ and self.ohe_encoder_ is not None:
             width += _onehot_width(self.ohe_encoder_)
+            if self.ohe_encoder_.sparse_output:
+                sparse_width += _onehot_width(self.ohe_encoder_)
         if self.high_card_cols_:
             width += (len(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
                       if self.target_cat_encoder_ is not None else len(self.high_card_cols_))
@@ -4155,16 +4222,27 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             if col not in self.columns_to_drop_:
                 width += (8 if mode == "HASH_ENCODE" else 1 if mode == "MANUAL_MAP"
                           else max(1, len(self.binary_category_maps_[col]).bit_length()))
+                if sparse_output and mode == "HASH_ENCODE":
+                    sparse_width += 8
         width += sum(state.get("n_components", state.get("n_bits", 1))
                      for state in (self.custom_encoders_ or {}).values())
+        if sparse_output:
+            sparse_width += sum(state["n_components"] for state in (self.custom_encoders_ or {}).values()
+                                if state["method"] == "HASH_ENCODE")
         if self.date_cols_ and self.datetime_extractor_ is not None:
             width += len(self.datetime_extractor_.output_feature_names_)
         if self.text_cols_ and self.text_transformer_ is not None:
             width += len(self.text_transformer_.output_names_)
+            if getattr(self.text_transformer_, "sparse_output", False):
+                sparse_width += len(self.text_transformer_.output_names_) - sum(
+                    model.components_.shape[0] for model in self.text_transformer_.svd_models_.values() if model is not None)
         if self.ngram_text_cols_ and self.ngram_text_transformer_ is not None:
-            width += sum(map(len, self.ngram_text_transformer_.output_names_.values()))
+            text_width = sum(map(len, self.ngram_text_transformer_.output_names_.values()))
+            width += text_width
+            if getattr(self.ngram_text_transformer_, "sparse_output", False):
+                sparse_width += text_width
         _check_feature_width(width, "Matrice transformée")
-        check_dense_allocation(len(X_clean), width, np.float64, budget, "Matrice transformée")
+        check_dense_allocation(len(X_clean), width - sparse_width, np.float64, budget, "Matrice transformée")
         X_clean = X_clean.copy()
         for col, value in self.categorical_imputers_.items():
             if col in X_clean.columns:
@@ -4239,10 +4317,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # 4. Catégorielles Basse Cardinalité (OHE)
         if self.low_card_cols_ and self.rare_grouper_ is not None and self.ohe_encoder_ is not None:
             ohe_cols = self.ohe_encoder_.get_feature_names_out(self.low_card_cols_)
-            check_dense_allocation(len(X_clean), len(ohe_cols), self.ohe_encoder_.dtype, budget, "Encodage One-Hot")
+            if not self.ohe_encoder_.sparse_output:
+                check_dense_allocation(len(X_clean), len(ohe_cols), self.ohe_encoder_.dtype, budget, "Encodage One-Hot")
             df_grouped = self.rare_grouper_.transform(X_clean[self.low_card_cols_])
-            ohe_arr = self.ohe_encoder_.transform(df_grouped)
-            df_ohe = pd.DataFrame(ohe_arr, index=X_clean.index, columns=ohe_cols)
+            with warnings.catch_warnings():
+                # Unknown categories intentionally map to zeros with handle_unknown="ignore".
+                warnings.filterwarnings("ignore", message="Found unknown categories.*encoded as all zeros",
+                                        category=UserWarning, module=r"sklearn\.preprocessing\._encoders")
+                ohe_arr = self.ohe_encoder_.transform(df_grouped)
+            df_ohe = (_text_matrix_frame(ohe_arr, X_clean.index, ohe_cols, True, budget) if sparse.issparse(ohe_arr)
+                      else pd.DataFrame(ohe_arr, index=X_clean.index, columns=ohe_cols))
             parts.append(df_ohe)
 
         # 5. Catégorielles Haute Cardinalité
@@ -4280,10 +4364,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
             values = X_clean[col].astype("string") if col in X_clean else pd.Series(pd.NA, index=X_clean.index)
             if mode == "HASH_ENCODE":
-                check_dense_allocation(len(X_clean), 8, np.float64, budget, f"Hachage catégoriel {col!r}")
                 hasher = FeatureHasher(n_features=8, input_type="string", alternate_sign=False)
-                encoded = hasher.transform(([value] if pd.notna(value) else [] for value in values)).toarray()
+                if not sparse_output:
+                    check_dense_allocation(len(X_clean), 8, np.float64, budget, f"Hachage catégoriel {col!r}")
+                encoded = hasher.transform(([value] if pd.notna(value) else [] for value in values))
                 names = [f"{col}_hash_{i}" for i in range(8)]
+                parts.append(_text_matrix_frame(encoded, X_clean.index, names, sparse_output, budget))
+                continue
             elif mode == "MANUAL_MAP":
                 encoded = values.map(self.binary_category_maps_[col]).fillna(0).to_numpy(dtype=float)
                 names = [f"{col}_mapped"]
@@ -4295,7 +4382,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 names = [f"{col}_bit_{i}" for i in range(width)]
             parts.append(pd.DataFrame(encoded, index=X_clean.index, columns=names))
         for col, state in (self.custom_encoders_ or {}).items():
-            parts.append(self._apply_custom_encoder(col, state, X_clean, budget))
+            parts.append(self._apply_custom_encoder(col, state, X_clean, budget, sparse_output))
 
         # 6. Dates
         if self.date_cols_ and self.datetime_extractor_ is not None:
@@ -4310,7 +4397,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             parts.append(self.ngram_text_transformer_.transform(X_clean))
 
         if parts:
-            check_dense_allocation(len(X_clean), sum(part.shape[1] for part in parts), np.float64,
+            check_dense_allocation(len(X_clean), sum(not isinstance(dtype, pd.SparseDtype)
+                                   for part in parts for dtype in part.dtypes), np.float64,
                                    budget, "Concaténation des features")
             result = pd.concat(parts, axis=1)
             if not result.columns.is_unique:
@@ -4331,10 +4419,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self.dropped_collinear_cols_ = []
 
         # 1. Seuil de variance
-        variances = X_trans.var(numeric_only=True)
-        for col in cols:
-            var_val = variances.get(col, 0.0)
-            is_constant = X_trans[col].nunique(dropna=True) <= 1
+        for col, series in X_trans.items():
+            if isinstance(series.dtype, pd.SparseDtype):
+                values = series.array.sp_values.astype(float, copy=False)
+                zeros = len(series) - len(values)
+                mean = values.sum() / len(series)
+                var_val = ((values - mean) @ (values - mean) + zeros * mean ** 2) / max(len(series) - 1, 1)
+                is_constant = var_val == 0
+            else:
+                var_val = series.var()
+                is_constant = series.nunique(dropna=True) <= 1
             if is_constant or np.isnan(var_val) or var_val <= max(self.config.variance_threshold, 1e-12):
                 self.dropped_variance_cols_.append(col)
 
@@ -4343,20 +4437,38 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 2. Détection de colinéarité (|r| > correlation_threshold)
         if len(retained_after_var) >= max(2, self.config.min_features_for_collinearity) and len(X_curr) > 1:
-            width = len(retained_after_var)
-            check_dense_allocation(width, width, np.float64, self.config.max_dense_bytes, "Matrice de corrélation")
-            corr_mat = X_curr.corr().abs()
+            has_sparse = any(isinstance(dtype, pd.SparseDtype) for dtype in X_curr.dtypes)
+            if has_sparse and self.config.correlation_threshold >= 1:
+                self.final_feature_names_ = retained_after_var
+                return
+            if not has_sparse:
+                width = len(retained_after_var)
+                check_dense_allocation(width, width, np.float64, self.config.max_dense_bytes, "Matrice de corrélation")
+                corr_mat = X_curr.corr().abs()
+            else:
+                matrix = to_sparse_matrix(X_curr, dtype=np.float64).tocsc()
+                sums = np.asarray(matrix.sum(axis=0)).ravel()
+                squares = np.asarray(matrix.power(2).sum(axis=0)).ravel()
+                norms = np.sqrt(np.maximum(0, squares - sums ** 2 / len(X_curr)))
             to_drop_collinear = set()
 
             for i in range(len(retained_after_var)):
                 c1 = retained_after_var[i]
                 if c1 in to_drop_collinear:
                     continue
+                if has_sparse:
+                    products = (matrix[:, i].T @ matrix).tocsr()
+                    dot = dict(zip(products.indices, products.data))
                 for j in range(i + 1, len(retained_after_var)):
                     c2 = retained_after_var[j]
                     if c2 in to_drop_collinear:
                         continue
-                    r_val = corr_mat.loc[c1, c2]
+                    if not has_sparse:
+                        r_val = corr_mat.loc[c1, c2]
+                    elif not np.isfinite(norms[[i, j]]).all() or min(norms[i], norms[j]) == 0:
+                        r_val = abs(X_curr[c1].corr(X_curr[c2]))
+                    else:
+                        r_val = min(1., abs(dot.get(j, 0.) - sums[i] * sums[j] / len(X_curr)) / (norms[i] * norms[j]))
                     if not np.isnan(r_val) and r_val > self.config.correlation_threshold:
                         # Une règle stable indépendante de la cible: garder la première
                         # représentation selon l'ordre d'entrée et retirer la suivante.
@@ -4440,18 +4552,17 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         X_trans = self._transform_components(X_clean)
 
         # Aligner strictement sur les colonnes retenues au fit
-        check_dense_allocation(len(X_clean), len(self.final_feature_names_), np.float64,
+        check_dense_allocation(len(X_clean), sum(
+            col not in X_trans or not isinstance(X_trans[col].dtype, pd.SparseDtype)
+            for col in self.final_feature_names_), np.float64,
                                self.config.max_dense_bytes, "Sortie finale")
-        out_df = pd.DataFrame(index=X_clean.index)
-        for col in self.final_feature_names_:
-            if col in X_trans.columns:
-                out_df[col] = X_trans[col]
-            else:
-                out_df[col] = 0.0
+        out_df = X_trans.reindex(columns=self.final_feature_names_, fill_value=0.0)
 
         # Vérification finale de qualité des données
         # 1. Remplacement des Inf et -Inf
         for col in out_df.columns:
+            if isinstance(out_df[col].dtype, pd.SparseDtype):
+                continue
             vals = out_df[col].to_numpy()
             is_inf = np.isinf(vals)
             if np.any(is_inf):
@@ -4464,9 +4575,26 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         out_df = out_df.fillna(0.0)
 
         # 3. Conversion 100% numérique
-        out_df = out_df.astype(np.float32)
-
-        return out_df
+        result = out_df.astype({col: pd.SparseDtype(np.float32, 0) if isinstance(dtype, pd.SparseDtype)
+                                else np.float32 for col, dtype in out_df.dtypes.items()})
+        for col in self.num_cols_:
+            if (col not in result or col in (self.num_power_transformer_ or {})
+                    or self.column_scalers_.get(col, self.num_scaler_) is not None
+                    or col in getattr(self.winsorizer_, "replace_values_", {})
+                    or self.column_outliers_.get(col) in {"MEDIAN_REPLACE", "TO_MISSING"}):
+                continue
+            low = self.winsorizer_.lower_bounds_.get(col, -np.inf)
+            high = self.winsorizer_.upper_bounds_.get(col, np.inf)
+            original = out_df[col].to_numpy(dtype=float)
+            rounded = result[col].to_numpy(copy=True)
+            # A final float32 cast must not round a clipped value past its train bound.
+            if np.isfinite(low) and abs(low) <= np.finfo(np.float32).max and float(np.float32(low)) < low:
+                rounded[(original >= low) & (rounded.astype(float) < low)] = np.nextafter(np.float32(low), np.float32(np.inf))
+                result[col] = rounded
+            if np.isfinite(high) and abs(high) <= np.finfo(np.float32).max and float(np.float32(high)) > high:
+                rounded[(original <= high) & (rounded.astype(float) > high)] = np.nextafter(np.float32(high), np.float32(-np.inf))
+                result[col] = rounded
+        return result
 
     def fit_transform_xy(
         self,
@@ -4777,7 +4905,7 @@ def _series_profile(values: Any, iqr_multiplier: float = 1.5) -> Dict[str, float
         min=float(obs.min()), max=float(obs.max()),
         outlier_pct=float(((obs < q1 - iqr_multiplier * spread) | (obs > q3 + iqr_multiplier * spread)).mean() * 100),
         zero_pct=float((obs == 0).mean() * 100), normality_p=nan)
-    if len(obs) >= 8 and obs.nunique() > 1:
+    if len(obs) >= 20 and obs.nunique() > 1:
         try:
             profile["normality_p"] = float(stats.normaltest(obs.sample(min(len(obs), 5000), random_state=0)).pvalue)
         except Exception:

@@ -11,10 +11,11 @@ from sklearn.model_selection import KFold, StratifiedKFold, TimeSeriesSplit, cro
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-from auto_preprocessor import AutoPreprocessor, PreprocessConfig
+from auto_preprocessor import AutoPreprocessor, PreprocessConfig, to_sparse_matrix
 
 
 def _model(family, classification, seed):
@@ -58,6 +59,8 @@ def compare_preprocessing(frame, target, family, *, config=None, task="auto", cv
     if not 20 <= len(data) <= max_rows:
         raise ValueError(f"L'évaluation nécessite entre 20 et {max_rows} cibles renseignées.")
     base = config or PreprocessConfig(verbose=0)
+    if base.sparse_output and family == "gradient_boosting":
+        raise ValueError("Gradient boosting histogramme exige une entrée dense. Désactivez sparse_output.")
     seed = base.random_state
     resolved = AutoPreprocessor(base, task=task)._resolve_task(data[target])
     classification = resolved == "classification"
@@ -85,7 +88,10 @@ def compare_preprocessing(frame, target, family, *, config=None, task="auto", cv
     for scaler in candidates:
         cfg = replace(base, scaler_type=scaler, model_family=None, preserve_rows=True, transform_target=False,
                       supervised_encoding=base.supervised_encoding and time_column is None)
-        pipeline = make_pipeline(AutoPreprocessor(cfg, task=resolved), _model(family, classification, seed))
+        stages = [AutoPreprocessor(cfg, task=resolved)]
+        if cfg.sparse_output:
+            stages.append(FunctionTransformer(to_sparse_matrix))
+        pipeline = make_pipeline(*stages, _model(family, classification, seed))
         scores = cross_val_score(pipeline, features, labels, cv=splits, scoring=scoring, error_score="raise")
         results.append({"scaler": scaler, "scores": scores.tolist(), "mean": float(scores.mean()),
                         "std": float(scores.std(ddof=1))})

@@ -14,19 +14,16 @@ if not exist auto_preprocessor.py (
   exit /b 1
 )
 
-py -m pip install --upgrade pyinstaller openpyxl
+python -m pip install -r requirements.txt pyinstaller
 if errorlevel 1 (
   echo ERREUR pendant l'installation de PyInstaller.
   pause
   exit /b 1
 )
 
-if exist build rmdir /s /q build
-if exist dist rmdir /s /q dist
-
-py -m PyInstaller --noconfirm --clean --onefile --windowed --name AutoPreprocessor ^
+python -m PyInstaller --noconfirm --onefile --windowed --name AutoPreprocessor ^
   --hidden-import sklearn.utils._typedefs --hidden-import sklearn.neighbors._partition_nodes ^
-  --collect-submodules sklearn --collect-submodules scipy ^
+  --exclude-module IPython --exclude-module pytest ^
   app_preprocess.py
 if errorlevel 1 (
   echo.

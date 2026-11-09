@@ -34,6 +34,11 @@ export type Result = {
 };
 export const apiRoot = import.meta.env.DEV ? "http://127.0.0.1:8000" : "";
 
+/** Resolve an unspecified feature transformation to its recommendation. */
+export function effectiveChoice(choices: Record<string, string>, name: string) {
+  return Object.hasOwn(choices, name) ? choices[name] : "recommended";
+}
+
 /** Fetch one JSON endpoint, preserving a readable error from the API. */
 export async function api<T>(path: string, body?: FormData | object): Promise<T> {
   const response = await fetch(apiRoot + "/api" + path, body instanceof FormData

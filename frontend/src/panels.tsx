@@ -15,11 +15,11 @@ export function ImportPanel({ dataset, config, busy, onFile, onChange, onConfigu
   return <>
     <div className="two-col import-grid">
       <section className="panel">
-        <h3>Fichier source</h3>
+        <h2>Fichier source</h2>
         <label className="upload">
-          <span className="upload-icon" aria-hidden="true">↑</span>
+          <svg className="upload-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4h16v-4" /></svg>
           <strong>{dataset?.filename ?? "Choisir un fichier"}</strong>
-          <span>{dataset ? shape(dataset.shape) + " · cliquer pour remplacer" : "CSV, TSV, TXT, Excel, JSON ou Parquet"}</span>
+          <span>{dataset ? shape(dataset.shape) + " / remplacer le fichier" : "CSV, TSV, TXT, Excel, JSON ou Parquet"}</span>
           <input aria-label="Fichier source" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.parquet"
             disabled={busy} onChange={event => {
               const file = event.currentTarget.files?.[0];
@@ -29,7 +29,7 @@ export function ImportPanel({ dataset, config, busy, onFile, onChange, onConfigu
         </label>
       </section>
       <section className="panel">
-        <h3>Apprentissage</h3>
+        <h2>Apprentissage</h2>
         <form onSubmit={event => { event.preventDefault(); onConfigure(); }}>
           <fieldset disabled={!dataset || busy}>
             <legend className="sr-only">Configuration de l’apprentissage</legend>
@@ -53,13 +53,13 @@ export function ImportPanel({ dataset, config, busy, onFile, onChange, onConfigu
                 </select>
               </label>
             </>}
-            <button className="primary" type="submit">Valider et explorer <span aria-hidden="true">→</span></button>
+            <button className="primary" type="submit">Valider et explorer</button>
           </fieldset>
         </form>
       </section>
     </div>
     {dataset && <section className="panel">
-      <h3>Aperçu du fichier</h3><p className="muted">{dataset.preview.length} premières lignes</p>
+      <h2>Aperçu du fichier</h2><p className="muted">{dataset.preview.length} premières lignes</p>
       <DataTable rows={dataset.preview} columns={dataset.columns} />
     </section>}
   </>;
@@ -89,7 +89,7 @@ export function EdaPanel({ eda, feature, busy, onFeature }: {
       <Metric label="Doublons exacts" value={display(eda.duplicate_count)} />
     </div>
     <section className="panel">
-      <div className="panel-head"><h3>Inventaire des features</h3>
+      <div className="panel-head"><h2>Inventaire des features</h2>
         <input aria-label="Rechercher une feature" placeholder="Rechercher une feature…" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
       <div className="table-scroll" tabIndex={0}><table>
@@ -114,7 +114,7 @@ export function EdaPanel({ eda, feature, busy, onFeature }: {
           <Distribution data={feature.distribution} />
           <p className="muted">{display(feature.missing_count)} valeurs manquantes ({display(feature.missing_pct)} %)</p>
           {feature.boxplot && <>
-            <h4>Boîte à moustaches</h4><Boxplot box={feature.boxplot} />
+            <h3>Boîte à moustaches</h3><Boxplot box={feature.boxplot} />
             <DataTable rows={[
               { Méthode: "IQR × 1,5", Extrêmes: feature.iqr?.count ?? null, "Borne basse": feature.iqr?.lower ?? null, "Borne haute": feature.iqr?.upper ?? null },
               { Méthode: "Score z robuste · 3,5 MAD", Extrêmes: feature.robust_z?.count ?? null, "Borne basse": feature.robust_z?.lower ?? null, "Borne haute": feature.robust_z?.upper ?? null },
@@ -123,21 +123,21 @@ export function EdaPanel({ eda, feature, busy, onFeature }: {
           {feature.text_length && <p>Longueur moyenne des valeurs {display(feature.text_length.mean)} caractères</p>}
         </>}
       </section>
-      <section className="panel"><h3>Valeurs manquantes</h3><p className="muted">Jusqu’à 20 features, classées par proportion décroissante</p>
+      <section className="panel"><h2>Valeurs manquantes</h2><p className="muted">Jusqu’à 20 features, classées par proportion décroissante</p>
         <Distribution data={missing} unit="Manquants (%)" />
         <details><summary>Exemples de doublons ({display(eda.duplicate_count)} au total)</summary>
           <DataTable rows={eda.duplicate_examples} /></details>
       </section>
     </div>
     <div className="panel-head">
-      <h3>Corrélations</h3>
+      <h2>Corrélations</h2>
       <select aria-label="Mesure de corrélation" value={matrix} onChange={e => setMatrix(e.target.value as typeof matrix)}>
-        <option value="pearson">Pearson · numérique</option><option value="cramers_v">V de Cramér · catégoriel</option>
+        <option value="pearson">Pearson (numérique)</option><option value="cramers_v">V de Cramér (catégoriel)</option>
       </select>
     </div>
     <Heatmap matrix={eda[matrix]} title={matrix === "pearson" ? "Corrélation de Pearson" : "V de Cramér · modalités limitées à 40"} />
     {!!eda.target_relations.length && <section className="panel">
-      <h3>Relations avec la cible</h3>
+      <h2>Relations avec la cible</h2>
       <p className="muted">Effets classés par mesure · échantillon de {display(eda.relation_sample_size)} lignes</p>
       <DataTable rows={[...ranked, ...eda.target_relations.filter(row => row.effect === null)].map(row =>
         ({ Feature: row.column, Mesure: row.method, Effet: row.effect, Effectif: row.sample_size, Note: row.note }))} />
@@ -153,7 +153,7 @@ export function CleaningPanel({ rows, choices, selected, preview, busy, onChoice
   const row = rows.find(item => item.column === selected);
   return <>
     <section className="panel">
-      <div className="panel-head"><h3>Choix par feature</h3>
+      <div className="panel-head"><h2>Choix par feature</h2>
         <button disabled={busy} onClick={onReset}>Accepter toutes les recommandations</button></div>
       <div className="table-scroll" tabIndex={0}><table className="clean-table">
         <thead><tr><th>Feature</th><th>Anomalies</th><th>Recommandation et preuve</th><th>Votre choix</th></tr></thead>
@@ -172,7 +172,7 @@ export function CleaningPanel({ rows, choices, selected, preview, busy, onChoice
       </table></div>
     </section>
     <section className="panel">
-      <div className="panel-head"><h3>Aperçu avant / après</h3>
+      <div className="panel-head"><h2>Aperçu avant / après</h2>
         <select aria-label="Feature à comparer" disabled={busy} value={selected ?? ""} onChange={event => onPreview(event.target.value)}>
           {!selected && <option value="">Choisir une feature</option>}
           {rows.filter(item => !item.is_target).map(item => <option key={item.column}>{item.column}</option>)}
@@ -184,9 +184,9 @@ export function CleaningPanel({ rows, choices, selected, preview, busy, onChoice
       </details>}
       {preview && <>
         <div className="two-col">
-          <div><h4>Avant</h4><Distribution data={preview.before_chart} /></div>
+          <div><h3>Avant</h3><Distribution data={preview.before_chart} /></div>
           <div>{preview.after_charts.length ? preview.after_charts.map(chart => <div key={chart.title}>
-            <h4>Après · {chart.title}</h4><Distribution data={chart.data} /></div>) : <p>Aucune sortie pour cette feature.</p>}</div>
+            <h3>Après · {chart.title}</h3><Distribution data={chart.data} /></div>) : <p>Aucune sortie pour cette feature.</p>}</div>
         </div>
         {preview.notes.map(note => <p className="muted" key={note}>{note}</p>)}
         {!!preview.table.length && <DataTable rows={preview.table} />}
@@ -204,7 +204,7 @@ export function ExecutionPanel({ sessionId, busy, result, onRun }: {
   const [testSize, setTestSize] = useState(20);
   return <>
     <section className="panel">
-      <h3>Ajustement et découpage</h3>
+      <h2>Ajustement et découpage</h2>
       <p className="muted">Les paramètres sont appris sur le train. Le test est transformé avec ces paramètres.</p>
       <form className="run-form" onSubmit={event => { event.preventDefault(); onRun(testSize); }}>
         <label className="field">Part du test (%)
@@ -215,12 +215,12 @@ export function ExecutionPanel({ sessionId, busy, result, onRun }: {
       </form>
     </section>
     {result && <section className="panel">
-      <h3>Résultats et fichiers</h3>
+      <h2>Résultats et fichiers</h2>
       <div className="metrics">
         <Metric label="Entrée" value={shape(result.input_shape)} /><Metric label="Train" value={shape(result.train_shape)} />
         <Metric label="Test" value={shape(result.test_shape)} /><Metric label="Complet" value={shape(result.full_shape)} />
       </div>
-      <p className="muted">Processus isolé · {display(result.worker.elapsed_seconds)} s · pic {display(result.worker.peak_rss_bytes / 1024 ** 2)} Mio</p>
+      <p className="muted">Processus isolé en {display(result.worker.elapsed_seconds)} s, pic de {display(result.worker.peak_rss_bytes / 1024 ** 2)} Mio</p>
       {result.warnings.length > 0 && <details open><summary>Notes et avertissements ({result.warnings.length})</summary>
         <ul>{result.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul></details>}
       <details><summary>Colonnes de sortie ({result.output_columns.length})</summary>

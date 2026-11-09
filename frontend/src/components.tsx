@@ -37,12 +37,12 @@ export function Distribution({ data, unit = "Effectif" }: { data: Bin[]; unit?: 
   return <div className="chart">
     <ResponsiveContainer width="100%" height="100%" minWidth={1}>
       <BarChart data={data} margin={{ left: -12, right: 12, top: 12, bottom: 12 }}>
-        <CartesianGrid vertical={false} stroke="#e2e8e8" />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#52666a" }} tickMargin={8}
+        <CartesianGrid vertical={false} stroke="var(--line)" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted)" }} tickMargin={8}
           tickFormatter={value => String(value).length > 16 ? String(value).slice(0, 15) + "…" : value} />
-        <YAxis tick={{ fontSize: 11, fill: "#52666a" }} />
-        <Tooltip cursor={{ fill: "#ecf7f4" }} />
-        <Bar dataKey="count" name={unit} fill="#087f70" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        <YAxis tick={{ fontSize: 11, fill: "var(--muted)" }} />
+        <Tooltip cursor={{ fill: "var(--pale)" }} />
+        <Bar dataKey="count" name={unit} fill="var(--green)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   </div>;
@@ -56,16 +56,16 @@ export function Boxplot({ box }: { box: Box }) {
   return <figure className="boxplot">
     <svg viewBox="0 0 600 95" role="img" aria-label={label}>
       <title>{label}</title>
-      <line x1={x(box.low)} x2={x(box.high)} y1={40} y2={40} stroke="#47726e" strokeWidth={2} />
+      <line x1={x(box.low)} x2={x(box.high)} y1={40} y2={40} stroke="var(--control)" strokeWidth={2} />
       {[box.low, box.high].map((value, index) => <line key={index} x1={x(value)} x2={x(value)}
-        y1={29} y2={51} stroke="#47726e" strokeWidth={2} />)}
+        y1={29} y2={51} stroke="var(--control)" strokeWidth={2} />)}
       <rect x={x(box.q1)} y={21} width={Math.max(1, x(box.q3) - x(box.q1))} height={38}
-        fill="#c3eee5" stroke="#087f70" strokeWidth={2} />
-      <line x1={x(box.median)} x2={x(box.median)} y1={21} y2={59} stroke="#087f70" strokeWidth={3} />
-      <text x={30} y={82} fill="#52666a">{display(box.low)}</text>
-      <text x={570} y={82} textAnchor="end" fill="#52666a">{display(box.high)}</text>
+        fill="var(--pale)" stroke="var(--green)" strokeWidth={2} />
+      <line x1={x(box.median)} x2={x(box.median)} y1={21} y2={59} stroke="var(--green)" strokeWidth={3} />
+      <text x={30} y={82} fill="var(--muted)">{display(box.low)}</text>
+      <text x={570} y={82} textAnchor="end" fill="var(--muted)">{display(box.high)}</text>
     </svg>
-    <figcaption>Q1 {display(box.q1)} · Médiane {display(box.median)} · Q3 {display(box.q3)}</figcaption>
+    <figcaption>Q1 {display(box.q1)} / Médiane {display(box.median)} / Q3 {display(box.q3)}</figcaption>
   </figure>;
 }
 
@@ -80,8 +80,8 @@ export function Heatmap({ matrix, title }: { matrix: Matrix; title: string }) {
         <tbody>{matrix.columns.map((name, i) => <tr key={name}><th scope="row">{name}</th>
           {matrix.values[i].map((value, j) => <td key={j}
             title={name + " × " + matrix.columns[j] + " · " + display(value)}
-            style={{ background: value === null ? "#f1f4f4" : value < 0
-              ? `rgba(199, 79, 49, ${Math.abs(value) * .62})` : `rgba(16, 153, 131, ${value * .62})` }}>
+            style={{ background: value === null ? "var(--surface-quiet)" : value < 0
+              ? `color-mix(in srgb, var(--chart-negative) ${Math.abs(value) * 62}%, var(--surface))` : `color-mix(in srgb, var(--chart-positive) ${value * 62}%, var(--surface))` }}>
             {value === null ? "—" : value.toFixed(2)}</td>)}</tr>)}</tbody>
       </table>
     </div>}
@@ -102,7 +102,4 @@ export function visibleFeatures(features: Feature[], query: string, sort: SortKe
     });
 }
 
-/** Read the effective choice without inserting a default override. */
-export function effectiveChoice(choices: Record<string, string>, name: string) {
-  return Object.hasOwn(choices, name) ? choices[name] : "recommended";
-}
+export { effectiveChoice } from "./api";

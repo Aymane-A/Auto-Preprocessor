@@ -1,6 +1,7 @@
 /** Presentational tables and accessible, interactive data charts. */
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Bin, Box, Cell, Feature, Matrix, Row, Shape } from "./api";
+import { AnimatedNumber, ChartTooltip, motionTiming } from "./animation";
 
 const numericFormat = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
 
@@ -19,30 +20,35 @@ export function shape(value: Shape) {
 export function DataTable({ rows, columns }: { rows: Row[]; columns?: string[] }) {
   const names = columns ?? [...new Set(rows.flatMap(Object.keys))];
   if (!rows.length) return <p className="muted">Aucune ligne à afficher.</p>;
-  return <div className="table-scroll" tabIndex={0}><table>
+  return <div className="table-scroll" tabIndex={0} data-motion-key={JSON.stringify([rows.length, rows.slice(0, 12)])}><table>
     <thead><tr>{names.map(name => <th key={name} scope="col">{name}</th>)}</tr></thead>
     <tbody>{rows.map((row, index) => <tr key={index}>{names.map(name =>
-      <td key={name}>{display(row[name])}</td>)}</tr>)}</tbody>
+      <td key={name} className={typeof row[name] === "number" ? "numeric-cell" : undefined}>{display(row[name])}</td>)}</tr>)}</tbody>
   </table></div>;
 }
 
 /** Show key dataset measurements in a consistent card. */
-export function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
+export function Metric({ label, value, suffix = "" }: { label: string; value: number | Shape; suffix?: string }) {
+  return <div className="metric"><span>{label}</span><strong>{Array.isArray(value)
+    ? <><AnimatedNumber value={value[0]} digits={0} /> × <AnimatedNumber value={value[1]} digits={0} /></>
+    : <AnimatedNumber value={value} digits={suffix ? 4 : 0} />}{suffix}</strong></div>;
 }
 
 /** Draw a responsive frequency chart with exact values in its tooltip. */
-export function Distribution({ data, unit = "Effectif" }: { data: Bin[]; unit?: string }) {
+export function Distribution({ data, unit = "Effectif", color = "var(--green)" }: { data: Bin[]; unit?: string; color?: string }) {
   if (!data.length) return <p className="empty-chart">Aucune valeur à tracer.</p>;
-  return <div className="chart">
+  return <div className="chart" data-motion-key={JSON.stringify(data)}>
     <ResponsiveContainer width="100%" height="100%" minWidth={1}>
       <BarChart data={data} margin={{ left: -12, right: 12, top: 12, bottom: 12 }}>
         <CartesianGrid vertical={false} stroke="var(--line)" />
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted)" }} tickMargin={8}
           tickFormatter={value => String(value).length > 16 ? String(value).slice(0, 15) + "…" : value} />
         <YAxis tick={{ fontSize: 11, fill: "var(--muted)" }} />
-        <Tooltip cursor={{ fill: "var(--pale)" }} />
-        <Bar dataKey="count" name={unit} fill="var(--green)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        <Tooltip cursor={{ fill: "var(--pale)" }} animationDuration={motionTiming.interaction * 1000}
+          content={({ active, label, payload }) => <ChartTooltip active={active} label={label}>
+            {payload.map((item, index) => <p key={index}>{item.name} · {typeof item.value === "number" || typeof item.value === "string" ? display(item.value) : item.value?.join(" – ")}</p>)}
+          </ChartTooltip>} />
+        <Bar dataKey="count" name={unit} fill={color} radius={[3, 3, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   </div>;

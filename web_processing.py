@@ -259,7 +259,11 @@ def preview(path, limit, target, task, column, choice):
     chart = histogram(series.dropna()) if profile["type"] == "numérique" else profile["top"]
     if choice == "none":
         return json_safe({"status": "ok", "before_chart": chart, "after_charts": [{"title": column, "data": chart}],
-                          "notes": ["Les valeurs brutes sont conservées sur les lignes exportées."], "table": []})
+                          "notes": ["Les valeurs brutes sont conservées sur les lignes exportées."], "table": [],
+                          "rows": len(frame), "output_columns": [column], "applied": {"traitement": "NONE"},
+                          "before": profile, "after_scaled": profile,
+                          "samples": [{"row": index, "original": value, "values": {column: value}}
+                                      for index, value in series.head(12).items()]})
     options = Options(task=task)
     result = analyze_frame(frame, target, options)
     _, selected = selected_overrides(result, target, {column: choice})
@@ -274,7 +278,9 @@ def preview(path, limit, target, task, column, choice):
         before = chart
         after = [{"title": name, "data": histogram(values)} for name, values in data.get("after", {}).items()]
     return json_safe({"status": comparison["status"], "before_chart": before, "after_charts": after,
-                      "notes": comparison["notes"], "table": build_preview_table(comparison).to_dict("records")})
+                      "notes": comparison["notes"], "table": build_preview_table(comparison).to_dict("records"),
+                      **{key: comparison.get(key) for key in (
+                          "rows", "output_columns", "applied", "before", "after", "after_scaled", "affected", "samples")}})
 
 
 def fitted_values(estimator, column, names):

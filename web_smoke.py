@@ -76,9 +76,11 @@ def main():
     """Run the selected demo against localhost, generating temporary data if needed."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=("fraud", "churn", "large"), default="fraud")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000",
+                        help="Loopback server used for this validation run.")
     args = parser.parse_args()
     data = Path(__file__).parent / "data"
-    with httpx.Client(base_url="http://127.0.0.1:8000", timeout=650) as client:
+    with httpx.Client(base_url=args.base_url, timeout=650) as client:
         if args.dataset == "large":
             with TemporaryDirectory(prefix="autoprep-stress-") as folder:
                 path = Path(folder) / "fraud_large.csv"

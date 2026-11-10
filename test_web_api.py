@@ -62,6 +62,16 @@ def test_demo_flow(dataset, target, raw_column, feature, alternative):
         preview = payload(client.post("/api/preview", json={**body, "column": feature, "choice": alternative}))
         assert preview["status"] == "ok"
         assert preview["before_chart"] and preview["after_charts"]
+        assert len(preview["samples"]) == 12
+        assert preview["applied"] or preview["output_columns"]
+        if alternative == "encoding:COUNT_ENCODE":
+            assert preview["applied"] == {"traitement": "COUNT_ENCODE"}
+        for sample in preview["samples"]:
+            assert sample["original"] == loaded["preview"][sample["row"]][feature]
+            assert set(sample["values"]) <= set(preview["output_columns"])
+        raw_preview = payload(client.post("/api/preview", json={**body, "column": feature, "choice": "none"}))
+        assert raw_preview["applied"] == {"traitement": "NONE"}
+        assert all(sample["original"] == sample["values"][feature] for sample in raw_preview["samples"])
         result = payload(client.post("/api/preprocess", json={**body, "choices": {
             raw_column: "none", feature: alternative,
         }}))

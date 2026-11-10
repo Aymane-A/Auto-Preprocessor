@@ -4999,6 +4999,14 @@ def preview_column(df: pd.DataFrame, column: str, override: Any = None, config: 
     result: Dict[str, Any] = {"column": column, "kind": kind, "rows": int(len(frame)), "output_columns": outputs,
                               "choices": {k: (v if not isinstance(v, (tuple, list)) else list(v)) for k, v in choices.items()},
                               "applied": {}, "data": {}, "notes": notes}
+    result["samples"] = []
+    if frame.index.is_unique and out.index.is_unique:
+        original = frame[column].reindex(out.index)
+        result["samples"] = [
+            {"row": index, "original": original.loc[index],
+             "values": {str(name): out.loc[index, name] for name in outputs[:6]}}
+            for index in out.index[:12]
+        ]
     if kind in {"DROP_ID", "DROP_CONSTANT", "DROP_HIGH_MISSING", "DROP_DUPLICATE", "DROP_LEAKAGE"} or column in prep.columns_to_drop_:
         result["status"] = "dropped"
         notes.append(f"La colonne est supprimée du jeu transformé ({meta.get('reason') or kind}).")
@@ -5038,6 +5046,7 @@ def preview_column(df: pd.DataFrame, column: str, override: Any = None, config: 
         notes.append(PREVIEW_MODEL_NOTE)
     else:
         values = before_series.astype("string")
+        result["applied"] = {"traitement": prep._reported_action(column, meta)}
         counts = values.value_counts(dropna=True)
         probs = counts / max(int(counts.sum()), 1)
         result["before"] = {

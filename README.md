@@ -753,7 +753,9 @@ Les corrections plus anciennes (détection de fuite par colonne avec règle d'é
 
 ## Application web locale · React et FastAPI
 
-L’atelier **AutoPrépa** propose quatre étapes. Importez un tableau, configurez la cible ou le mode sans cible, explorez les statistiques, puis comparez les traitements avant d’exporter les résultats. L’application Tkinter se lance toujours avec `python app_preprocess.py`.
+L’atelier **AutoPrépa** propose six étapes. Importez un tableau, explorez les statistiques, consultez les recommandations, configurez le pipeline, comparez et exécutez les traitements, puis exportez les résultats. Les scènes Three.js montrent le réseau scientifique et les opérations du moteur avec des contrôles souris et clavier. L’application Tkinter se lance toujours avec `python app_preprocess.py`.
+
+Le rapport de réalisation et les limites vérifiées figurent dans [IMPLEMENTATION_3D.md](IMPLEMENTATION_3D.md).
 
 ### Installation et lancement
 
@@ -769,6 +771,8 @@ python serve.py
 ```
 
 Ouvrez [AutoPrépa](http://127.0.0.1:8000). Pour développer l’interface, laissez `python serve.py` tourner et lancez `npm run dev` dans `frontend` depuis un second terminal. Ouvrez alors [Vite](http://localhost:5173).
+
+Si l’API de développement utilise un autre port, définissez par exemple `$env:VITE_API_URL = "http://127.0.0.1:8001"` avant `npm run dev`. Le build de production utilise l’origine du serveur qui le sert.
 
 Les formats importés sont CSV, TSV, TXT, XLSX, XLS, JSON et Parquet. Le classeur de rapport est produit au format XLSX. Le CSV complet concatène le train puis le test. En mode supervisé, l’export contient aussi la cible alignée sur les lignes retenues.
 

@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useReducedMotionPreference } from "./animation";
 
-const Canvas = lazy(() => import("./ScientificCanvas"));
+const OrbitalScene = lazy(() => import("./OrbitalScene").then(module => ({ default: module.OrbitalScene })));
 
 export type SceneNode = { label: string; state: "pending" | "active" | "complete" | "warning" | "error"; disabled?: boolean };
 type Props = { nodes?: SceneNode[]; running?: boolean; celebrate?: boolean; onSelect?: (index: number) => void; label: string };
@@ -12,7 +12,6 @@ class SceneBoundary extends Component<{ fallback: ReactNode; children: ReactNode
   static getDerivedStateFromError() { return { failed: true }; }
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
-
 function SceneFallback({ nodes, failed }: { nodes?: SceneNode[]; failed?: boolean }) {
   return <div className="scene-fallback">
     {nodes ? <ol>{nodes.map(node => <li key={node.label} data-state={node.state}>{node.label}</li>)}</ol> :
@@ -32,20 +31,15 @@ export function ScientificScene({ nodes, running, celebrate, onSelect, label }: 
   const [visible, setVisible] = useState(false);
   const [started, setStarted] = useState(false);
   const [pageVisible, setPageVisible] = useState(!document.hidden);
-  const [lost, setLost] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const [focused, setFocused] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  const [paused, setPaused] = useState(false);
   const [ambient, setAmbient] = useState(false);
   const reducedMotion = useReducedMotionPreference();
   const signature = nodes?.map(node => node.state).join("|") ?? "network";
   useEffect(() => {
-    if (!visible || !pageVisible || paused || reducedMotion) { setAmbient(false); return; }
+    if (!visible || !pageVisible || reducedMotion) { setAmbient(false); return; }
     setAmbient(true);
     const timer = window.setTimeout(() => setAmbient(false), celebrate ? 1800 : 1400);
     return () => window.clearTimeout(timer);
-  }, [visible, pageVisible, paused, reducedMotion, signature, celebrate]);
+  }, [visible, pageVisible, reducedMotion, signature, celebrate]);
   useEffect(() => {
     if (!host.current) return;
     const observer = new IntersectionObserver(([entry]) => {
@@ -63,23 +57,13 @@ export function ScientificScene({ nodes, running, celebrate, onSelect, label }: 
 
   const fallback = <SceneFallback nodes={nodes} failed />;
   return <figure className={nodes ? "science-scene pipeline-scene" : "science-scene"} ref={host} aria-label={label}
-    data-animation={paused || reducedMotion ? "paused" : running ? "processing" : ambient ? "entrance" : "idle"}>
+    data-animation={reducedMotion || !visible || !pageVisible ? "paused" : running ? "processing" : ambient ? "entrance" : "idle"}>
     <div className="scene-viewport">
-      {started && !lost ? <SceneBoundary fallback={fallback}>
+      {started ? <SceneBoundary fallback={fallback}>
         <Suspense fallback={<SceneFallback nodes={nodes} />}>
-          <Canvas nodes={nodes} running={(!!running || ambient) && !paused} visible={visible && pageVisible}
-            rotation={rotation} focused={focused} resetKey={resetKey}
-            onSelect={onSelect} onUnavailable={() => setLost(true)} fallback={fallback} />
+          <OrbitalScene nodes={nodes} active={visible && pageVisible && !reducedMotion} />
         </Suspense>
-      </SceneBoundary> : <SceneFallback nodes={nodes} failed={lost} />}
-    </div>
-    <div className="scene-tools">
-      <label>Orientation 3D<input aria-label="Orientation 3D" type="range" min="-90" max="90"
-        value={rotation} onChange={event => setRotation(event.currentTarget.valueAsNumber)} /></label>
-      <button type="button" aria-pressed={focused} onClick={() => setFocused(value => !value)}>{focused ? "Vue d’ensemble" : "Rapprocher"}</button>
-      <button type="button" onClick={() => { setRotation(0); setFocused(false); setResetKey(value => value + 1); }}>Recentrer</button>
-      <button type="button" aria-pressed={paused} onClick={() => setPaused(value => !value)}>
-        {paused ? "Reprendre les animations" : "Mettre les animations en pause"}</button>
+      </SceneBoundary> : <SceneFallback nodes={nodes} />}
     </div>
     {nodes && onSelect && <div className="scene-node-controls" role="group" aria-label={label}>
       {nodes.map((node, index) => <button key={node.label} type="button" disabled={node.disabled}

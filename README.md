@@ -757,6 +757,8 @@ L’atelier **AutoPrépa** propose six étapes. Importez un tableau, explorez le
 
 Le rapport de réalisation et les limites vérifiées figurent dans [IMPLEMENTATION_3D.md](IMPLEMENTATION_3D.md).
 
+L’intégration complète du moteur est décrite dans [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md). Le catalogue des 52 réglages publics et des 91 couples étape/action figure dans [INTEGRATION_OPTIONS.md](INTEGRATION_OPTIONS.md). Les réglages avancés, les opérations combinées par variable et l’import/export de configuration sont accessibles dans la configuration du pipeline. Les résultats proposent aussi une analyse des données transformées, un dataset Excel, le rapport JSON et le préprocesseur ajusté. La validation croisée est disponible en mode supervisé.
+
 ### Installation et lancement
 
 Exécutez les commandes depuis la racine du projet. Python et Node.js 20.19+ ou 22.12+ sont requis.
@@ -782,13 +784,18 @@ Les formats importés sont CSV, TSV, TXT, XLSX, XLS, JSON et Parquet. Le classeu
 |---|---|
 | `POST /api/upload` | Import multipart via le champ `file`, schéma, aperçu et identifiant de session |
 | `POST /api/config` | Mode `supervised` ou `unsupervised`, cible éventuelle et tâche |
+| `GET /api/capabilities` | Schéma, valeurs par défaut, formats et limites des options publiques |
 | `GET /api/eda/{session_id}` | Statistiques, doublons, extrêmes, matrices et relations avec la cible |
 | `GET /api/eda/{session_id}/feature/{column}` | Histogramme ou modalités, boîte à moustaches et bornes |
 | `POST /api/analyze` | Recommandations et preuves issues d’AutoPreprocessor |
 | `POST /api/preview` | Comparaison de la colonne pour le choix proposé |
 | `POST /api/preprocess` | Ajustement sur le train, transformation du test, génération des exports |
+| `POST /api/evaluate` | Comparaison par validation croisée supervisée, avec découpage temporel facultatif |
+| `GET /api/results-eda/{session_id}` | Statistiques du dataset transformé publié |
+| `POST /api/export-excel` | Préparation du dataset XLSX téléchargeable |
 | `GET /api/report/{session_id}` | Rapport JSON par feature et rapport du moteur |
-| `GET /api/download/{session_id}/{train|test|full|report_xlsx}` | CSV ou classeur Excel |
+| `GET /api/download/{session_id}/{kind}` | `train`, `test`, `full`, `report_xlsx`, `report_json`, `full_xlsx` ou `preprocessor` |
+| `DELETE /api/session/{session_id}` | Fermeture explicite d’une session disponible |
 
 Les requêtes JSON POST incluent `session_id`. Les choix sont indexés par nom de colonne. `recommended` suit le moteur, `none` conserve les valeurs brutes et les autres identifiants sont ceux renvoyés par `/api/analyze`. Les colonnes laissées brutes sont réintégrées par identifiant de ligne et peuvent contenir du texte ou des cellules manquantes. En présence de ces colonnes, les doublons sont conservés par défaut pour éviter d’éliminer des lignes qui diffèrent sur une valeur brute.
 
@@ -809,8 +816,8 @@ Le service écoute sur la boucle locale. CORS autorise l’origine de développe
 
 | Variable d’environnement | Défaut | Effet |
 |---|---:|---|
-| `AUTOPREP_MAX_TABLE_MB` | 100 | Limite du fichier importé, en Mio |
-| `AUTOPREP_WORKER_MB` | 1024 | Budget mémoire par processus isolé, en Mio |
+| `AUTOPREP_MAX_TABLE_MB` | 200 | Limite du fichier importé, en Mio |
+| `AUTOPREP_WORKER_MB` | 2048 | Budget mémoire par processus isolé, en Mio |
 | `AUTOPREP_TIMEOUT_SECONDS` | 120 | Délai maximal d’une opération isolée, en secondes |
 
 Les fichiers de fraude réels peuvent dépasser 100 Mio. Ajustez les budgets avant de démarrer le serveur. Les protections de lecture Excel et Parquet s’appliquent également aux formats compressés.

@@ -37,6 +37,7 @@ const entranceSelector = [
   ".completion-overview", ".comparison", ".comparison-statistics > div", ".chart", ".boxplot",
   "tbody > tr:nth-child(-n+12)", ".downloads > a", ".workflow-nav > button", ".scene-node-controls > button",
   ".panel li:nth-child(-n+12)", "dialog[open]", '[role="dialog"]', '[role="listbox"]',
+  ".advanced-grid > label:nth-child(-n+12)", ".step-controls > details:nth-child(-n+12)",
 ].join(",");
 const interactiveSelector = 'button, a.button, a.primary, select, summary';
 

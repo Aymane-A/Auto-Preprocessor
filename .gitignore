@@ -1,11 +1,70 @@
+# Python caches and bytecode
 __pycache__/
-.pytest_cache/
-*.pyc
+*.py[cod]
+*$py.class
+*.spec
+
+# Build and distribution artifacts
 build/
 dist/
-*.spec
 resultats/
 *.joblib
+frontend/dist/
+
+# Virtual environments and dependencies
 .venv/
+.venv*/
+venv/
+env/
+ENV/
 .webdeps/
+node_modules/
 frontend/node_modules/
+
+# Local datasets and secrets
+.env
+.env.*
+!.env.example
+**/creditcard.csv
+
+# Local scientific datasets (keep large datasets out of Git)
+data/*.csv
+data/*.xls
+data/*.xlsx
+!data/churn_telecom_demo.csv
+!data/fraud_signal_demo.csv
+!data/immobilier_demo.csv
+browser_titanic_subset.csv
+
+# Temporary validation artifacts and caches
+.pytest_cache/
+.pytest_task*/
+.pytest_v*/
+.taste-skill/
+frontend/.tmp/
+
+# Local validation evidence and temporary task logs
+docs/task*-evidence/
+
+# Generated test and benchmark outputs
+*.log
+*.jsonl
+nested_browser_export.json
+
+# Local temporary, database, and IDE state
+*.tmp
+*.temp
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.sublime-workspace
+*.pem
+*.pfx
+*.key
+.secrets/

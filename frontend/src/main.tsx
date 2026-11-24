@@ -1,11 +1,14 @@
 /** Six-stage local scientific workspace, backed by the existing Python API. */
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AnimatePresence, motion } from "framer-motion";
 import { AnimatedNumber, AnimationSystem, Notice, WorkflowStage, motionTiming, useReducedMotionPreference } from "./animation";
 import { ScientificScene } from "./ScientificScene";
+import type { Atmosphere } from "./OrbitalScene";
 import { stages } from "./workflow";
 import { useWorkflow } from "./useWorkflow";
+import { api } from "./api";
+import type { SelectionDetails, SelectionPreview } from "./api";
 import "./style.css";
 
 const ImportPanel = lazy(() => import("./panels").then(module => ({ default: module.ImportPanel })));
@@ -14,6 +17,10 @@ const CleaningPanel = lazy(() => import("./panels").then(module => ({ default: m
 const ExecutionPanel = lazy(() => import("./panels").then(module => ({ default: module.ExecutionPanel })));
 const PipelinePanel = lazy(() => import("./PipelinePanel").then(module => ({ default: module.PipelinePanel })));
 const AppliedReport = lazy(() => import("./PipelinePanel").then(module => ({ default: module.AppliedReport })));
+const AdvancedSettings = lazy(() => import("./AdvancedSettings").then(module => ({ default: module.AdvancedSettings })));
+const EvaluationPanel = lazy(() => import("./AdvancedSettings").then(module => ({ default: module.EvaluationPanel })));
+const NestedEvaluationPanel = lazy(() => import("./NestedEvaluation").then(module => ({ default: module.NestedEvaluationPanel })));
+const OrbitalScene = lazy(() => import("./OrbitalScene").then(module => ({ default: module.OrbitalScene })));
 
 function Mark() {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -24,9 +31,28 @@ function Mark() {
 
 function App() {
   const state = useWorkflow();
+  const [selectionPreview, setSelectionPreview] = useState<SelectionPreview | null>(null);
+  const [selectionError, setSelectionError] = useState("");
+  const [selectionLoading, setSelectionLoading] = useState(false);
+  const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const reducedMotion = useReducedMotionPreference();
   const { step, dataset, busy, result } = state;
   const current = stages[step];
+  const appliedOptions = useMemo(() => ({ ...state.options, test_size_pct: state.testSize }), [state.options, state.testSize]);
+  const selectionIdentity = JSON.stringify([dataset?.session_id, state.config, state.options, state.choices, state.testSize]);
+  const selectionIdentityRef = useRef(selectionIdentity);
+  selectionIdentityRef.current = selectionIdentity;
+  useEffect(() => { setSelectionPreview(null); setSelectionConfirmed(false); setSelectionError(""); }, [selectionIdentity]);
+
+  async function previewSelection() {
+    if (!dataset || selectionLoading) return;
+    setSelectionLoading(true); setSelectionError(""); setSelectionConfirmed(false);
+    const requestedIdentity = selectionIdentity;
+    try { const response = await api<SelectionPreview>("/selection-preview", { session_id: dataset.session_id, options: appliedOptions, choices: state.choices });
+      if (requestedIdentity === selectionIdentityRef.current) setSelectionPreview(response); }
+    catch (reason) { if (requestedIdentity === selectionIdentityRef.current) { setSelectionError(reason instanceof Error ? reason.message : "Aperçu impossible."); setSelectionPreview(null); } }
+    finally { setSelectionLoading(false); }
+  }
 
   useEffect(() => {
     document.title = current.name + " | AutoPrépa";
@@ -44,7 +70,7 @@ function App() {
       schema_version: 1, mode: state.config.mode,
       target: state.config.mode === "supervised" ? state.config.target : null,
       task: state.config.mode === "supervised" ? state.config.task : "auto",
-      options: { test_size_pct: state.testSize }, choices: state.choices,
+      options: { ...state.options, test_size_pct: state.testSize }, choices: state.choices,
     }, null, 2);
     const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
     const link = document.createElement("a");
@@ -69,7 +95,7 @@ function App() {
             : state.nodes[index].state === "warning" ? "Avec avertissements" : "À venir"}</small></span>
         </button>)}
       </nav>
-      <div className="sidebar-note"><strong>Projet d’ingénierie</strong>
+      <div className="sidebar-note">
         <p>Exploration statistique et prétraitement reproductible.</p><span>React / Python / WebGL</span>
       </div>
     </aside>
@@ -106,27 +132,26 @@ function App() {
                 <div className="intro-copy">
                   <h2>Du brut.<br />Au signal.</h2>
                   <p>Un environnement pour comprendre vos données et décider de chaque transformation avant l’entraînement.</p>
-                  <button disabled={!!busy} className="demo-button" type="button" onClick={() => void state.openDemo()}>
-                    Charger la démo fraude <span aria-hidden="true">↗</span>
-                  </button>
                   <div className="import-principles"><span>Ajustement sur train</span><span>Choix par variable</span><span>Rapport Excel</span></div>
                 </div>
                 <div className="hero-science" data-loaded={!!dataset}>
                   <ScientificScene label="Réseau scientifique tridimensionnel, illustration du moteur" running={!!busy} />
-                  <div className="scene-heading"><span>Illustration du moteur</span><span>3D interactive</span></div>
-                  <p className="scene-help">Glissez pour orbiter · Molette pour zoomer</p>
+                  <div className="scene-heading"><span>Illustration du moteur</span></div>
                 </div>
               </section>
               <ImportPanel dataset={dataset} config={state.config} busy={!!busy} onFile={file => void state.importFile(file)}
                 onChange={state.changeConfig} onConfigure={() => void state.configure()} />
+              {dataset && <button disabled={!!busy} onClick={() => void state.closeSession()}>Fermer la session et ses fichiers temporaires</button>}
             </>}
 
             {step === 1 && (state.eda ? <>
-              <EdaPanel eda={state.eda} feature={state.feature} busy={!!busy} onFeature={state.selectFeature} />
+              <EdaPanel eda={state.eda} feature={state.feature} featureError={state.featureError} busy={!!busy} onFeature={state.selectFeature} />
               <div className="advance"><button className="primary" disabled={!!busy} onClick={() => go(2)}>Voir les recommandations</button></div>
             </> : !busy && <button onClick={() => go(1)}>Relancer l’analyse statistique</button>)}
 
             {step === 2 && (state.recommendations ? <>
+              {state.eda?.imbalance?.level && <p className="notice">Cible déséquilibrée ({state.eda.imbalance.level}) : {(state.eda.imbalance.minority_ratio!*100).toFixed(2)} % dans la classe minoritaire. L’accuracy peut être trompeuse ; comparer PR-AUC, rappel et F1.</p>}
+              {state.analysisNote && <p className="notice">{state.analysisNote}</p>}
               <CleaningPanel rows={state.recommendations} choices={state.choices} selected={state.selected}
                 preview={state.preview} busy={!!busy} onChoice={state.choose} onReset={state.acceptAll}
                 onPreview={column => { state.compare(column); }} view="recommendations" />
@@ -134,6 +159,7 @@ function App() {
             </> : !busy && <button onClick={() => go(2)}>Relancer les recommandations</button>)}
 
             {step === 3 && state.recommendations && <>
+              <AdvancedSettings options={appliedOptions} busy={!!busy} onApply={next => void state.applyOptions(next)} onImport={file => void state.importConfiguration(file)} />
               <PipelinePanel rows={state.recommendations} choices={state.choices} busy={!!busy}
                 onChoice={state.choose} workflow={state.nodes} onNavigate={go} />
               <div className="advance"><button className="primary" disabled={!!busy} onClick={() => {
@@ -142,6 +168,33 @@ function App() {
             </>}
 
             {step === 4 && dataset && <>
+              <section className="panel" aria-labelledby="selection-preview-title"><h2 id="selection-preview-title">Aperçu de la sélection</h2>
+                <p className="muted">Calculé sur le train du découpage choisi. La source reste intacte ; l’exécution ajuste de nouveau les paramètres.</p>
+                <button type="button" disabled={!!busy || selectionLoading} onClick={() => void previewSelection()}>{selectionLoading ? "Calcul de l’aperçu…" : "Calculer l’aperçu de sélection"}</button>
+                {selectionError && <p role="alert" className="notice error">{selectionError}</p>}
+                {selectionPreview && <><p>{selectionPreview.method} · {selectionPreview.original.length} colonnes source · {selectionPreview.encoded_count} features encodées · {selectionPreview.selected_count} retenues (dont colonnes brutes) · sortie estimée {selectionPreview.expected_rows} × {selectionPreview.output_count} colonnes{selectionPreview.target_included ? " (cible incluse)" : ""}</p>
+                  <details><summary>Colonnes source</summary><p>{selectionPreview.original.join(" · ")}</p></details>
+                  <p className="muted">{selectionPreview.note}</p>
+                  <div className="two-col"><div><h3>Features attendues</h3><ul>{selectionPreview.selected.map(name => <li key={name}><strong>{name}</strong>
+                    {selectionPreview.feature_sources?.[name] && <small>Source : {selectionPreview.feature_sources[name]}</small>}
+                    {selectionPreview.details?.scores?.[name] != null && <small>Score : {selectionPreview.details.scores[name]}</small>}
+                    {selectionPreview.details?.rankings?.[name] != null && <small>Rang : {selectionPreview.details.rankings[name]}</small>}
+                    {selectionPreview.details?.reasons?.[name] && <small>{selectionPreview.details.reasons[name]}</small>}</li>)}</ul></div>
+                    <div><h3>Rejetées par la méthode</h3><ul>{selectionPreview.rejected.map(name => <li key={name}><strong>{name}</strong>
+                      {selectionPreview.feature_sources?.[name] && <small>Source : {selectionPreview.feature_sources[name]}</small>}
+                      {selectionPreview.details?.reasons?.[name] && <small>{selectionPreview.details.reasons[name]}</small>}</li>)}</ul></div></div>
+                  {selectionPreview.details && <p className="muted">Sélecteur ajusté sur {selectionPreview.details.fit_rows} lignes du train en {selectionPreview.details.elapsed_seconds} s{selectionPreview.details.scoring ? ` · métrique ${selectionPreview.details.scoring}` : ""}.</p>}
+                  {selectionPreview.warnings.map((warning, index) => <p className="notice" key={index}>{warning}</p>)}
+                  <label className="selection-confirm"><input type="checkbox" checked={selectionConfirmed} onChange={event => setSelectionConfirmed(event.target.checked)} /> Je confirme la sélection de variables et l’exécution sur une copie des données.</label>
+                </>}
+              </section>
+              <EvaluationPanel columns={dataset.columns.filter(column => column !== state.config.target)} supervised={state.config.mode === "supervised"}
+                busy={!!busy} result={state.evaluation} onEvaluate={(family, folds, time) => void state.evaluate(family, folds, time)} />
+              {state.config.mode === "supervised" && <NestedEvaluationPanel
+                key={`${dataset.session_id}|${state.config.target}|${state.config.task}|${JSON.stringify(state.options)}`}
+                sessionId={dataset.session_id} columns={dataset.columns} target={state.config.target}
+                task={state.config.task} options={state.options} busy={!!busy}
+                onTaskChange={task => { state.changeConfig({ ...state.config, task }); go(0); }} />}
               <section className="processing-overview">
                 <ScientificScene label="État du parcours" nodes={state.nodes} running={state.processing} onSelect={go} />
                 <div className="processing-message">
@@ -155,7 +208,9 @@ function App() {
               {state.recommendations && <CleaningPanel rows={state.recommendations} choices={state.choices} selected={state.selected}
                 preview={state.preview} busy={!!busy} onChoice={state.choose} onReset={state.acceptAll}
                 onPreview={state.compare} view="preview" />}
-              <ExecutionPanel sessionId={dataset.session_id} busy={!!busy} result={result} onRun={size => void state.run(size)}
+              <ExecutionPanel sessionId={dataset.session_id} busy={!!busy} runDisabled={!selectionConfirmed} result={result} onRun={size => void state.run(size)}
+                imbalance={state.eda?.imbalance} options={state.options} onImbalance={state.changeImbalance}
+                rawCategorical={dataset.columns.some(col => state.choices[col] === "none" && /object|string|category/.test(dataset.dtypes[col] ?? ""))}
                 view="run" testSize={state.testSize} onTestSize={value => {
                   state.changeTestSize(value);
                 }} />
@@ -168,9 +223,31 @@ function App() {
                 <ScientificScene label="Réseau scientifique, confirmation de fin du traitement" celebrate />
               </section>
               <ExecutionPanel sessionId={dataset.session_id} busy={!!busy} result={result} onRun={size => void state.run(size)}
-                view="exports" testSize={state.testSize} onTestSize={state.changeTestSize} />
+                onDownload={kind => void state.download(kind)} view="exports" testSize={state.testSize} onTestSize={state.changeTestSize} />
               {state.report ? <AppliedReport report={state.report} /> : !busy &&
                 <button onClick={() => void state.openExports()}>Recharger le rapport des transformations</button>}
+              {state.report?.core?.selection_features && <section className="panel" aria-labelledby="selection-title">
+                <h2 id="selection-title">Sélection des variables</h2>
+                {(() => { const selection = state.report!.core!.selection_features as SelectionDetails & { original_count: number; selected_count: number };
+                  return <><p>{selection.method} · {selection.selected_count} sur {selection.original_count} features conservées · {selection.elapsed_seconds} s</p>
+                     <div className="two-col"><div><h3>Conservées</h3><ul>{selection.selected.map(name => <li key={name}>{name}{selection.scores?.[name] == null ? "" : ` · score ${selection.scores[name]}`}{selection.rankings?.[name] == null ? "" : ` · rang ${selection.rankings[name]}`}{selection.reasons?.[name] ? ` · ${selection.reasons[name]}` : ""}</li>)}</ul></div>
+                       <div><h3>Retirées</h3><ul>{selection.rejected.map(name => <li key={name}>{name}{selection.reasons?.[name] ? ` · ${selection.reasons[name]}` : ""}</li>)}</ul></div></div>
+                    {selection.scores && <div className="selection-scores" role="img" aria-label={`Classement des scores de ${selection.method}`}>
+                      <h3>Scores · {selection.method}</h3>
+                      {Object.entries(selection.scores).filter((entry): entry is [string, number] => entry[1] !== null && Number.isFinite(entry[1]))
+                        .sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, score]) => {
+                          const max = Math.max(...Object.values(selection.scores!).filter((value): value is number => value !== null && Number.isFinite(value)), 1e-12);
+                          return <div className="selection-score" key={name}><span>{name}</span><span className="selection-track"><span style={{ width: `${Math.max(0, score / max * 100)}%` }} /></span><strong>{score.toPrecision(4)}</strong></div>;
+                        })}
+                    </div>}
+                    <p className="muted">Les scores sont propres à la méthode choisie ; « — » signifie indisponible, pas zéro.</p></>; })()}
+              </section>}
+              <section className="panel"><h2>Analyse et exports complémentaires</h2>
+                <div className="downloads"><button disabled={!!busy} onClick={() => void state.prepareExcel()}>Préparer le dataset Excel</button>
+                  <button disabled={!!busy} onClick={() => void state.inspectResults()}>Analyser le dataset transformé</button></div>
+                {state.afterEda && <><p>{state.afterEda.shape[0]} lignes · {state.afterEda.shape[1]} colonnes · {state.afterEda.missing_pct.toFixed(4)} % de manquants · {state.afterEda.duplicate_count} doublons</p>
+                  <details><summary>Statistiques des sorties</summary><pre className="json-report">{JSON.stringify(state.afterEda, null, 2)}</pre></details></>}
+              </section>
               <section className="panel"><h2>Configuration du pipeline</h2>
                 <p className="muted">Le fichier JSON contient les choix et les options de cette exécution. Il peut être archivé avec le rapport.</p>
                 <button type="button" onClick={exportConfig}>Exporter la configuration JSON</button>
@@ -181,9 +258,23 @@ function App() {
         </AnimatePresence>
         {step > 0 && <button className="back-button" disabled={!!busy} onClick={() => go(step - 1)}>Retour à l’étape précédente</button>}
       </main>
-      <footer className="workspace-footer"><span>AutoPrépa / Projet universitaire d’ingénierie</span><span>Statistiques, décisions, transformations</span></footer>
+      <footer className="workspace-footer"><span aria-hidden="true" /><span>Statistiques, décisions, transformations</span></footer>
     </div>
   </div>;
 }
 
-createRoot(document.getElementById("root")!).render(<AnimationSystem><App /></AnimationSystem>);
+function VisualLab() {
+  const [mode, setMode] = useState<Atmosphere>("orbital");
+  const modes: { key: Atmosphere; label: string }[] = [
+    { key: "orbital", label: "Orbites scientifiques" }, { key: "particles", label: "Particules organiques" },
+    { key: "geometry", label: "Structures géométriques" }, { key: "leaves", label: "Feuilles" },
+    { key: "spatial", label: "Atmosphère spatiale" },
+  ];
+  return <main className="visual-lab"><a href="/">← Retour à l’atelier</a><p>Laboratoire visuel · développement</p>
+    <h1>Cinq études de profondeur.</h1><div role="group" aria-label="Choisir une ambiance">
+      {modes.map(item => <button key={item.key} aria-pressed={mode === item.key} onClick={() => setMode(item.key)}>{item.label}</button>)}
+    </div><section><Suspense fallback={<div className="orbital-fallback" />}><OrbitalScene mode={mode} /></Suspense><p>{modes.find(item => item.key === mode)?.label}</p></section></main>;
+}
+
+createRoot(document.getElementById("root")!).render(import.meta.env.DEV && location.search.includes("visual-lab")
+  ? <VisualLab /> : <AnimationSystem><App /></AnimationSystem>);

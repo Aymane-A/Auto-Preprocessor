@@ -1,10 +1,12 @@
 """Descriptive evidence shared by analysis and numerical execution."""
 
 from collections import Counter
+import warnings
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+from scipy import stats, optimize
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import (KBinsDiscretizer, MaxAbsScaler, MinMaxScaler, PowerTransformer,
                                    QuantileTransformer, RobustScaler, StandardScaler)
 
@@ -42,6 +44,74 @@ class EmpiricalRank:
         return np.interp(frame.to_numpy(dtype=float), self.values_, self.ranks_, left=0, right=1)
 
 
+class StablePowerTransformer(BaseEstimator, TransformerMixin):
+    """Bounded power MLE, with an explicit fitted fallback for unstable columns."""
+
+    def __init__(self, method="yeo-johnson", random_state=42):
+        self.method = method
+        self.random_state = random_state
+
+    def fit(self, frame, y=None):
+        self.column_ = str(frame.columns[0])
+        values = frame.to_numpy(dtype=float).ravel()
+        unique, counts = np.unique(values, return_counts=True)
+        weights = counts / counts.sum()
+        failures = []
+        self.warning_ = ""
+        self.fallback_ = None
+        for method in (["box-cox", "yeo-johnson"] if self.method == "box-cox" else ["yeo-johnson"]):
+            transform = stats.boxcox if method == "box-cox" else stats.yeojohnson
+            jacobian = float(weights @ (np.log(unique) if method == "box-cox" else np.sign(unique) * np.log1p(np.abs(unique))))
+
+            def objective(lmbda):
+                with np.errstate(over="raise", invalid="raise", divide="raise"):
+                    transformed = transform(unique, lmbda=lmbda)
+                    mean = weights @ transformed
+                    variance = weights @ ((transformed - mean) ** 2)
+                    return .5 * np.log(variance) - (lmbda - 1) * jacobian if variance > 0 else np.inf
+
+            try:
+                with warnings.catch_warnings(), np.errstate(over="raise", invalid="raise", divide="raise"):
+                    warnings.simplefilter("error", RuntimeWarning)
+                    fitted = optimize.minimize_scalar(objective, bounds=(-5., 5.), method="bounded", options={"xatol": 1e-8})
+                    if not fitted.success or not np.isfinite(fitted.fun) or abs(fitted.x) >= 4.999:
+                        raise ValueError("lambda optimal hors de l’intervalle stable [-5, 5]")
+                    transformed = transform(values, lmbda=float(fitted.x)).reshape(-1, 1)
+                    scaler = StandardScaler().fit(transformed)
+                    if not np.isfinite(scaler.transform(transformed)).all():
+                        raise ValueError("résultat non fini")
+                self.actual_method_ = method
+                self.lambdas_ = np.array([fitted.x])
+                self.scaler_ = scaler
+                self.quantile_ = None
+                if method != self.method:
+                    self.fallback_ = "YEO_JOHNSON"
+                break
+            except (ValueError, FloatingPointError, OverflowError, RuntimeWarning) as exc:
+                failures.append(f"{method} : {exc}")
+        else:
+            self.actual_method_ = "quantile"
+            self.lambdas_ = None
+            self.quantile_ = QuantileTransformer(n_quantiles=min(1000, len(values)), output_distribution="normal",
+                                                random_state=self.random_state).fit(frame)
+            self.fallback_ = "QUANTILE_NORMAL"
+        if failures:
+            self.warning_ = (f"Colonne {self.column_!r} : transformation puissance instable ({'; '.join(failures)}). "
+                             f"Repli numérique sûr : {self.fallback_} ; paramètres ajustés sur les données fournies.")
+        return self
+
+    def transform(self, frame):
+        if self.quantile_ is not None:
+            result = self.quantile_.transform(frame)
+        else:
+            transform = stats.boxcox if self.actual_method_ == "box-cox" else stats.yeojohnson
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                result = self.scaler_.transform(transform(frame.to_numpy(dtype=float), lmbda=self.lambdas_[0]))
+        if not np.isfinite(result).all():
+            raise ValueError(f"Transformation non finie pour la colonne {self.column_!r}.")
+        return result
+
+
 def fit_distribution(values, action, random_state):
     validate_distribution(values, action, values.name)
     if action in ELEMENTWISE:
@@ -57,7 +127,8 @@ def fit_distribution(values, action, random_state):
             output_distribution=action.split("_")[1].lower(),
             random_state=random_state,
         ).fit(values.to_frame())
-    return PowerTransformer(method="box-cox" if action == "BOX_COX" else "yeo-johnson").fit(values.to_frame())
+    return StablePowerTransformer(method="box-cox" if action == "BOX_COX" else "yeo-johnson",
+                                  random_state=random_state).fit(values.to_frame())
 
 
 def apply_distribution(values, transformer, action):
@@ -95,6 +166,8 @@ def numerical_comparison(values, random_state):
                 "perte_valeurs_distinctes": max(0, sample_unique - transformed_unique),
                 "resultat_constant": transformed_unique == 1,
             }
+            if action != "NONE" and getattr(fitted, "warning_", ""):
+                results[action].update(avertissement=fitted.warning_, transformation_effective=fitted.fallback_)
         except (ValueError, FloatingPointError, OverflowError) as exc:
             results[action] = {"applicable": False, "avertissement": str(exc)}
     return results
@@ -209,7 +282,10 @@ def association(x, y, x_numeric, y_numeric, *, kendall=True):
         statistic, p, _, expected = stats.chi2_contingency(table, correction=False)
         if (expected < 1).any() or (expected < 5).mean() > .2:
             if table.shape != (2, 2):
-                return {**result, "limite": "Effectifs théoriques insuffisants pour le khi-deux."}
+                note = ("Cardinalité trop élevée pour un test d'association."
+                        if max(table.shape) > 40 or max(table.shape) > n / 5
+                        else "Effectifs théoriques insuffisants pour le khi-deux.")
+                return {**result, "limite": note}
             p = stats.fisher_exact(table.to_numpy()).pvalue
             primary = "fisher"
         else:
@@ -255,11 +331,6 @@ def semantic_type(series, kind, column_profile):
         return "NUMERIC_BINARY" if pd.api.types.is_numeric_dtype(series) else "CATEGORICAL_BINARY"
     if kind == "NUMERIC_CONTINUOUS":
         values = series.replace([np.inf, -np.inf], np.nan).dropna()
-        name = str(series.name).casefold()
-        if len(values) and name in {"lat", "latitude", "lon", "lng", "longitude"}:
-            limit = 90 if name in {"lat", "latitude"} else 180
-            if values.between(-limit, limit).all():
-                return "GEOGRAPHIC_COORDINATE"
         if len(values) and values.mod(1).eq(0).all():
             return "NUMERIC_DISCRETE"
     if kind.startswith("CATEGORICAL"):
@@ -337,7 +408,8 @@ def profile(raw, clean, kind, rare_threshold, random_state):
         values = observed.replace([np.inf, -np.inf], np.nan).dropna().astype(float)
         q1, q2, q3 = values.quantile([.25, .5, .75])
         iqr = q3 - q1
-        outlier = (values < q1 - 1.5 * iqr) | (values > q3 + 1.5 * iqr)
+        zero_count_iqr = iqr == 0 and q1 == 0 and values.mod(1).eq(0).all()
+        outlier = ((values < q1 - 1.5 * iqr) | (values > q3 + 1.5 * iqr)) & (not zero_count_iqr)
         skew, kurtosis = float(values.skew()), float(values.kurt())
         shapes = []
         if values.nunique() <= 1:
@@ -357,7 +429,7 @@ def profile(raw, clean, kind, rare_threshold, random_state):
             shapes.append("forte masse à zéro")
         if result["quasi_constante"]:
             shapes.append("forte concentration")
-        extreme = (values < q1 - 3 * iqr) | (values > q3 + 3 * iqr)
+        extreme = ((values < q1 - 3 * iqr) | (values > q3 + 3 * iqr)) & (not zero_count_iqr)
         result.update(moyenne=float(values.mean()), mediane=float(q2), q1=float(q1), q3=float(q3),
                       mode=counts.index[0] if n else None, variance=float(values.var()),
                       ecart_type=float(values.std()), min=float(values.min()), max=float(values.max()),

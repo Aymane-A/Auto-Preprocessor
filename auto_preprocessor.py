@@ -14,6 +14,8 @@ import logging
 import re
 import unicodedata
 import warnings
+import time
+from functools import wraps
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -72,6 +74,66 @@ TREE_FAMILIES = {"decision_tree", "random_forest", "gradient_boosting", "xgboost
 MAX_DENSE_CELLS = 20_000_000
 DEFAULT_MAX_DENSE_BYTES = MAX_DENSE_CELLS * np.dtype(np.float64).itemsize
 MAX_FEATURE_COLUMNS = 100_000
+IDENTIFIER_UNIQUE_THRESHOLD = 0.90
+
+
+def _unique_integer_identifier(series: pd.Series, threshold: float = IDENTIFIER_UNIQUE_THRESHOLD,
+                               *, unique_count: Optional[int] = None, observed_count: Optional[int] = None) -> bool:
+    """Require semantic or strong sparse-key evidence before dropping integer values."""
+    if pd.api.types.is_bool_dtype(series) or not pd.api.types.is_numeric_dtype(series):
+        return False
+    observed = series.dropna() if observed_count is None or unique_count is None else None
+    if observed is None:
+        observed = series.dropna()
+    n = len(observed) if observed_count is None else observed_count
+    unique = int(observed.nunique()) if unique_count is None else unique_count
+    numeric = pd.to_numeric(observed, errors="coerce")
+    if not (n > 30 and unique == n and unique / n > threshold
+            and bool(numeric.notna().all() and np.isfinite(numeric).all() and numeric.mod(1).eq(0).all())):
+        return False
+    # Beyond this bound float values cannot represent every integer exactly.
+    if pd.api.types.is_float_dtype(series) and numeric.abs().max() > 2**53:
+        return False
+    name = re.sub(r"[^a-z0-9]+", "_", str(series.name).casefold()).strip("_")
+    parts = set(name.split("_"))
+    if parts & {"id", "identifier", "identifiant", "key", "uuid", "index", "code", "sequence", "sequential"} or name.endswith("id"):
+        return True
+    if parts & {"amount", "montant", "price", "prix", "fare", "cost", "cout", "revenue", "income", "salary", "age", "count", "quantity", "duration", "distance", "score", "measurement", "measure", "value", "valeur", "magnitude"}:
+        return False
+    # A very sparse, irregular integer space is key-like even with an opaque name.
+    span = float(numeric.max()) - float(numeric.min()) + 1
+    ordered = np.sort(numeric.to_numpy(dtype=float))
+    gaps = np.diff(ordered)
+    return bool(span >= 20 * n and np.count_nonzero(gaps != gaps[0]) > 0)
+
+
+def _duplicate_mask(frame: pd.DataFrame) -> pd.Series:
+    """Find exact duplicate rows after cheaply narrowing large frames by row hash."""
+    if len(frame) <= 200_000:
+        return frame.duplicated(keep="first")
+    hashes = pd.util.hash_pandas_object(frame, index=False)
+    candidates = hashes.duplicated(keep=False)
+    result = pd.Series(False, index=frame.index)
+    if candidates.any():
+        result.loc[candidates] = frame.loc[candidates].duplicated(keep="first").to_numpy()
+    return result
+
+
+def _timed_stage(name):
+    """Measure completed engine stages without inventing live progress."""
+    def decorate(function):
+        @wraps(function)
+        def measured(self, *args, **kwargs):
+            started = time.perf_counter()
+            try:
+                return function(self, *args, **kwargs)
+            finally:
+                timings = getattr(self, "stage_timings_", None)
+                if timings is None:
+                    self.stage_timings_ = timings = {}
+                timings[name] = timings.get(name, 0.) + time.perf_counter() - started
+        return measured
+    return decorate
 
 
 def check_dense_allocation(rows: int, columns: int, dtype, max_bytes: int, operation: str) -> None:
@@ -132,9 +194,9 @@ def to_sparse_matrix(frame: pd.DataFrame, dtype=np.float32) -> sparse.csr_matrix
 def _target_encoder(n_splits=5, seed=None, *, target_type="auto", stratified=False):
     if Version(sklearn_version).release[:2] >= (1, 9):
         splitter = StratifiedKFold if stratified else KFold
-        return TargetEncoder(smooth="auto", target_type=target_type,
+        return TargetEncoder(smooth=10.0, target_type=target_type,
                              cv=splitter(n_splits, shuffle=True, random_state=seed))
-    return TargetEncoder(smooth="auto", target_type=target_type, cv=n_splits, random_state=seed)
+    return TargetEncoder(smooth=10.0, target_type=target_type, cv=n_splits, random_state=seed)
 
 
 def _crossfit_singleton_classes(encoder, frame, y, classes, n_splits, seed):
@@ -424,8 +486,6 @@ _SINGLE_ACTION_VALUE: Dict[str, str] = {"KEEP_NUMERIC":"AUTO", "SCALE_STANDARD":
 def _action_group(feature_type: Any) -> str:
     """Retourne la famille utilisée par SUPPORTED_ACTIONS."""
     kind = feature_type.value if isinstance(feature_type, FeatureType) else str(feature_type)
-    if kind == "NUMERIC_DISCRETE":
-        return "categorical_low"
     if kind.startswith("NUMERIC"):
         return "numeric"
     return {"BINARY": "binary", "ORDINAL": "ordinal", "CATEGORICAL_LOW_CARD": "categorical_low",
@@ -474,7 +534,7 @@ def _recommend_scaler(values: pd.Series, config: Optional[PreprocessConfig] = No
         return "STANDARD", f"observations disponibles : {len(x)}", "échantillon < 8; scaler standard par défaut"
     q1, q3 = x.quantile(.25), x.quantile(.75)
     spread = q3 - q1
-    iqr_pct = float(((x < q1 - config.outlier_iqr_multiplier * spread) | (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100)
+    iqr_pct = float(((x < q1 - config.outlier_iqr_multiplier * spread) | (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100) if spread > 0 or not (q1 == 0 and x.mod(1).eq(0).all()) else 0.
     mad = float(np.median(np.abs(x - np.median(x))))
     mad_pct = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100) if mad else 0.0
     kurt = float(x.kurt()) if len(x) > 3 else 0.0
@@ -526,6 +586,7 @@ class StepRecommendation:
 class AnalysisResult:
     columns: List[Dict[str, Any]]
     sample_note: str = ""
+    timings: Dict[str, float] = field(default_factory=dict)
 
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(self.columns)
@@ -575,7 +636,7 @@ def _numeric_profile(values: pd.Series, config: PreprocessConfig) -> Dict[str, f
     q1, q3 = x.quantile(.25), x.quantile(.75)
     spread = q3 - q1
     profile["iqr_pct"] = float(((x < q1 - config.outlier_iqr_multiplier * spread) |
-                                (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100)
+                                (x > q3 + config.outlier_iqr_multiplier * spread)).mean() * 100) if spread > 0 or not (q1 == 0 and x.mod(1).eq(0).all()) else 0.
     mad = float(np.median(np.abs(x - np.median(x))))
     if mad:
         profile["mad_pct"] = float((np.abs(x - np.median(x)) > config.outlier_mad_threshold * 1.4826 * mad).mean() * 100)
@@ -611,6 +672,8 @@ def _outlier_bounds(values: pd.Series, mode: str, config: PreprocessConfig,
         if k <= 0:
             raise ValueError("Le multiplicateur IQR doit être > 0.")
         q1, q3 = x.quantile(.25), x.quantile(.75)
+        if q1 == q3 == 0 and x.mod(1).eq(0).all():
+            return -np.inf, np.inf
         return float(q1 - k * (q3 - q1)), float(q3 + k * (q3 - q1))
     if mode == "ZSCORE":
         k = float(params.get("threshold", 3.0))
@@ -691,7 +754,7 @@ def _recommend_outliers(values: pd.Series, config: PreprocessConfig) -> Tuple[st
     heavy_limit = config.scaler_outlier_threshold * 100
     if p["n"] < 8:
         return "WINSORIZE", f"observations disponibles : {p['n']}", "échantillon < 8; bornage par quantiles par défaut"
-    if p["iqr_pct"] == 0 and p["mad_pct"] == 0:
+    if p["iqr_pct"] == 0 and p["mad_pct"] == 0 and abs(p["skew"]) <= config.skew_threshold:
         return "NONE", measure, "aucune valeur au-delà des clôtures IQR et MAD"
     if (abs(p["skew"]) > config.skew_threshold or abs(p["kurtosis"]) > config.scaler_kurtosis_threshold
             or p["iqr_pct"] > heavy_limit):
@@ -770,10 +833,20 @@ def _preview_yeo_johnson(frame: pd.DataFrame, preview: Optional[Dict[str, np.nda
     """Reuse the fit for the same treated column within a single analysis."""
     if preview is not None and "yeo-johnson" in preview:
         return preview["yeo-johnson"]
-    result = PowerTransformer(method="yeo-johnson").fit_transform(frame)
+    fitted = fit_distribution(frame.iloc[:, 0], "YEO_JOHNSON", 42)
+    result = apply_distribution(frame.iloc[:, 0], fitted, "YEO_JOHNSON").reshape(-1, 1)
+    if preview is not None and getattr(fitted, "warning_", ""):
+        preview.setdefault("warnings", []).append(fitted.warning_)
     if preview is not None:
         preview["yeo-johnson"] = result
     return result
+
+
+def _preview_box_cox(frame, preview, random_state):
+    fitted = fit_distribution(frame.iloc[:, 0], "BOX_COX", random_state)
+    if preview is not None and getattr(fitted, "warning_", ""):
+        preview.setdefault("warnings", []).append(fitted.warning_)
+    return apply_distribution(frame.iloc[:, 0], fitted, "BOX_COX").reshape(-1, 1)
 
 
 def _distribution_skew(values) -> float:
@@ -818,7 +891,7 @@ def _evaluate_distribution_alternatives(values: pd.Series, config: PreprocessCon
     add("LOG1P", lo > -1, "valeurs > -1 requises" if lo <= -1 else "valeurs > -1", lambda: np.log1p(x))
     add("CBRT", True, "défini sur tous les réels", lambda: np.cbrt(x))
     add("BOX_COX", lo > 0, "valeurs strictement positives requises" if lo <= 0 else "valeurs > 0",
-        lambda: PowerTransformer(method="box-cox").fit_transform(frame))
+        lambda: _preview_box_cox(frame, preview, config.random_state))
     add("YEO_JOHNSON", True, "défini sur tous les réels", lambda: _preview_yeo_johnson(frame, preview))
     add("QUANTILE", len(x) >= 10, "au moins 10 observations requises" if len(x) < 10 else "≥ 10 observations",
         lambda: QuantileTransformer(n_quantiles=n_q, output_distribution="normal", random_state=config.random_state).fit_transform(frame),
@@ -835,13 +908,15 @@ def _recommend_distribution(values: pd.Series, config: PreprocessConfig,
 
     ``values`` doit déjà avoir subi le traitement des extrêmes. Sous le seuil d'asymétrie : NONE. Sinon, les
     candidats compatibles avec le domaine (SQRT et LOG1P exigent des valeurs ≥ 0) sont évalués et celui qui
-    laisse la plus faible asymétrie absolue gagne; une transformation simple (LOG1P, SQRT, sans paramètre à
-    estimer) est préférée à Yeo-Johnson si elle reste à 0,25 de la meilleure. Box-Cox reste un choix manuel
+    laisse la plus faible asymétrie absolue est repéré; une transformation simple (LOG1P, SQRT, sans paramètre à
+    estimer) est préférée si elle reste à 0,25 du meilleur score. Box-Cox reste un choix manuel
     (équivalent de Yeo-Johnson sur données strictement positives, mais refuse les valeurs ≤ 0 au transform).
     """
     x = pd.to_numeric(values, errors="coerce").dropna().astype(float)
     if len(x) < 3:
         return "NONE", f"observations disponibles : {len(x)}", "échantillon < 3"
+    if x.mod(1).eq(0).all() and x.nunique() <= 100 and x.value_counts(normalize=True).iloc[0] >= .5:
+        return "NONE", f"{x.nunique()} valeurs entières ; mode {x.value_counts(normalize=True).iloc[0]:.1%}", "comptage discret à mode dominant ≥ 50% : conserver les distances"
     skew0 = float(stats.skew(x))
     if not config.adaptive_recommendations:
         return ("YEO_JOHNSON" if abs(skew0) > config.skew_threshold else "NONE",
@@ -859,19 +934,22 @@ def _recommend_distribution(values: pd.Series, config: PreprocessConfig,
     if not scores:
         return "NONE", f"asymétrie : {skew0:.2f}", "aucune transformation applicable"
     best = min(scores, key=scores.get)
+    lowest_skew = best
     simple = {k: v for k, v in scores.items() if k in {"LOG1P", "SQRT"}}
     if simple:
         best_simple = min(simple, key=simple.get)
         if simple[best_simple] <= scores[best] + 0.25:
             best = best_simple
     if scores[best] >= abs(skew0):
-        return "NONE", f"asymétrie : {skew0:.2f}; aucune transformation ne la réduit", "gain d'asymétrie requis"
+        return "NONE", f"asymétrie : {skew0:.2f}; le candidat retenu ne la réduit pas", "gain d'asymétrie du candidat retenu requis"
     if scores[best] > config.skew_threshold:
         detail = ", ".join(f"{name} → {value:.2f}" for name, value in sorted(scores.items(), key=lambda kv: kv[1]))
         return ("QUANTILE", f"asymétrie : {skew0:.2f}; |asymétrie| après : {detail}",
-                f"|skew| > {config.skew_threshold:g} atteint même après la meilleure transformation paramétrique; la transformation par quantiles ne dépend pas de la forme")
+                f"|skew| > {config.skew_threshold:g} atteint après le candidat retenu; la transformation par quantiles ne dépend pas de la forme")
     detail = ", ".join(f"{name} → {value:.2f}" for name, value in sorted(scores.items(), key=lambda kv: kv[1]))
-    return best, f"asymétrie : {skew0:.2f}; |asymétrie| après : {detail}", f"|skew| > {config.skew_threshold:g} atteint; plus faible asymétrie résiduelle"
+    reason = (f"{best} préféré : écart {scores[best] - scores[lowest_skew]:.2f} ≤ tolérance 0,25 face à {lowest_skew}"
+              if best != lowest_skew else f"{best} retenu : plus faible asymétrie résiduelle")
+    return best, f"asymétrie : {skew0:.2f}; |asymétrie| après : {detail}", f"|skew| > {config.skew_threshold:g} atteint; {reason}"
 
 
 MNAR_NOTE = ("MNAR (le manque dépend de la valeur absente elle-même) ne peut pas être détecté à partir des données "
@@ -1060,7 +1138,7 @@ class PreprocessConfig:
     missing_indicator_threshold: float = 0.05
     variance_threshold: float = 0.0
     constant_threshold: float = 0.99
-    identifier_unique_threshold: float = 0.90
+    identifier_unique_threshold: float = IDENTIFIER_UNIQUE_THRESHOLD
     value_bounds: Dict[str, Tuple[Optional[float], Optional[float]]] = field(default_factory=dict)
     max_text_features: int = 15
     text_svd_components: int = 4
@@ -1091,6 +1169,13 @@ class PreprocessConfig:
     supervised_encoding: bool = True
     max_dense_bytes: int = DEFAULT_MAX_DENSE_BYTES
     sparse_output: bool = False
+    selection_method: str = "auto"
+    selection_count: Optional[int] = None
+    selection_percentile: int = 50
+    selection_folds: int = 3
+    selection_scoring: Optional[str] = None
+    selection_include: Optional[List[str]] = None
+    selection_exclude: Optional[List[str]] = None
 
 
 
@@ -1180,7 +1265,7 @@ class MissingIndicatorTransformer(BaseEstimator, TransformerMixin):
         self.indicator_cols_ = []
         for col in X.columns:
             missing_rate = X[col].isna().mean()
-            if missing_rate > self.threshold:
+            if int(X[col].isna().sum()) >= 5 and missing_rate > self.threshold:
                 self.indicator_cols_.append(col)
         return self
 
@@ -1876,7 +1961,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 variant_action, _ = self._override_value(str(col), "clean_variants")
                 original = df_out[col]
                 stripped = original.astype(str).str.strip()
-                s = stripped.map(self._canonical_variant) if variant_action == "MERGE" else original.astype(str)
+                if variant_action == "MERGE":
+                    canonical = {value: self._canonical_variant(value) for value in stripped.unique()}
+                    s = stripped.map(canonical)
+                else:
+                    s = original.astype(str)
                 # Détection des faux manquants
                 if variant_action not in {"MERGE", "KEEP"}:
                     raise ValueError(f"Action clean_variants invalide pour {col!r}: {variant_action}")
@@ -1936,6 +2025,20 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         except (ValueError, TypeError):
             return np.nan
 
+    @staticmethod
+    def _parse_numeric_series(values: pd.Series) -> pd.Series:
+        """Parse each distinct textual value once, retaining every row and its index.
+
+        The scalar parser operates on ``str(value)`` after checking missingness.
+        Stringifying before factorization also keeps mixed values such as True
+        and 1 distinct (pandas factorization alone considers them equal).
+        Missing spellings still produce NaN through the same scalar parser.
+        """
+        codes, unique = pd.factorize(values.map(str), sort=False)
+        parsed = np.fromiter((AutoPreprocessor._clean_numeric_str_value(value) for value in unique),
+                             dtype=float, count=len(unique))
+        return pd.Series(parsed[codes], index=values.index, name=values.name)
+
     def _parse_numeric_strings(self, df: pd.DataFrame) -> pd.DataFrame:
         """Détecte et convertit les colonnes textuelles numériques lors du FIT uniquement (F2).
 
@@ -1962,8 +2065,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     continue
 
                 # Test de conversion
-                converted_series = non_null.apply(self._clean_numeric_str_value)
-                success_rate = converted_series.notna().mean()
+                converted_series = self._parse_numeric_series(df_out[col])
+                success_rate = converted_series[df_out[col].notna()].notna().mean()
                 self.cleaning_decisions_.setdefault(str(col), {}).update({
                     "nombres_texte_convertibles_pct": float(success_rate * 100),
                     "nombres_texte_convertibles": int(converted_series.notna().sum()),
@@ -1980,7 +2083,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         f"Colonne '{col}' convertie de texte en numerique au fit "
                         f"(succes={success_rate:.1%}, format={fmt})"
                     )
-                    df_out[col] = df_out[col].apply(self._clean_numeric_str_value)
+                    df_out[col] = converted_series
 
         return df_out
 
@@ -1999,7 +2102,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             if col not in df_out.columns:
                 continue
             if pd.api.types.is_object_dtype(df_out[col]) or pd.api.types.is_string_dtype(df_out[col]):
-                df_out[col] = df_out[col].apply(self._clean_numeric_str_value)
+                df_out[col] = self._parse_numeric_series(df_out[col])
                 logger.debug(f"Colonne '{col}' convertie via numeric_string_cols_ (transform, F2)")
         return df_out
 
@@ -2015,6 +2118,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 df_out[col] = pd.to_numeric(df_out[col], downcast="integer")
         return df_out
 
+    @_timed_stage("cleaning")
     def _preprocess_raw_dataframe(
         self,
         df: pd.DataFrame,
@@ -2169,6 +2273,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 return ordered
         return None
 
+    @_timed_stage("type_detection")
     def _detect_types(self, X: pd.DataFrame) -> None:
         """Analyse et classifie chaque colonne avec justification explicable."""
         n_rows = len(X)
@@ -2262,7 +2367,6 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             seen_contents[content_hash] = col
 
             # 4. Colonne d'identifiant (ID)
-            identifier_name = bool(re.search(r"(^|_)(id|code|ref)(_|$)|(^num_|_num$)", str(col).strip().lower()))
             unique_ratio = n_unique / max(n_rows, 1)
             text_stats = {}
             is_text = False
@@ -2274,13 +2378,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                                 or text_stats["part_ponctuee"] >= .4))
             textual_identifier = (pd.api.types.is_object_dtype(series) or
                                   pd.api.types.is_string_dtype(series))
-            integer_sequence = False
-            if pd.api.types.is_integer_dtype(series) and unique_ratio > self.config.identifier_unique_threshold:
-                ordered_values = np.sort(pd.to_numeric(non_null, errors="coerce").dropna().unique())
-                diffs = np.diff(ordered_values)
-                integer_sequence = len(diffs) > 0 and bool(np.all(diffs == diffs[0]))
-            is_id_candidate = not is_text and (n_rows > 30 and (identifier_name or (unique_ratio > self.config.identifier_unique_threshold
-                               and (textual_identifier or integer_sequence))))
+            integer_identifier = _unique_integer_identifier(
+                series, self.config.identifier_unique_threshold,
+                unique_count=n_unique, observed_count=len(non_null))
+            is_id_candidate = (not is_text and n_rows > 30 and
+                               ((textual_identifier and unique_ratio > self.config.identifier_unique_threshold)
+                                or integer_identifier))
             # Vérifier si ce n'est pas un texte long
             # Une colonne date/heure quasi unique (horodatage) n'est pas un ID
             date_clean_action, _ = self._override_value(str(col), "clean_dates")
@@ -2290,8 +2393,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 mean_str_len = non_null.astype(str).str.len().mean() if len(non_null) > 0 else 0
                 if mean_str_len < 30:
                     meta["type"] = FeatureType.DROP_ID
-                    meta["reason"] = (f"Profil d'identifiant : uniques/lignes = {unique_ratio:.1%} "
-                                       f"(seuil > {self.config.identifier_unique_threshold:.0%})")
+                    meta["reason"] = (
+                        f"Profil d'identifiant entier : {n_unique}/{len(non_null)} valeurs observées uniques, aucune répétition "
+                        f"(seuil > {self.config.identifier_unique_threshold:.0%})" if integer_identifier else
+                        f"Profil d'identifiant : uniques/lignes = {unique_ratio:.1%} "
+                        f"(seuil > {self.config.identifier_unique_threshold:.0%})")
                     meta["action"] = "DROP"
                     self.columns_to_drop_.append(col)
                     self.column_metadata_[col] = meta
@@ -2342,13 +2448,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             # 9. Détection Numérique
             if pd.api.types.is_numeric_dtype(series):
                 if (
-                    pd.api.types.is_integer_dtype(series)
-                    and n_unique <= self.config.cardinality_threshold
-                    and self.config.encode_discrete_as_categorical
+                    non_null.mod(1).eq(0).all()
+                    and n_unique <= 100
+                    and (not pd.api.types.is_float_dtype(series) or non_null.abs().max() <= 2**53)
                 ):
                     meta["type"] = FeatureType.NUMERIC_DISCRETE
                     meta["reason"] = f"Entier discret à faible cardinalité ({n_unique} valeurs)"
-                    self.low_card_cols_.append(col)
+                    (self.low_card_cols_ if self.config.encode_discrete_as_categorical else self.num_cols_).append(col)
                 else:
                     meta["type"] = FeatureType.NUMERIC_CONTINUOUS
                     meta["reason"] = f"Variable numérique continue ({n_unique} valeurs distinctes)"
@@ -2379,6 +2485,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
     # DÉTECTION DE FUITE DE CIBLE (sur colonnes BRUTES, une par une)
     # -------------------------------------------------------------------------
 
+    @_timed_stage("leakage_detection")
     def _detect_leaky_columns(self, X_work: pd.DataFrame, y_arr: np.ndarray) -> None:
         """Teste chaque colonne brute SEULE : petit arbre évalué en validation croisée.
 
@@ -2406,7 +2513,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # Sous-échantillonnage pour garder un coût raisonnable sur les gros datasets
         if len(y_d) > 20000:
-            idx = np.random.RandomState(self.config.random_state).choice(len(y_d), 20000, replace=False)
+            cap = 5000 if len(y_d) > 100000 else 20000
+            rng = np.random.RandomState(self.config.random_state)
+            if self.task_resolved_ == "classification" and np.min(np.bincount(y_d.astype(int))) / len(y_d) < .05:
+                minority_class = np.argmin(np.bincount(y_d.astype(int)))
+                minority_idx = np.flatnonzero(y_d == minority_class)
+                majority_idx = np.flatnonzero(y_d != minority_class)
+                kept_minority = rng.choice(minority_idx, min(len(minority_idx), cap // 2), replace=False)
+                idx = np.concatenate([kept_minority, rng.choice(majority_idx, cap-len(kept_minority), replace=False)])
+            else:
+                idx = rng.choice(len(y_d), cap, replace=False)
             X_d, y_d = X_d.iloc[idx], y_d[idx]
 
         rs = self.config.random_state
@@ -2424,11 +2540,14 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             scoring = "r2"
             cv = KFold(n_splits=5, shuffle=True, random_state=rs)
 
-        skip = set(self.date_cols_) | set(self.text_cols_) | set(self.ngram_text_cols_)
+        skip = set(self.text_cols_) | set(self.ngram_text_cols_)
         candidates = [c for c in X_d.columns if c not in skip and c not in self.columns_to_drop_]
 
         for col in candidates:
             s = X_d[col]
+            if col in self.date_cols_:
+                dates = _parse_datetime_values(s, _is_time_only_column(s))
+                s = pd.Series(dates.astype("int64").to_numpy(dtype=float), index=s.index).mask(dates.isna().to_numpy())
             tree = (DecisionTreeClassifier(max_depth=4, random_state=rs) if is_clf
                     else DecisionTreeRegressor(max_depth=4, random_state=rs))
             try:
@@ -2487,6 +2606,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
     # GARDE-FOU CONTRE LES COLONNES DE BRUIT (F1)
     # -------------------------------------------------------------------------
 
+    @_timed_stage("noise_detection")
     def _detect_noise_columns(self, X_work: pd.DataFrame, y_arr: np.ndarray) -> None:
         """Teste le signal de chaque colonne candidate au bruit (DATETIME, CATEGORICAL_HIGH_CARD).
 
@@ -2740,12 +2860,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if self.task_resolved_ == "classification":
             if self.target_encoder_ is None:
                 raise ValueError("Target encoder non ajusté.")
-            # Gérer les classes inconnues avec -1
-            known_classes = set(self.target_encoder_.classes_)
-            mapped = y_series.astype(str).map(
-                lambda x: self.target_encoder_.transform([x])[0] if x in known_classes else -1
-            )
-            return mapped.to_numpy()
+            # get_indexer conserve -1 pour les classes inconnues, sans encoder chaque ligne séparément.
+            return pd.Index(self.target_encoder_.classes_).get_indexer(y_series.astype(str))
         else:
             y_float = y_series.astype(float).to_numpy()
             if self.target_transformer_ is not None:
@@ -2771,16 +2887,19 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         """Analyse les colonnes sans ajuster le préprocesseur ni modifier ``df``.
 
         Au-delà de 200 000 lignes, les statistiques sont estimées sur un échantillon
-        déterministe de 200 000 lignes; le détecteur de fuite utilise le même détecteur
+        déterministe de 10 000 lignes; le détecteur de fuite utilise le même détecteur
         que le fit, sur cet échantillon.
         """
         if not isinstance(df, pd.DataFrame):
             df = pd.DataFrame(df)
+        analysis_started = time.perf_counter()
         raw = df.copy(deep=True)
         sample_note = ""
         if len(raw) > 200_000:
-            raw = raw.sample(n=200_000, random_state=self.config.random_state)
-            sample_note = "Analyse statistique sur échantillon déterministe de 200 000 lignes."
+            raw = raw.sample(n=10_000, random_state=self.config.random_state)
+            sample_note = (f"Profil descriptif : 10 000 lignes sur {len(df):,} "
+                           f"({10_000 / len(df) * 100:.2f} %), tirage aléatoire sans remise, graine {self.config.random_state}, "
+                           "pour limiter le coût de l’analyse.")
         prep = AutoPreprocessor(copy.deepcopy(self.config), task=self.task)
         if target is not None and target not in raw.columns:
             raise ValueError(f"La colonne cible '{target}' est absente du DataFrame.")
@@ -2814,6 +2933,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                                               for name, test in target_missing_tests.items()})
         missing_pool = _missingness_pool(clean, raw[target] if target is not None else None)
         rows = []
+        recommendations_started = time.perf_counter()
         duplicate_rows = int(raw.duplicated().sum())
         for col in df.columns:
             if target is not None and col == target:
@@ -2830,7 +2950,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             meta = prep.column_metadata_.get(clean_name, {})
             kind = meta.get("type", FeatureType.CATEGORICAL_LOW_CARD)
             kind_name = kind.value if isinstance(kind, FeatureType) else str(kind)
-            groups = _action_group(kind)
+            groups = "categorical_low" if kind_name == "NUMERIC_DISCRETE" and self.config.encode_discrete_as_categorical else _action_group(kind)
             nonnull = s.dropna()
             nunique = int(nonnull.nunique())
             missing = float(s.isna().mean()) if len(s) else 0.0
@@ -2856,7 +2976,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             action, confidence = Action.ONEHOT, "moyenne"
             alternatives: List[Action] = [Action.DROP]
             reason = ""
-            stats_row: Dict[str, Any] = {}
+            stats_row: Dict[str, Any] = {"top_category_frequency":
+                float(nonnull.value_counts(normalize=True).iloc[0]) if len(nonnull) else np.nan}
             step_recs: Dict[str, Dict[str, Any]] = {}
             if kind_name.startswith("DROP"):
                 action, confidence = Action.DROP, "haute"
@@ -2866,7 +2987,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 alternatives = [Action.DROP]
                 time_only = _is_time_only_column(nonnull)
                 dates = _parse_datetime_values(nonnull, time_only)
-                parsed_dates = dates.dropna().sort_values()
+                parsed_dates = dates.dropna().drop_duplicates().sort_values()
                 gaps = parsed_dates.diff().dropna().dt.total_seconds()
                 median_gap = float(gaps.median()) if len(gaps) else np.nan
                 if pd.isna(median_gap):
@@ -2899,7 +3020,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 action = Action.ORDINAL
                 alternatives = [Action.ONEHOT, Action.DROP]
                 reason = f"Ordre ordinal reconnu parmi {nunique} modalités; l'encodage conserve cet ordre."
-            elif kind_name.startswith("CATEGORICAL") or kind_name == "NUMERIC_DISCRETE":
+            elif kind_name.startswith("CATEGORICAL") or (kind_name == "NUMERIC_DISCRETE" and self.config.encode_discrete_as_categorical):
                 supervised = y_arr is not None and getattr(self.config, "supervised_encoding", True)
                 action = (Action.TARGET_ENCODE if supervised else Action.FREQUENCY_ENCODE) if kind_name.endswith("HIGH_CARD") else Action.ONEHOT
                 alternatives = [Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.DROP]
@@ -2912,6 +3033,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 stats_row["entropy"] = float(-(probs * np.log2(probs.clip(lower=1e-15))).sum())
                 stats_row["natural_order"] = self._match_ordinal_pattern(nonnull.unique().tolist()) or []
                 reason = f"Cardinalité de {nunique}; encodage {'supervisé régularisé' if action == Action.TARGET_ENCODE else 'One-Hot'} adapté au type détecté."
+                counts = nonnull.astype(str).value_counts()
+                sparse_share = float(counts[counts < 5].sum() / max(len(nonnull), 1))
+                stats_row.update(sparse_observation_pct=sparse_share * 100, minimum_level_count=int(counts.min()) if len(counts) else 0)
+                if kind_name.endswith("HIGH_CARD"):
+                    reason += f" Risque de surapprentissage : {sparse_share:.1%} des observations dans des modalités d'effectif < 5 ; regroupement des rares et lissage de poids 10."
+                    if sparse_share > .5 and nunique / max(len(nonnull), 1) > .5:
+                        action = Action.DROP
+                        reason += (f" Suppression recommandée : {nunique}/{len(nonnull)} modalités/valeurs observées "
+                                   "et majorité d'observations trop rares ; l'encodage supervisé capterait surtout connu vs manquant.")
             else:
                 vals = pd.to_numeric(nonnull, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
                 skew = float(vals.skew()) if len(vals) > 2 else 0.0
@@ -2920,7 +3050,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 decision_skew = float(stats.skew(distribution_values)) if len(distribution_values) > 2 else 0.0
                 q1, q3 = vals.quantile(.25), vals.quantile(.75)
                 iqr = q3 - q1
-                outlier_pct = float((((vals < q1 - self.config.outlier_iqr_multiplier * iqr) | (vals > q3 + self.config.outlier_iqr_multiplier * iqr)).mean()) * 100) if len(vals) else 0.0
+                outlier_pct = float((((vals < q1 - self.config.outlier_iqr_multiplier * iqr) | (vals > q3 + self.config.outlier_iqr_multiplier * iqr)).mean()) * 100) if len(vals) and (iqr > 0 or not (q1 == 0 and vals.mod(1).eq(0).all())) else 0.0
                 stats_row.update(min=vals.min() if len(vals) else np.nan, max=vals.max() if len(vals) else np.nan,
                                  mean=vals.mean() if len(vals) else np.nan, median=vals.median() if len(vals) else np.nan,
                                  std=vals.std() if len(vals) else np.nan, skew=skew,
@@ -2948,8 +3078,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                           "SQRT": Action.SQRT, "QUANTILE": Action.QUANTILE}.get(dist_choice, Action.KEEP_NUMERIC)
                 alternatives = [Action.DROP, Action.YEO_JOHNSON, Action.LOG1P, Action.SQRT, Action.WINSORIZE,
                                 Action.SCALE_STANDARD, Action.SCALE_ROBUST, Action.SCALE_MINMAX, Action.NO_SCALE]
-                reason = (f"Asymétrie après bornage = {decision_skew:.2f}; {dist_choice} choisi car il laisse la plus faible "
-                          f"asymétrie résiduelle (seuil {self.config.skew_threshold:g})." if action != Action.KEEP_NUMERIC else
+                reason = (rule_recs["distribution"][1] + "; " + rule_recs["distribution"][2] if rule_recs else
+                          f"Asymétrie après bornage = {decision_skew:.2f}; {dist_choice} choisi selon le seuil "
+                          f"d'asymétrie {self.config.skew_threshold:g}." if action != Action.KEEP_NUMERIC else
                           f"Asymétrie après bornage = {decision_skew:.2f}, sous le seuil {self.config.skew_threshold:g}; traitement numérique standard.")
             # Les 11 étapes sont explicites. Les étapes non configurées reprennent le comportement du pipeline.
             def rec(action_name: str, measure: str, threshold: str, explanation: str,
@@ -2966,7 +3097,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 f"{token} ({count})" for token, count in found_false_counts.items()
             ) or "aucun"
             raw_nonnull = raw_s.dropna()
-            numeric_converted = (raw_nonnull.map(self._clean_numeric_str_value)
+            numeric_converted = (self._parse_numeric_series(raw_nonnull)
                                  if (pd.api.types.is_object_dtype(raw_s) or pd.api.types.is_string_dtype(raw_s))
                                  else pd.Series(dtype=float))
             numeric_text_ratio = float(numeric_converted.notna().mean()) if len(numeric_converted) else 0.0
@@ -3008,8 +3139,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             step_recs["duplicates"] = rec(
                 "DROP" if duplicate_rows else "KEEP", f"lignes dupliquées : {duplicate_rows}", "égalité exacte de toutes les cellules",
                 "La suppression des lignes strictement identiques évite de surpondérer les répétitions accidentelles.", ["DROP", "KEEP"])
-            step_recs["type"] = rec("DROP" if kind_name.startswith("DROP") else "AUTO", f"{nunique} valeurs uniques", f"identifiant si ratio > {self.config.identifier_unique_threshold:.1%}; suppression si manquants ≥ {self.config.missing_threshold:.1%}",
+            step_recs["type"] = rec("DROP" if action == Action.DROP else "AUTO", f"{nunique} valeurs uniques", f"identifiant si ratio > {self.config.identifier_unique_threshold:.1%}; suppression si manquants ≥ {self.config.missing_threshold:.1%}",
                 "La détection conserve les variables exploitables et écarte les profils vides, constants ou identifiants selon les seuils configurés.", ["AUTO", "DROP", "NUMERIC", "CATEGORICAL", "DATETIME", "TEXT"], confidence)
+            if action == Action.DROP and kind_name == "CATEGORICAL_HIGH_CARD":
+                step_recs["type"].update(measure=f"{nunique}/{len(nonnull)} modalités/valeurs observées ; {sparse_share:.1%} des observations dans des modalités d'effectif < 5",
+                    threshold="ratio modalités/lignes > 50% et observations dans les modalités rares > 50%",
+                    explanation="Risque de surapprentissage : suppression recommandée ; un encodage explicite reste possible.")
             missing_explanations = {
                 "MEDIAN": "Médiane : robuste à l'asymétrie et aux valeurs extrêmes.",
                 "MEAN": "Moyenne : distribution symétrique, extrêmes ≤ 1 % et normalité non rejetée.",
@@ -3048,7 +3183,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             p_text = ("p < 0.001" if pd.notna(normality_p) and normality_p < .001 else
                       f"p = {normality_p:.3g}" if pd.notna(normality_p) else "p-value indisponible")
             normality_text = (f"normalité rejetée ({p_text})" if pd.notna(normality_p) and normality_p < self.config.normality_p_threshold else
-                              f"normalité non rejetée ({p_text})")
+                              f"normalité non rejetée ({p_text})" if pd.notna(normality_p) else "normalité indisponible")
             skew = float(stats_row.get("skew_after_outlier_treatment", stats_row.get("skew", np.nan)))
             skew_reaches_threshold = abs(skew) > self.config.skew_threshold
             distribution_explanation = (
@@ -3066,7 +3201,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     "QUANTILE": "Aucune transformation paramétrique ne ramène l'asymétrie sous le seuil; la transformation par quantiles impose une forme régulière en conservant l'ordre.",
                 }.get(dist_action, distribution_explanation)
                 step_recs["distribution"] = rec(dist_action if dist_action != "NONE" else "NONE",
-                    f"{dist_measure}; {normality_text}", dist_limit, dist_text,
+                    f"après nettoyage des extrêmes : {dist_measure}; normalité avant nettoyage : {normality_text}", dist_limit, dist_text,
                     ["AUTO", "NONE", "LOG1P", "BOX_COX", "YEO_JOHNSON", "SQRT", "CBRT", "QUANTILE", "RANK"])
                 step_recs["distribution"]["evaluations"] = _evaluate_distribution_alternatives(
                     treated_values, self.config, distribution_preview)
@@ -3094,7 +3229,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 Action.TARGET_ENCODE: "L'encodage supervisé résume les modalités par une statistique de cible calculée hors pli.",
                 Action.FREQUENCY_ENCODE: "L'encodage par fréquence remplace les modalités par leur fréquence d'apparition.",
                 Action.ORDINAL: "L'encodage ordinal associe des nombres aux modalités selon un ordre défini.",
-                Action.BINARY_MAP: "Le mappage binaire transforme deux modalités en indicateurs numériques.",
+                Action.BINARY_MAP: "Le mappage binaire transforme deux modalités en 0/1, sans ordre métier ni niveau supérieur ; les codes sont mémorisés sur le train.",
             }.get(action, "Aucun encodage particulier n'est recommandé pour le type observé.")
             step_recs["encoding"] = rec(action.value if action in (Action.ONEHOT, Action.TARGET_ENCODE, Action.FREQUENCY_ENCODE, Action.ORDINAL, Action.BINARY_MAP) else "NONE",
                 f"{nunique} modalités", f"haute cardinalité > {self.config.cardinality_threshold} modalités", encoding_explanation,
@@ -3179,7 +3314,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     except (TypeError, ValueError):
                         pass
                     try:
-                        codes = pd.factorize(aligned["x"].fillna("__MISSING__").astype(str))[0].reshape(-1, 1)
+                        association_x = aligned["x"]
+                        if kind_name == "NUMERIC_CONTINUOUS" or (kind_name.startswith("NUMERIC") and association_x.nunique() > 20):
+                            association_x = pd.qcut(pd.to_numeric(association_x, errors="coerce"), 10, duplicates="drop")
+                        association_x = association_x.astype(object).where(association_x.notna(), "__MISSING__").astype(str)
+                        codes = pd.factorize(association_x)[0].reshape(-1, 1)
                         yy = pd.factorize(aligned["target"].astype(str))[0] if prep.task_resolved_ == "classification" else pd.to_numeric(aligned["target"], errors="coerce").fillna(0).to_numpy()
                         mi_fn = mutual_info_classif if prep.task_resolved_ == "classification" else mutual_info_regression
                         target_mi = float(mi_fn(codes, yy, discrete_features=True, random_state=self.config.random_state)[0])
@@ -3189,13 +3328,14 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         try:
                             if aligned["x"].nunique() * aligned["target"].nunique() > 100_000:
                                 raise ValueError("Table de contingence trop grande.")
-                            ct = pd.crosstab(aligned["x"].fillna("__MISSING__").astype(str), aligned["target"].astype(str))
+                            ct = pd.crosstab(association_x, aligned["target"].astype(str))
                             if ct.shape[0] > 1 and ct.shape[1] > 1:
-                                chi2 = float(stats.chi2_contingency(ct)[0])
+                                chi2 = float(stats.chi2_contingency(ct, correction=False)[0])
                                 n_obs = ct.to_numpy().sum()
-                                min_dim = min(ct.shape[0] - 1, ct.shape[1] - 1)
-                                if min_dim > 0 and n_obs > 0:
-                                    target_cramer = float(np.sqrt(chi2 / (n_obs * min_dim)))
+                                r, k = ct.shape
+                                phi2 = max(0., chi2 / n_obs - (r - 1) * (k - 1) / (n_obs - 1))
+                                min_dim = min(r - 1 - (r - 1)**2 / (n_obs - 1), k - 1 - (k - 1)**2 / (n_obs - 1))
+                                target_cramer = float(np.sqrt(phi2 / min_dim)) if min_dim > 0 else 0.
                         except Exception:
                             pass
                     missing_mask = aligned["x"].isna()
@@ -3235,7 +3375,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 elif pd.notna(target_spearman) and kind_name.startswith("NUMERIC"):
                     target_relation_method = "Spearman (échelle [-1, 1])"
                 elif pd.notna(target_cramer):
-                    target_relation_method = "V de Cramér (échelle [0, 1])"
+                    target_relation_method = "V de Cramér corrigé du biais (échelle [0, 1])"
                 elif pd.notna(target_mi):
                     target_relation_method = "information mutuelle (échelle [0, +∞[)"
                 elif pd.notna(target_spearman):
@@ -3444,7 +3584,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         "applicable": can_encode, "avertissement": (
                             "Encodage hors pli sur le train." if can_encode else "Cible utilisable requise."),
                     }
+            numerical_warnings = list(dict.fromkeys(distribution_preview.get("warnings", []) + [
+                item["avertissement"] for item in step_recs.get("distribution", {}).get("comparaison", {}).values()
+                if isinstance(item, dict) and item.get("transformation_effective") and item.get("avertissement")]))
             rows.append({"colonne": str(col), "type": kind_name, "dtype": str(df[col].dtype),
+                         "fuite_suspectee": clean_name in prep.suspected_leakage_cols_,
+                         "avertissements_numeriques": numerical_warnings,
                          "profil": column_profile, "raison_type": meta.get("reason", ""),
                          "type_semantique": semantic,
                          "confiance_type": recommendation_confidence(len(nonnull), .85 if kind_name in {
@@ -3468,6 +3613,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                          "manquant_informatif": bool(informative_missing),
                          "est_cible": False,
                          **stats_row})
+        prep.stage_timings_["recommendations"] = time.perf_counter() - recommendations_started
         # Paires de features fortement corrélées; ordre d'entrée = règle explicite du préprocesseur.
         numeric_df = clean.select_dtypes(include=[np.number]).drop(
             columns=[target] + list(prep.columns_to_drop_) if target else list(prep.columns_to_drop_),
@@ -3481,6 +3627,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             names = list(corr.columns)
             for i, left in enumerate(names):
                 for right in names[i + 1:]:
+                    # Pairwise deletion can yield |r|=1 on the observed subset
+                    # even though train-fitted imputation changes the relation.
+                    if numeric_df[left].isna().any() or numeric_df[right].isna().any():
+                        continue
                     score_corr = corr.loc[left, right]
                     if pd.notna(score_corr) and score_corr > self.config.correlation_threshold:
                         correlation_pairs.append({"gauche": str(left), "droite": str(right), "correlation_abs": float(score_corr),
@@ -3523,8 +3673,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             row["ratio_uniques_lignes"] = unique_ratio
             row["seuil_identifiant_uniques"] = self.config.identifier_unique_threshold
             if row["type"] == FeatureType.DROP_ID.value:
-                row["drop_preuve"] = f"uniques = {row['uniques']} / {len(raw)} lignes ({unique_ratio:.1%})"
-                row["drop_seuil"] = f"ratio uniques/lignes > {self.config.identifier_unique_threshold:.1%}"
+                observed_count = int(raw[row["colonne"]].notna().sum())
+                observed_ratio = row["uniques"] / max(observed_count, 1)
+                row["drop_preuve"] = (f"uniques = {row['uniques']} / {len(raw)} lignes ({unique_ratio:.1%}) ; "
+                                      f"{row['uniques']} / {observed_count} valeurs observées ({observed_ratio:.1%})")
+                row["drop_seuil"] = f"ratio uniques/observés > {self.config.identifier_unique_threshold:.1%}"
             elif row["type"] == FeatureType.DROP_HIGH_MISSING.value:
                 row["drop_preuve"] = f"manquants = {row['manquants_pct']:.1f}%"
                 row["drop_seuil"] = f">= {self.config.missing_threshold:.1%} des lignes"
@@ -3567,8 +3720,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 row["relation_cible"] = np.nan
                 row["spearman_cible"] = row["cramer_cible"] = row["information_mutuelle_cible"] = np.nan
                 row["relation_cible_methode"] = "non fiable (identifiant)"
-        return AnalysisResult(rows, sample_note)
+        prep.stage_timings_["analysis_total"] = time.perf_counter() - analysis_started
+        return AnalysisResult(rows, sample_note, prep.stage_timings_)
 
+    @_timed_stage("fit_total")
     def fit(self, X: pd.DataFrame, y: Optional[Union[pd.Series, np.ndarray]] = None) -> AutoPreprocessor:
         """Ajuste l'ensemble des transformateurs sur les données d'entraînement.
 
@@ -3577,9 +3732,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         """
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
+        raw_selection_target = y
 
         self._set_logging_level()
         self.is_fitted_ = False
+        self.stage_timings_ = {}
         self.warnings_ = []
         self.cleaning_decisions_ = {}
         self.numeric_string_cols_ = {}  # F2 : reinitialiser a chaque fit
@@ -3602,7 +3759,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             y_arr = self._fit_target(y)
 
         # Détection des types
-        self._detect_types(X_clean)
+        diagnostic_X = (X_clean.sample(n=20_000, random_state=self.config.random_state)
+                        if len(X_clean) > 200_000 else X_clean)
+        self._detect_types(diagnostic_X)
 
         # Application des choix explicites avant la construction des pipelines.
         self.user_override_notes_ = {}
@@ -3615,6 +3774,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         self.categorical_imputers_ = {}
         self.frequency_override_cols_ = []
         self.target_cat_encoder_ = None
+        self.high_rare_grouper_ = None
+        self.high_missing_cols_ = []
         self._te_oof_ = None
         self.freq_encoding_maps_ = {}
         self.count_encoding_cols_ = set()
@@ -3649,7 +3810,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 choices = {stage: normalized_action}
             meta_type = self.column_metadata_.get(col, {}).get("type")
             kind = meta_type.value if isinstance(meta_type, FeatureType) else str(meta_type)
-            group = _action_group(meta_type)
+            group = "categorical_low" if col in self.low_card_cols_ and kind == "NUMERIC_DISCRETE" else _action_group(meta_type)
             for step_name, action_value in choices.items():
                 if not _action_supported(step_name, group, action_value.upper()):
                     raise ValueError(
@@ -3742,15 +3903,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     self._add_override_note(col, f"choix utilisateur : {val.upper()} (étape {step})")
 
         # Choix statistiques par défaut (mêmes règles que analyze) pour les colonnes sans override explicite.
+        rules_started = time.perf_counter()
         self.auto_imputation_ = {}
         if self.config.adaptive_recommendations:
             for col in self.num_cols_:
                 if col not in X_clean.columns:
                     continue
                 if col not in self.column_outliers_:
-                    self.column_outliers_[col] = _recommend_outliers(X_clean[col], self.config)[0]
+                    self.column_outliers_[col] = _recommend_outliers(diagnostic_X[col], self.config)[0]
                 self.auto_imputation_[col] = _recommend_imputation(
-                    X_clean[col], self.config, X_clean[[c for c in self.num_cols_ if c != col and c in X_clean.columns]])[0]
+                    diagnostic_X[col], self.config, diagnostic_X[[c for c in self.num_cols_ if c != col and c in diagnostic_X.columns]])[0]
                 if col not in self.column_missing_:
                     self.column_missing_[col] = self.auto_imputation_[col]
 
@@ -3760,10 +3922,11 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 if getattr(self.config, "model_family", None) in TREE_FAMILIES:
                     mode = "NONE"
                 else:
-                    mode = (_recommend_scaler(X_clean[col], self.config)[0] if self.config.scaler_type == "standard"
+                    mode = (_recommend_scaler(diagnostic_X[col], self.config)[0] if self.config.scaler_type == "standard"
                             else self.config.scaler_type.upper())
                 self.column_scalers_[col] = mode
 
+        self.stage_timings_["recommendation_rules_fit"] = time.perf_counter() - rules_started
         # Filtrage des colonnes à exclure
         X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
         self.suspected_leakage_cols_ = []
@@ -3774,6 +3937,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             self._detect_noise_columns(X_work, y_arr)
             X_work = X_clean.drop(columns=self.columns_to_drop_, errors="ignore")
 
+        for col in self.low_card_cols_ + self.binary_cols_ + self.ordinal_cols_ + self.high_card_cols_:
+            missing_count = int(X_work[col].isna().sum()) if col in X_work else 0
+            if (col in X_work and col not in self.column_missing_ and
+                    0 < missing_count < 5 and missing_count / len(X_work) < .05):
+                self.column_missing_[col] = "MODE"
+                self._add_override_note(col, "moins de 5 manquants sur le train : imputation par le mode, sans indicateur")
         for col, mode in self.column_missing_.items():
             categorical = (self.binary_cols_ + self.ordinal_cols_ + self.low_card_cols_ + self.high_card_cols_
                            + self.frequency_override_cols_ + list(self.compact_category_modes_)
@@ -3804,10 +3973,12 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             )
             self.missing_indicator_.fit(X_num)
             for col, mode in self.column_missing_.items():
-                if mode == "MISSING_INDICATOR" and col in X_num.columns and col not in self.missing_indicator_.indicator_cols_:
+                if (mode == "MISSING_INDICATOR" and col in X_num.columns
+                        and X_num[col].isna().sum() >= 5 and col not in self.missing_indicator_.indicator_cols_):
                     self.missing_indicator_.indicator_cols_.append(col)
 
             # Winsorisation / Outliers
+            outliers_started = time.perf_counter()
             self.winsorizer_ = Winsorizer(
                 method=self.config.outlier_method,
                 lower_quantile=self.config.outlier_lower_quantile,
@@ -3850,8 +4021,15 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 self.winsorizer_.upper_bounds_[col] = high
                 self.winsorizer_.replacements_[col] = (mode, vals.median())
             X_num_wins = self.winsorizer_.transform(X_num)
+            self.winsorizer_.capped_counts_ = {
+                col: int(((X_num[col] < self.winsorizer_.lower_bounds_.get(col, -np.inf)) |
+                          (X_num[col] > self.winsorizer_.upper_bounds_.get(col, np.inf))).sum())
+                for col in X_num.columns
+            }
+            self.stage_timings_["outliers_fit_apply"] = time.perf_counter() - outliers_started
 
             # Imputation médiane ou moyenne
+            imputation_started = time.perf_counter()
             self.num_imputer_ = {}
             for col in self.num_cols_:
                 mode = self.column_missing_.get(col, self.config.imputation_strategy.upper())
@@ -3874,8 +4052,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
             self._fit_multivariate_imputers(X_num_wins)
             X_num_imp = self._impute_numeric(X_num_wins)
+            self.stage_timings_["imputation_fit_apply"] = time.perf_counter() - imputation_started
 
             # PowerTransformer pour asymétrie
+            distribution_started = time.perf_counter()
             self.num_power_transformer_ = {}
             self.num_skewed_cols_ = []
             if self.config.adaptive_recommendations:
@@ -3901,12 +4081,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         override_dist = "YEO_JOHNSON"
                 if override_dist in DISTRIBUTIONS[2:]:
                     transformer = fit_distribution(values, override_dist, self.config.random_state)
+                    if getattr(transformer, "warning_", ""):
+                        self.warnings_.append(transformer.warning_)
                     X_num_imp[col] = apply_distribution(values, transformer, override_dist)
                     self.num_power_transformer_[col] = transformer
                     if override_dist == "YEO_JOHNSON":
                         self.num_skewed_cols_.append(col)
 
+            self.stage_timings_["distribution_fit_apply"] = time.perf_counter() - distribution_started
             # Scaling
+            scaling_started = time.perf_counter()
             scaler_type = ("none" if getattr(self.config, "model_family", None) in TREE_FAMILIES
                            else self.config.scaler_type)
             if scaler_type == "robust":
@@ -3933,6 +4117,8 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                         raise ValueError(f"Scaler inconnu pour {col!r}: {mode}")
                     self.column_scalers_[col] = scaler_cls().fit(X_num_imp[[col]])
 
+            self.stage_timings_["scaling_fit"] = time.perf_counter() - scaling_started
+        encoding_started = time.perf_counter()
         # 2. Pipeline Binaire
         if self.binary_cols_:
             self.binary_mapper_ = BinaryMapper()
@@ -3983,6 +4169,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         # 5. Pipeline Catégoriel Haute Cardinalité
         if self.high_card_cols_:
+            self.high_rare_grouper_ = RareCategoryGrouper(threshold=self.config.rare_category_threshold,
+                column_thresholds={c: min(1., max(self.config.rare_category_threshold, 5 / max(X_work[c].notna().sum(), 1))) for c in self.high_card_cols_})
+            self.high_rare_grouper_.fit(X_work[self.high_card_cols_])
+            self.high_missing_cols_ = [c for c in self.high_card_cols_ if X_work[c].isna().any()]
             distinct_targets = len(np.unique(y_arr)) if y_arr is not None else 0
             if (getattr(self.config, "supervised_encoding", True) and distinct_targets >= 2
                     and (self.task_resolved_ == "regression" or distinct_targets < len(y_arr))):
@@ -4005,7 +4195,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 _check_feature_width(target_width, "Encodage de cible")
                 check_dense_allocation(len(X_work), target_width, np.float64,
                                        self.config.max_dense_bytes, "Encodage de cible")
-                categories = X_work[self.high_card_cols_].astype(str)
+                categories = self.high_rare_grouper_.transform(X_work[self.high_card_cols_])
                 if singleton_classes:
                     self._te_oof_ = _crossfit_singleton_classes(
                         self.target_cat_encoder_, categories, y_arr, classes, cv, self.config.random_state)
@@ -4101,15 +4291,17 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 default_max_features=self.config.max_text_features)
             self.ngram_text_transformer_.fit(X_work[list(self.ngram_text_cols_)])
 
+        self.stage_timings_["encoding_fit"] = time.perf_counter() - encoding_started
         # Post-traitement sur le train : Sélection des colonnes, variance, corrélation et fuites
         X_trans_train = self._transform_components(X_clean)
         self._use_oof_encoding(X_trans_train)
-        self._fit_post_processing(X_trans_train, y_arr)
+        self._fit_post_processing(X_trans_train, y_arr, raw_X=X, raw_y=raw_selection_target)
 
         self.is_fitted_ = True
         logger.info(f"AutoPreprocessor ajusté avec succès. Nb features finales : {len(self.final_feature_names_)}")
         return self
 
+    @_timed_stage("imputation_fit")
     def _fit_multivariate_imputers(self, X_num_wins: pd.DataFrame) -> None:
         """Ajuste KNN / imputation itérative sur le train pour les colonnes qui les demandent.
 
@@ -4153,6 +4345,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 continue
             self.multivariate_imputers_[method] = (imputer, cols, mu, sd)
 
+    @_timed_stage("imputation_apply")
     def _impute_numeric(self, X_num_wins: pd.DataFrame) -> pd.DataFrame:
         """Impute les numériques : multivarié pour les colonnes KNN/ITERATIVE, valeur apprise sinon."""
         out = X_num_wins.copy()
@@ -4212,6 +4405,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         return _text_matrix_frame(matrix, X_clean.index, [f"{col}_hash_{i}" for i in range(width)],
                                   sparse_output, max_dense_bytes)
 
+    @_timed_stage("components_total")
     def _transform_components(self, X_clean: pd.DataFrame) -> pd.DataFrame:
         """Applique les composants de transformation individuels et concatène le résultat."""
         budget = self.config.max_dense_bytes
@@ -4227,6 +4421,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if self.high_card_cols_:
             width += (len(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
                       if self.target_cat_encoder_ is not None else len(self.high_card_cols_))
+            width += len(self.high_missing_cols_)
         width += len(self.frequency_override_cols_)
         for col, mode in getattr(self, "compact_category_modes_", {}).items():
             if col not in self.columns_to_drop_:
@@ -4274,20 +4469,27 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     parts.append(df_mi)
 
             # Winsorisation
+            outliers_started = time.perf_counter()
             X_num_wins = self.winsorizer_.transform(X_num)
+            self.stage_timings_["outliers_apply"] = self.stage_timings_.get("outliers_apply", 0.) + time.perf_counter() - outliers_started
 
             # Imputation
             X_num_imp = self._impute_numeric(X_num_wins)
 
             # PowerTransformer
+            distribution_started = time.perf_counter()
             if self.num_power_transformer_:
                 for c, pt in self.num_power_transformer_.items():
                     if c in X_num_imp.columns:
                         action = pt if isinstance(pt, str) else getattr(self, "column_distributions_", {}).get(c, "AUTO")
-                        validate_distribution(X_num[c].dropna(), action, c, fitting=False)
+                        requested, _ = self._override_value(c, "distribution")
+                        validation_values = X_num[c] if requested not in (None, "AUTO", "") else X_num_imp[c]
+                        validate_distribution(validation_values.dropna(), action, c, fitting=False)
                         X_num_imp[c] = apply_distribution(X_num_imp[c], pt, action)
 
+            self.stage_timings_["distribution_apply"] = self.stage_timings_.get("distribution_apply", 0.) + time.perf_counter() - distribution_started
             # Scaling
+            scaling_started = time.perf_counter()
             overridden = set(self.column_scalers_).intersection(self.num_cols_)
             if not overridden:
                 if self.num_scaler_ is not None:
@@ -4305,8 +4507,10 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                     if scaler is not None:
                         df_num_scaled[col] = scaler.transform(X_num_imp[[col]]).ravel()
 
+            self.stage_timings_["scaling_apply"] = self.stage_timings_.get("scaling_apply", 0.) + time.perf_counter() - scaling_started
             parts.append(df_num_scaled)
 
+        encoding_started = time.perf_counter()
         # 2. Binaires
         if self.binary_cols_ and self.binary_mapper_ is not None:
             df_bin = self.binary_mapper_.transform(X_clean[self.binary_cols_])
@@ -4342,11 +4546,13 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # 5. Catégorielles Haute Cardinalité
         if self.high_card_cols_:
             if self.target_cat_encoder_ is not None:
-                X_high = X_clean[self.high_card_cols_].astype(str)
+                X_high = self.high_rare_grouper_.transform(X_clean[self.high_card_cols_])
                 te_arr = self.target_cat_encoder_.transform(X_high)
                 te_cols = list(self.target_cat_encoder_.get_feature_names_out(self.high_card_cols_))
                 df_te = pd.DataFrame(te_arr, index=X_clean.index, columns=te_cols)
                 parts.append(df_te)
+                if self.high_missing_cols_:
+                    parts.append(pd.DataFrame({f"{c}_isna": X_clean[c].isna().astype(float) for c in self.high_missing_cols_}, index=X_clean.index))
             elif self.freq_encoding_maps_:
                 fe_dict = {}
                 for col in self.high_card_cols_:
@@ -4406,6 +4612,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if self.ngram_text_cols_ and self.ngram_text_transformer_ is not None:
             parts.append(self.ngram_text_transformer_.transform(X_clean))
 
+        self.stage_timings_["encoding_apply"] = self.stage_timings_.get("encoding_apply", 0.) + time.perf_counter() - encoding_started
         if parts:
             check_dense_allocation(len(X_clean), sum(not isinstance(dtype, pd.SparseDtype)
                                    for part in parts for dtype in part.dtypes), np.float64,
@@ -4418,11 +4625,18 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
 
         return result
 
-    def _fit_post_processing(self, X_trans: pd.DataFrame, y: Optional[np.ndarray]) -> None:
+    @_timed_stage("selection_fit")
+    def _fit_post_processing(self, X_trans: pd.DataFrame, y: Optional[np.ndarray], *,
+                             raw_X: Optional[pd.DataFrame] = None, raw_y=None) -> None:
         """Détecte les variances quasi-nulles, colinéarités et fuites de données."""
+        selection_started = time.perf_counter()
         if X_trans.empty:
             self.final_feature_names_ = []
+            self.feature_selector_ = None
+            self.feature_selection_report_ = None
             return
+        self.feature_selector_ = None
+        self.feature_selection_report_ = None
 
         cols = list(X_trans.columns)
         self.dropped_variance_cols_ = []
@@ -4437,7 +4651,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
                 var_val = ((values - mean) @ (values - mean) + zeros * mean ** 2) / max(len(series) - 1, 1)
                 is_constant = var_val == 0
             else:
-                var_val = series.var()
+                var_val = series.astype(float).var()
                 is_constant = series.nunique(dropna=True) <= 1
             if is_constant or np.isnan(var_val) or var_val <= max(self.config.variance_threshold, 1e-12):
                 self.dropped_variance_cols_.append(col)
@@ -4448,8 +4662,16 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # 2. Détection de colinéarité (|r| > correlation_threshold)
         if len(retained_after_var) >= max(2, self.config.min_features_for_collinearity) and len(X_curr) > 1:
             has_sparse = any(isinstance(dtype, pd.SparseDtype) for dtype in X_curr.dtypes)
-            if has_sparse and self.config.correlation_threshold >= 1:
+            if (has_sparse and self.config.correlation_threshold >= 1 and self.config.selection_method == "auto"
+                    and not self.config.selection_include and not self.config.selection_exclude):
                 self.final_feature_names_ = retained_after_var
+                self.dropped_collinear_cols_ = []
+                self.feature_selection_report_ = {"method": "auto", "original_count": len(cols),
+                    "selected_count": len(retained_after_var), "selected": retained_after_var,
+                    "rejected": self.dropped_variance_cols_, "scores": None, "rankings": None,
+                    "reasons": {c: ("Variance nulle ou sous le seuil" if c in self.dropped_variance_cols_ else
+                                     "Conservée après filtrage de variance") for c in cols},
+                    "elapsed_seconds": round(time.perf_counter() - selection_started, 3), "fit_rows": len(X_trans)}
                 return
             if not has_sparse:
                 width = len(retained_after_var)
@@ -4493,6 +4715,93 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Finalisation des colonnes conservées
         all_dropped = set(self.dropped_variance_cols_) | set(self.dropped_collinear_cols_)
         self.final_feature_names_ = [c for c in cols if c not in all_dropped]
+        if self.config.selection_method not in {"auto", "correlation"}:
+            from feature_selection import fit_selector
+            before = self.final_feature_names_
+            if self.config.selection_method in {"rfecv", "forward", "backward"} and raw_X is not None and raw_y is not None:
+                from fold_safe_selection import FoldIsolationUnavailable, fit_fold_safe_selector
+                try:
+                    self.feature_selector_, self.feature_selection_report_ = fit_fold_safe_selector(
+                        X_trans[before], raw_X, raw_y, method=self.config.selection_method,
+                        config=self.config, task=getattr(self, "task_resolved_", self.task))
+                    if self.config.selection_method == "rfecv":
+                        self.warnings_.append("Chaque pli interne réajuste le prétraitement sur son sous-train. Le score interne sert à choisir le nombre de features ; utilisez une évaluation externe pour estimer la performance finale.")
+                    else:
+                        self.warnings_.append("Chaque pli interne réajuste le prétraitement et sélectionne ses candidates sur son sous-train. Son score de validation évalue cette recherche ; utilisez une évaluation externe pour estimer la performance finale.")
+                    unavailable = self.feature_selection_report_.get("selected_unavailable_at_final_fit", [])
+                    if unavailable:
+                        self.warnings_.append(
+                            "Des features choisies dans les plis internes sont absentes du fit final : "
+                            + ", ".join(unavailable) + ". Le support final peut être plus petit que demandé.")
+                    if self.feature_selection_report_.get("final_count_adjusted"):
+                        self.warnings_.append(
+                            "Le nombre de features retenues au fit final diffère du nombre évalué dans les plis internes ; interprétez le score interne avec prudence.")
+                except FoldIsolationUnavailable as exc:
+                    self.warnings_.append(f"Validation interne non isolée : {exc} Le score CV peut être optimiste ; réévaluez le pipeline complet dans des plis externes.")
+                    self.feature_selector_, self.feature_selection_report_ = fit_selector(
+                        X_trans[before], y, method=self.config.selection_method,
+                        task=getattr(self, "task_resolved_", self.task), count=self.config.selection_count,
+                        percentile=self.config.selection_percentile, folds=self.config.selection_folds,
+                        random_state=self.config.random_state, max_dense_bytes=self.config.max_dense_bytes,
+                        scoring=self.config.selection_scoring)
+                    self.feature_selection_report_["cv_preprocessing"] = "unsafe_legacy"
+            else:
+                self.feature_selector_, self.feature_selection_report_ = fit_selector(
+                    X_trans[before], y, method=self.config.selection_method,
+                    task=getattr(self, "task_resolved_", self.task), count=self.config.selection_count,
+                    percentile=self.config.selection_percentile, folds=self.config.selection_folds,
+                    random_state=self.config.random_state, max_dense_bytes=self.config.max_dense_bytes,
+                    scoring=self.config.selection_scoring)
+                if self.config.selection_method in {"rfecv", "forward", "backward"}:
+                    self.feature_selection_report_["cv_preprocessing"] = "unsafe_legacy"
+                    self.warnings_.append("La validation interne du sélecteur utilise des données prétraitées sur le train complet ; son score peut être optimiste.")
+            self.final_feature_names_ = self.feature_selection_report_["selected"]
+        if self.feature_selection_report_ is None:
+            self.feature_selection_report_ = {"method": self.config.selection_method,
+                "original_count": len(cols), "selected_count": len(self.final_feature_names_),
+                "selected": list(self.final_feature_names_),
+                "rejected": [c for c in cols if c not in self.final_feature_names_],
+                "scores": None, "rankings": None, "elapsed_seconds": round(time.perf_counter() - selection_started, 3), "fit_rows": len(X_trans),
+                "reasons": {}}
+        reasons = self.feature_selection_report_.setdefault("reasons", {})
+        reasons.update({c: "Variance nulle ou sous le seuil" for c in self.dropped_variance_cols_})
+        reasons.update({c: "Corrélation au-dessus du seuil avec une feature précédente" for c in self.dropped_collinear_cols_})
+        includes = set(self.config.selection_include or [])
+        excludes = set(self.config.selection_exclude or [])
+        if includes or excludes:
+            if includes & excludes:
+                raise ValueError("Une colonne ne peut pas être à la fois incluse et exclue.")
+            available = set(self.column_metadata_)
+            if (includes | excludes) - available:
+                raise ValueError("La sélection manuelle contient une colonne source inconnue ou la cible.")
+            if includes & set(self.columns_to_drop_):
+                raise ValueError("Impossible de forcer une colonne supprimée pour identifiant, fuite ou qualité.")
+            groups = {name: [feature for feature in cols if feature == name or feature.startswith(name + "_")]
+                      for name in includes | excludes}
+            if any(not group for group in groups.values() if group is not None):
+                raise ValueError("Une colonne manuelle n'a aucune sortie encodée disponible.")
+            forced = {feature for name in includes for feature in groups[name] if feature in retained_after_var}
+            blocked = {feature for name in excludes for feature in groups[name]}
+            selected = set(self.final_feature_names_) | forced
+            selected -= blocked
+            self.final_feature_names_ = [feature for feature in cols if feature in selected]
+            if not self.final_feature_names_:
+                raise ValueError("La sélection manuelle ne laisse aucune feature.")
+            if self.feature_selection_report_ is None:
+                self.feature_selection_report_ = {"method": self.config.selection_method, "scores": None,
+                                                  "rankings": None, "elapsed_seconds": 0., "fit_rows": len(X_trans)}
+            self.feature_selection_report_.update({"manual_include": sorted(includes), "manual_exclude": sorted(excludes),
+                "selected": self.final_feature_names_, "rejected": [c for c in cols if c not in selected],
+                "selected_count": len(self.final_feature_names_), "original_count": len(cols)})
+            reasons.update({feature: "Conservée par inclusion manuelle" for feature in forced})
+            reasons.update({feature: "Écartée par exclusion manuelle" for feature in blocked})
+        else:
+            self.feature_selection_report_.update({"selected": list(self.final_feature_names_),
+                "rejected": [c for c in cols if c not in self.final_feature_names_],
+                "selected_count": len(self.final_feature_names_), "original_count": len(cols)})
+        for feature in cols:
+            reasons.setdefault(feature, "Conservée par le filtrage automatique" if feature in self.final_feature_names_ else
+                               "Écartée par le filtrage automatique")
 
     def fit_transform(self, X: pd.DataFrame, y: Optional[Union[pd.Series, np.ndarray]] = None, **fit_params) -> pd.DataFrame:
         """Ajuste puis transforme le train. À utiliser pour le train (et non fit() + transform()).
@@ -4504,7 +4813,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
         duplicate_action = self._dataset_duplicate_action()
-        duplicate_mask = X.duplicated(keep="first")
+        duplicate_mask = _duplicate_mask(X)
         duplicate_count = int(duplicate_mask.sum())
         self.dataset_cleaning_ = {"doublons_detectes": duplicate_count, "action_doublons": duplicate_action}
         if duplicate_action == "DROP" and duplicate_count:
@@ -4536,6 +4845,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             if name in X_out.columns and len(X_out) == len(loo_values):
                 X_out[name] = np.nan_to_num(loo_values).astype(np.float32)
 
+    @_timed_stage("transform_total")
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Applique les transformations apprises sur un nouveau DataFrame (ex: jeu de test).
 
@@ -4552,7 +4862,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         # Nettoyage préalable (Étape 0)
         retained = np.ones(len(X), dtype=bool)
         if self._dataset_duplicate_action() == "DROP":
-            retained = ~X.duplicated(keep="first").to_numpy()
+            retained = ~_duplicate_mask(X).to_numpy()
             X = X.iloc[retained]
         X_clean = self._preprocess_raw_dataframe(X)
         retained[retained] = self._last_keep_positions_
@@ -4585,8 +4895,21 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         out_df = out_df.fillna(0.0)
 
         # 3. Conversion 100% numérique
-        result = out_df.astype({col: pd.SparseDtype(np.float32, 0) if isinstance(dtype, pd.SparseDtype)
-                                else np.float32 for col, dtype in out_df.dtypes.items()})
+        output_types = {}
+        for col, dtype in out_df.dtypes.items():
+            values = out_df[col].array.sp_values if isinstance(dtype, pd.SparseDtype) else out_df[col].to_numpy()
+            precision = np.float32
+            if len(values) and np.max(np.abs(values)) > np.finfo(np.float32).max:
+                precision = np.float64
+                message = f"Colonne {col!r} : précision float64 conservée pour éviter un dépassement float32."
+                if message not in self.warnings_:
+                    self.warnings_.append(message)
+            output_types[col] = pd.SparseDtype(precision, 0) if isinstance(dtype, pd.SparseDtype) else precision
+        result = out_df.astype(output_types)
+        for col in result:
+            values = result[col].array.sp_values if isinstance(result[col].dtype, pd.SparseDtype) else result[col].to_numpy()
+            if not np.isfinite(values).all():
+                raise ValueError(f"La colonne transformée {col!r} contient des valeurs non finies ; aucun export valide ne peut être produit.")
         for col in self.num_cols_:
             if (col not in result or col in (self.num_power_transformer_ or {})
                     or self.column_scalers_.get(col, self.num_scaler_) is not None
@@ -4627,7 +4950,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         duplicate_action = self._dataset_duplicate_action()
         n_before = len(df_work)
         if duplicate_action == "DROP":
-            df_work = df_work.drop_duplicates()
+            df_work = df_work.loc[~_duplicate_mask(df_work)]
         n_dup = n_before - len(df_work)
         if n_dup > 0:
             logger.info(f"{n_dup} lignes en doublon exact supprimées du jeu d'entraînement.")
@@ -4740,6 +5063,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
             "colonnes_detaillees": df_report,
             "nb_features_initiales": len(self.input_columns_),
             "nb_features_finales": len(self.final_feature_names_),
+            "selection_features": getattr(self, "feature_selection_report_", None),
             "tache_detectee": self.task_resolved_,
             "analyse_cible": self.target_stats_,
             "colonnes_supprimees": {
@@ -4760,6 +5084,9 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         """Retourne l'action principale effectivement appliquée à une colonne."""
         if col in self.columns_to_drop_ or col in self.dropped_variance_cols_ or col in self.dropped_collinear_cols_:
             return "DROP"
+        fallback = getattr((self.num_power_transformer_ or {}).get(col), "fallback_", None)
+        if fallback:
+            return fallback
         preferred_steps = ("type", "distribution", "outliers", "scaling", "encoding", "dates", "text")
         for step in preferred_steps:
             action, _ = self._override_value(col, step)
@@ -4775,7 +5102,7 @@ class AutoPreprocessor(BaseEstimator, TransformerMixin):
         if kind in {"CATEGORICAL_LOW", "CATEGORICAL_LOW_CARD"}:
             return "ONEHOT"
         if kind in {"CATEGORICAL_HIGH", "CATEGORICAL_HIGH_CARD"}:
-            if self.target_stats_ and self.target_stats_.get("present"):
+            if self.target_cat_encoder_ is not None:
                 return "TARGET_ENCODE"
             return "FREQUENCY_ENCODE"
         if col in self.column_distributions_:
@@ -4911,9 +5238,9 @@ def _series_profile(values: Any, iqr_multiplier: float = 1.5) -> Dict[str, float
     spread = q3 - q1
     profile.update(
         mean=float(obs.mean()), median=float(obs.median()), std=float(obs.std(ddof=1)) if len(obs) > 1 else nan,
-        skew=float(stats.skew(obs)) if len(obs) > 2 else nan, kurtosis=float(obs.kurt()) if len(obs) > 3 else nan,
+        skew=float(obs.skew()) if len(obs) > 2 else nan, kurtosis=float(obs.kurt()) if len(obs) > 3 else nan,
         min=float(obs.min()), max=float(obs.max()),
-        outlier_pct=float(((obs < q1 - iqr_multiplier * spread) | (obs > q3 + iqr_multiplier * spread)).mean() * 100),
+        outlier_pct=float(((obs < q1 - iqr_multiplier * spread) | (obs > q3 + iqr_multiplier * spread)).mean() * 100) if spread > 0 or not (q1 == 0 and obs.mod(1).eq(0).all()) else 0.,
         zero_pct=float((obs == 0).mean() * 100), normality_p=nan)
     if len(obs) >= 20 and obs.nunique() > 1:
         try:
@@ -5034,10 +5361,17 @@ def preview_column(df: pd.DataFrame, column: str, override: Any = None, config: 
             affected={"missing_filled": int((~observed).sum()), "outside_bounds": outside,
                       "rows_changed": changed, "rows_changed_pct": changed / max(len(out), 1) * 100},
             applied={"missing": prep.column_missing_.get(column), "outliers": prep.column_outliers_.get(column),
-                     "distribution": prep.column_distributions_.get(column, "NONE"),
+                     "distribution": (getattr((prep.num_power_transformer_ or {}).get(column), "fallback_", None)
+                                      or prep.column_distributions_.get(column, "NONE")),
                      "scaling": prep.column_scalers_.get(column) if not hasattr(prep.column_scalers_.get(column), "fit")
                      else type(prep.column_scalers_[column]).__name__},
             data={"before": sample(before_aligned), "after": sample(after_raw), "after_scaled": sample(out[column])})
+        q1, q3 = before_aligned.quantile([.25, .75])
+        iqr = q3 - q1
+        iqr_count = int(((before_aligned < q1 - base.outlier_iqr_multiplier * iqr) |
+                         (before_aligned > q3 + base.outlier_iqr_multiplier * iqr)).sum())
+        notes.append(f"Détection IQR : {iqr_count} valeurs extrêmes ; bornes de winsorisation [{lower:.4g}, {upper:.4g}] ; "
+                     f"{outside} valeurs réellement bornées sur l’aperçu.")
         dist = result["applied"]["distribution"]
         if dist in {"QUANTILE", "RANK"}:
             notes.append("QUANTILE et RANK ne conservent que l'ordre des valeurs : les distances entre valeurs sont perdues.")

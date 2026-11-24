@@ -38,7 +38,7 @@ Les validations de cette itération comprennent 6 tests API, 7 tests ciblés sur
 
 La comparaison mobile a été vérifiée après stabilisation du redimensionnement du canvas. À 390 px, le document mesure 390 px et la scène mesure environ 321 px. Les fichiers téléchargés ont été ouverts et contrôlés, avec 800 lignes de train, 200 de test, 1 000 au total et les quatre feuilles attendues du rapport XLSX. Le journal du parcours ne contient aucune erreur JavaScript, console ou HTTP. Les avertissements de dépréciation de Three.js et de taille du chunk GPU demeurent.
 
-Les preuves de cette itération sont conservées dans `premium-iteration2`, à côté du dossier `premium-six-stage` décrit plus bas. Les mêmes limites de diffusion du statut par l’API, de validation sur GPU physique et les avertissements des dépendances restent applicables.
+Les preuves détaillées de cette itération sont conservées hors du dépôt. Les mêmes limites de diffusion du statut par l’API, de validation sur GPU physique et les avertissements des dépendances restent applicables.
 
 ## Audit et choix d’architecture
 
@@ -157,13 +157,7 @@ Le mode sans cible et les deux jeux de démonstration sont couverts par les test
 
 ## Preuves locales
 
-Les captures des six étapes, les téléchargements vérifiés, les scripts de contrôle et les journaux se trouvent dans le dossier suivant sur cette machine.
-
-```text
-C:/Users/khiar/.codex/visualizations/2026/11/08/01a1bd81-1647-7671-b44f-45011df5f130/premium-six-stage
-```
-
-`browser-log.json` contient les événements console et réseau du dernier parcours. `rendering-log.json` conserve les compteurs de rendu et les cycles des contextes. `exports-validation.json` conserve les dimensions des CSV et les feuilles du classeur vérifié.
+Les captures, journaux et exports de validation locale sont conservés hors du dépôt et ne sont pas inclus dans cette publication.
 
 ## Lancement local
 

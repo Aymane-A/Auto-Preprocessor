@@ -88,7 +88,7 @@ def test_demo_flow(dataset, target, raw_column, feature, alternative):
         response = client.get(f"/api/download/{session_id}/report_xlsx")
         assert response.status_code == 200
         workbook = load_workbook(BytesIO(response.content))
-        assert workbook.sheetnames == ["Résumé", "Features", "Corrélations", "Colonnes de sortie"]
+        assert workbook.sheetnames == ["Résumé", "Features", "Corrélations", "Colonnes de sortie", "Opérations", "Diagnostics"]
         header, *rows = list(workbook["Features"].values)
         assert len(rows) == loaded["shape"][1]
         xlsx = {row[0]: dict(zip(header, row)) for row in rows}

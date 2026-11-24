@@ -31,7 +31,7 @@ export function PreviewComparison({ preview, column }: { preview: Preview; colum
     {preview.affected && <p className="comparison-impact">
       <strong>{display(preview.affected.missing_filled)}</strong> valeurs manquantes imputées
       <span>·</span><strong>{display(preview.affected.outside_bounds)}</strong> valeurs hors bornes
-      <span>·</span><strong>{display(preview.affected.rows_changed)}</strong> lignes modifiées avant mise à l’échelle
+       <span>·</span>Transformation appliquée à toutes les lignes ({display(preview.rows ?? preview.affected.rows_changed)}) · {display(preview.affected.outside_bounds)} valeurs winsorisées
     </p>}
     <div className="two-col comparison-charts">
       <div><h3>Avant</h3><p className="chart-caption">Distribution avant transformation</p><Distribution data={preview.before_chart} color="var(--beige)" /></div>

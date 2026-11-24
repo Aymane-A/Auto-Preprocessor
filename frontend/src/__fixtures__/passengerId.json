@@ -1,0 +1,16 @@
+{
+  "column": "PassengerId", "dtype": "int64", "type": "numérique",
+  "missing_count": 0, "missing_pct": 0.0, "unique": 891, "top": [], "binary": false,
+  "mean": 446.0, "std": 257.3538420152301, "min": 1, "max": 891,
+  "skew": 0.0, "kurtosis": -1.1999999999999997, "q1": 223.5, "median": 446.0, "q3": 668.5,
+  "detected_type": "ID_LIKE", "display_type_override": "AUTO",
+  "code_evidence": {"integer_valued": true, "cardinality": 891, "unique_ratio": 1.0,
+    "repeated_ratio": 0.0, "range_density": 1.0, "skew": 0.0,
+    "ordered_target_spearman": -0.005006660767066498, "possible_codes": true},
+  "cardinality": 891, "observed_count": 891, "dominant_share": 0.001122334455667789,
+  "target_type": "BINARY",
+  "recommended_visualization": [{"kind": "summary",
+    "reason": "Identifiant (valeurs uniques) : aucune distribution pertinente. 100.0% de valeurs uniques, codes courts ou entiers sans répétition. Aucune distribution pertinente ; cardinalité et exemples uniquement.",
+    "cardinality": 891, "examples": ["1", "2", "3", "4", "5"]}],
+  "relationship_note": "Aucune relation graphique pertinente pour une colonne vide, identifiante, textuelle, datée ou quasi constante."
+}

@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
 import os
@@ -20,7 +21,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
 from python_multipart import MultipartParser
 from python_multipart.multipart import parse_options_header
 from starlette.concurrency import run_in_threadpool
@@ -28,6 +28,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from isolated_processing import ProcessLimits, run_isolated
 import web_processing as work
+from web_contracts import AnalysisRequest, Evaluation, NestedEvaluation, Execute, Preview, SessionRequest, WebOptions
 
 LOG = logging.getLogger(__name__)
 MIB = 1024 ** 2
@@ -36,49 +37,11 @@ ORIGIN_DEV = "http://localhost:5173"
 ORIGINS = {ORIGIN_DEV, "http://127.0.0.1:8000", "http://localhost:8000"}
 
 
-class SessionRequest(BaseModel):
-    """Identify a single server-owned dataset."""
-    model_config = ConfigDict(extra="forbid")
-    session_id: str
-
-
 class Configure(SessionRequest):
     """Describe the learning mode and optional supervised target."""
     mode: Literal["supervised", "unsupervised"]
     target: str | None = None
     task: Literal["auto", "classification", "regression"] = "auto"
-
-
-class Preview(SessionRequest):
-    """Describe one feature preview."""
-    column: str
-    choice: str = "recommended"
-
-
-class WebOptions(BaseModel):
-    """Allow only supported desktop options with bounded values."""
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    test_size_pct: int = Field(20, ge=1, le=50)
-    scaler_type: Literal["standard", "robust", "minmax", "none"] = "standard"
-    outlier_method: Literal["winsorize", "iqr", "none"] = "winsorize"
-    cardinality_threshold: int = Field(10, ge=2, le=1000)
-    missing_threshold: float = Field(.90, gt=0, le=1)
-    correlation_threshold: float = Field(.95, gt=0, le=1)
-    rare_category_threshold: float = Field(.01, ge=0, lt=1)
-    skew_threshold: float = Field(1.0, ge=0, le=100)
-    transform_target: bool = True
-    drop_leaky_columns: bool = False
-    encode_discrete_as_categorical: bool = False
-    random_state: int = Field(42, ge=0, le=2**32 - 1)
-    sparse_output: bool = False
-    model_family: Literal["linear", "logistic", "decision_tree", "random_forest", "gradient_boosting",
-                          "xgboost", "lightgbm", "knn", "svm", "neural_network"] | None = None
-
-
-class Execute(SessionRequest):
-    """Describe transformation choices and fit options."""
-    options: WebOptions = Field(default_factory=WebOptions)
-    choices: dict[str, str] = Field(default_factory=dict)
 
 
 @dataclass
@@ -92,6 +55,7 @@ class Session:
     task: str = "auto"
     configured: bool = False
     output: Path | None = None
+    analysis_key: str | None = None
     lock: Lock = field(default_factory=Lock)
 
 
@@ -249,8 +213,8 @@ def isolated(function, *args, limits):
 
 def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
     """Build the local API with configurable storage and worker budgets."""
-    limit = max_table_bytes if max_table_bytes is not None else int(os.getenv("AUTOPREP_MAX_TABLE_MB", "100")) * MIB
-    limits = limits or ProcessLimits(int(os.getenv("AUTOPREP_WORKER_MB", "1024")) * MIB,
+    limit = max_table_bytes if max_table_bytes is not None else int(os.getenv("AUTOPREP_MAX_TABLE_MB", "200")) * MIB
+    limits = limits or ProcessLimits(int(os.getenv("AUTOPREP_WORKER_MB", "2048")) * MIB,
                                      float(os.getenv("AUTOPREP_TIMEOUT_SECONDS", "120")))
     if limit <= 0 or ttl <= 0:
         raise ValueError("Les limites d'import et de session doivent être positives.")
@@ -260,6 +224,8 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
         """Own all dataset storage and run periodic expiry cleanup."""
         with tempfile.TemporaryDirectory(prefix="autoprep-web-") as root:
             app.state.store = SessionStore(Path(root), ttl)
+            LOG.info("AutoPrépa PID %s — API chargée ; cache descriptif partagé ; délai worker %.0f s.",
+                     os.getpid(), limits.timeout_seconds)
 
             async def sweep():
                 """Remove idle uploads even when there is no incoming traffic."""
@@ -277,14 +243,15 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
 
     app = FastAPI(title="Auto-Préprocesseur local", lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
-    app.add_middleware(CORSMiddleware, allow_origins=[ORIGIN_DEV], allow_methods=["GET", "POST"],
+    app.add_middleware(CORSMiddleware, allow_origins=[ORIGIN_DEV], allow_methods=["GET", "POST", "DELETE"],
                        allow_headers=["Content-Type"])
 
     @app.middleware("http")
     async def local_origin(request, call_next):
         """Reject API access initiated by an unexpected browser origin."""
         origin = request.headers.get("origin")
-        if request.url.path.startswith("/api/") and origin and origin not in ORIGINS:
+        if (request.url.path.startswith("/api/") and origin and origin not in ORIGINS
+                and origin != str(request.base_url).rstrip("/")):
             return JSONResponse({"detail": "Origine non autorisée."}, status_code=403)
         return await call_next(request)
 
@@ -321,6 +288,10 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
             raise HTTPException(422, "La tâche doit être automatique en mode non supervisé.")
         with app.state.store.use(body.session_id, configured=False) as session:
             isolated(work.validate_config, session.path, limit, body.target, body.task, limits=limits)
+            if (session.target, session.task) != (body.target, body.task):
+                session.analysis_key = None
+                (session.folder / "analysis.json").unlink(missing_ok=True)
+                (session.folder / "analysis.joblib").unlink(missing_ok=True)
             if (session.target, session.task) != (body.target, body.task) and session.output:
                 shutil.rmtree(session.output, ignore_errors=True)
                 session.output = None
@@ -333,23 +304,109 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
         with app.state.store.use(session_id) as session:
             return isolated(work.eda, session.path, limit, session.target, session.task, limits=limits)[0]
 
+    @app.delete("/api/session/{session_id}")
+    def close_session(session_id: str):
+        with app.state.store.use(session_id, configured=False) as session:
+            shutil.rmtree(session.folder)
+            with app.state.store.lock:
+                app.state.store.sessions.pop(session_id, None)
+        return {"closed": True}
+
     @app.get("/api/eda/{session_id}/feature/{column:path}")
-    def column_eda(session_id: str, column: str):
+    def column_eda(session_id: str, column: str, display_type: Literal["AUTO", "FORCE_NUMERIC", "FORCE_CATEGORICAL", "FORCE_DATE", "FORCE_TEXT"] = "AUTO"):
         """Return distribution and boxplot data for one dataset column."""
         with app.state.store.use(session_id) as session:
-            return isolated(work.feature_eda, session.path, limit, column, limits=limits)[0]
+            return isolated(work.feature_eda, session.path, limit, column, session.target, session.task, display_type, limits=limits)[0]
 
     @app.post("/api/analyze")
-    def analyze(body: SessionRequest):
+    def analyze(body: AnalysisRequest):
         """Return justified preprocessing recommendations."""
         with app.state.store.use(body.session_id) as session:
-            return isolated(work.analyze, session.path, limit, session.target, session.task, limits=limits)[0]
+            started = time.monotonic()
+            payload = body.model_dump()
+            key = hashlib.sha256(json.dumps(
+                [session.target, session.task, payload], sort_keys=True, ensure_ascii=False,
+            ).encode("utf-8")).hexdigest()
+            cached = session.folder / "analysis.json"
+            if session.analysis_key == key and cached.is_file():
+                result = json.loads(cached.read_text(encoding="utf-8"))
+                LOG.info("Recommandations en cache : %.3f s", time.monotonic() - started)
+                return JSONResponse(result, headers={"X-Analysis-Cache": "HIT"})
+            try:
+                result, usage = isolated(work.analyze, session.path, limit, session.target, session.task,
+                                         payload["options"], payload["choices"], session.folder / "analysis.joblib", limits=limits)
+            except HTTPException as exc:
+                LOG.warning("Échec des recommandations après %.3f s (HTTP %s)",
+                            time.monotonic() - started, exc.status_code)
+                if exc.status_code == 504:
+                    raise HTTPException(504, f"L’analyse des recommandations a dépassé la limite de {limits.timeout_seconds:g} s. "
+                                        "Réessayez lorsque le serveur est moins sollicité ; aucun résultat n’a été enregistré.") from exc
+                raise
+            pending = session.folder / "analysis.tmp"
+            pending.write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+            pending.replace(cached)
+            session.analysis_key = key
+            LOG.info("Recommandations calculées : %.3f s, worker %.3f s, pic %s octets",
+                     time.monotonic() - started, usage["elapsed_seconds"], usage["peak_rss_bytes"])
+            return JSONResponse(result, headers={"X-Analysis-Cache": "MISS"})
+
+    @app.post("/api/selection-preview")
+    def selection_preview(body: AnalysisRequest):
+        with app.state.store.use(body.session_id) as session:
+            return isolated(work.selection_preview, session.path, limit, session.target, session.task,
+                            body.options.model_dump(), body.choices, limits=limits)[0]
+
+    @app.get("/api/capabilities")
+    def capabilities():
+        """Publish the actual validated settings rather than a second frontend catalog."""
+        from importlib.util import find_spec
+        evaluation = Evaluation.model_json_schema()
+        families = evaluation["properties"]["family"]["enum"]
+        evaluation["properties"]["family"]["enum"] = [family for family in families
+            if family not in {"xgboost", "lightgbm"} or find_spec(family) is not None]
+        nested_evaluation = NestedEvaluation.model_json_schema()
+        nested_evaluation["properties"]["family"]["enum"] = evaluation["properties"]["family"]["enum"]
+        return {"options": WebOptions.model_json_schema(), "defaults": WebOptions().model_dump(),
+                "evaluation": evaluation,
+                "nested_evaluation": nested_evaluation,
+                "formats": sorted(SUFFIXES), "session_ttl_seconds": ttl,
+                "limits": {"upload_bytes": limit, "worker_bytes": limits.memory_bytes, "timeout_seconds": limits.timeout_seconds}}
+
+    @app.post("/api/evaluate")
+    def evaluate(body: Evaluation):
+        with app.state.store.use(body.session_id) as session:
+            return isolated(work.evaluate, session.path, limit, session.target, session.task,
+                            body.options.model_dump(), body.family, body.folds, body.time_column, body.candidates, limits=limits)[0]
+
+    @app.post("/api/evaluate-nested")
+    def evaluate_nested(body: NestedEvaluation):
+        with app.state.store.use(body.session_id) as session:
+            return isolated(work.evaluate_nested, session.path, limit, session.target, session.task,
+                            body.options.model_dump(), body.family, body.outer_folds,
+                            body.inner_folds, body.time_column, body.group_column,
+                            body.selection_counts, body.scalers, body.model_params, limits=limits)[0]
+
+    @app.get("/api/results-eda/{session_id}")
+    def results_eda(session_id: str):
+        with app.state.store.use(session_id) as session:
+            if session.output is None:
+                raise HTTPException(404, "Lancez le traitement avant l’analyse des résultats.")
+            return isolated(work.result_eda, session.output, limits=limits)[0]
+
+    @app.post("/api/export-excel")
+    def export_excel(body: SessionRequest):
+        with app.state.store.use(body.session_id) as session:
+            if session.output is None:
+                raise HTTPException(404, "Lancez le traitement avant de préparer l’export Excel.")
+            isolated(work.export_excel, session.output, limits=limits)
+            return {"download": "full_xlsx"}
 
     @app.post("/api/preview")
     def preview(body: Preview):
         """Return the before/after preview for one selected transformation."""
         with app.state.store.use(body.session_id) as session:
-            return isolated(work.preview, session.path, limit, session.target, session.task, body.column, body.choice,
+            return isolated(work.preview, session.path, limit, session.target, session.task, body.column, body.model_dump()["choice"], body.options.model_dump(),
+                            session.folder / "analysis.joblib",
                             limits=limits)[0]
 
     @app.post("/api/preprocess")
@@ -359,13 +416,16 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
             output = Path(tempfile.mkdtemp(prefix="export-", dir=session.folder))
             try:
                 result, usage = isolated(work.execute, session.path, limit, session.target, session.task,
-                                         body.options.model_dump(), body.choices, output, session.name, limits=limits)
+                                         body.options.model_dump(), body.model_dump()["choices"], output, session.name,
+                                         session.folder / "analysis.joblib", limits=limits)
             except BaseException:
                 shutil.rmtree(output, ignore_errors=True)
                 raise
             if session.output:
                 shutil.rmtree(session.output, ignore_errors=True)
             session.output = output
+            LOG.info("Prétraitement terminé : worker %.3f s, pic %s octets ; étapes réelles %s",
+                     usage["elapsed_seconds"], usage["peak_rss_bytes"], json.dumps(result.get("timings", {})))
             return {**result, "worker": usage}
 
     @app.get("/api/report/{session_id}")
@@ -377,7 +437,7 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
             return json.loads((session.output / "report.json").read_text(encoding="utf-8"))
 
     @app.get("/api/download/{session_id}/{kind}")
-    def download(session_id: str, kind: Literal["train", "test", "full", "report_xlsx"]):
+    def download(session_id: str, kind: Literal["train", "test", "full", "train_provenance", "report_xlsx", "full_xlsx", "report_json", "preprocessor"]):
         """Stream a fixed export name and keep the session pinned while reading."""
         lease = app.state.store.use(session_id)
         session = lease.__enter__()
@@ -386,8 +446,11 @@ def create_app(*, max_table_bytes=None, ttl=1800, limits=None, frontend=None):
                 raise HTTPException(404, "Aucun fichier exporté pour cette session.")
             filename = work.DOWNLOADS[kind]
             path = session.output / filename
+            if not path.is_file():
+                raise HTTPException(404, "Préparez cet export avant de le télécharger.")
             media = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                     if kind == "report_xlsx" else "text/csv")
+                     if kind in {"report_xlsx", "full_xlsx"} else "application/json" if kind == "report_json"
+                     else "application/octet-stream" if kind == "preprocessor" else "text/csv")
 
             async def chunks():
                 """Release the session even if the download disconnects."""

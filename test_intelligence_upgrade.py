@@ -105,7 +105,8 @@ def test_semantic_profiles_missingness_and_target_association():
     assert rows["Feature Name"]["diagnostic_manquants"]["statut"] == "MAR plausible"
     assert rows["Feature Name"]["manquant_informatif"]
     assert rows["group"]["analyse_cible"]["q_primaire"] < .05
-    assert rows["latitude"]["type_semantique"] == "GEOGRAPHIC_COORDINATE"
+    # A name and a plausible range do not prove geographic semantics.
+    assert rows["latitude"]["type_semantique"] == "NUMERIC_CONTINUOUS"
     assert rows["flag"]["type_semantique"] == "BOOLEAN"
     assert rows["device_code"]["type"] == "DROP_ID"
     assert rows["almost"]["profil"]["quasi_constante"]

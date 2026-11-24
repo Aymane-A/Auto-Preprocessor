@@ -87,6 +87,7 @@ def compare_preprocessing(frame, target, family, *, config=None, task="auto", cv
     results = []
     for scaler in candidates:
         cfg = replace(base, scaler_type=scaler, model_family=None, preserve_rows=True, transform_target=False,
+                      adaptive_recommendations=False,
                       supervised_encoding=base.supervised_encoding and time_column is None)
         stages = [AutoPreprocessor(cfg, task=resolved)]
         if cfg.sparse_output:
@@ -95,4 +96,10 @@ def compare_preprocessing(frame, target, family, *, config=None, task="auto", cv
         scores = cross_val_score(pipeline, features, labels, cv=splits, scoring=scoring, error_score="raise")
         results.append({"scaler": scaler, "scores": scores.tolist(), "mean": float(scores.mean()),
                         "std": float(scores.std(ddof=1))})
-    return {"family": family, "scoring": scoring, "folds": cv, "results": results}
+    return {"family": family, "scoring": scoring, "folds": cv, "adaptive_recommendations": False, "results": results}
+
+
+def nested_cross_validate(*args, **kwargs):
+    """Public model-evaluation entry point for independent outer validation."""
+    from nested_cv import nested_cross_validate as run
+    return run(*args, **kwargs)

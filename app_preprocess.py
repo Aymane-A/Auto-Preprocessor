@@ -24,6 +24,7 @@ import queue
 import sys
 import re
 import threading
+import time
 import traceback
 import zipfile
 from isolated_processing import run_isolated
@@ -192,6 +193,7 @@ class Options:
     column_overrides: Dict[str, ColumnOverride] = field(default_factory=dict)
     model_family: Optional[str] = None
     sparse_output: bool = False
+    engine_options: Dict[str, Any] = field(default_factory=dict)
 
 
 def build_config(opts: Options) -> PreprocessConfig:
@@ -214,6 +216,8 @@ def build_config(opts: Options) -> PreprocessConfig:
         "sparse_output": opts.sparse_output,
     }
     valid = {f.name for f in dataclasses.fields(PreprocessConfig)}
+    wanted.update({key: value for key, value in getattr(opts, "engine_options", {}).items()
+                   if key in valid and key not in {"column_overrides", "verbose", "preserve_rows", "max_dense_bytes"}})
     return PreprocessConfig(**{k: v for k, v in wanted.items() if k in valid})
 
 
@@ -657,6 +661,23 @@ def validate_step_choice(result: AnalysisResult, column: str, step: str, action:
 def parse_step_parameters(step: str, action: str, raw_value: str, column_type: str) -> Optional[Any]:
     """Valide et convertit les champs de paramètres de l'éditeur d'étapes."""
     value = (raw_value or "").strip()
+    if step == "text":
+        action = {"TFIDF_NGRAM": "TFIDF_NGRAMS", "COUNT": "COUNT_VECTORIZER", "HASH": "HASH_TEXT"}.get(action, action)
+    if step == "missing" and action == "KNN" and value:
+        number = int(value)
+        if not 1 <= number <= 1000:
+            raise ValueError("Le nombre de voisins doit être compris entre 1 et 1 000.")
+        return {"n_neighbors": number}
+    if step == "distribution" and action == "QUANTILE" and value:
+        number = int(value)
+        if not 2 <= number <= 50000:
+            raise ValueError("Le nombre de quantiles doit être compris entre 2 et 50 000.")
+        return {"n_quantiles": number}
+    if step == "outliers" and value and action in {"IQR", "MEDIAN_REPLACE", "TO_MISSING", "REPLACE_MEDIAN", "OUTLIER_TO_NAN", "ZSCORE", "Z_SCORE", "MODIFIED_Z", "MODIFIED_ZSCORE"}:
+        number = float(value)
+        if not np.isfinite(number) or number <= 0:
+            raise ValueError("Le multiplicateur ou seuil doit être un nombre fini strictement positif.")
+        return {"threshold" if action in {"ZSCORE", "Z_SCORE", "MODIFIED_Z", "MODIFIED_ZSCORE"} else "multiplier": number}
     if step == "clean_missing_tokens" and action == "SELECTED_TO_NAN":
         selected = [part.strip() for part in value.split(",") if part.strip()]
         if not selected:
@@ -750,6 +771,9 @@ def parse_step_parameters(step: str, action: str, raw_value: str, column_type: s
 def step_parameter_visible(step: str, action: str) -> bool:
     """Indique sans Tkinter si l'action nécessite un champ de paramètre éditable."""
     return (step, str(action).upper()) in {
+        ("missing", "KNN"), ("distribution", "QUANTILE"),
+        *(('outliers', name) for name in ("IQR", "MEDIAN_REPLACE", "TO_MISSING", "REPLACE_MEDIAN", "OUTLIER_TO_NAN", "ZSCORE", "Z_SCORE", "MODIFIED_Z", "MODIFIED_ZSCORE")),
+        ("text", "TFIDF_NGRAM"), ("text", "COUNT"), ("text", "HASH"),
         ("clean_missing_tokens", "SELECTED_TO_NAN"),
         ("missing", "CONSTANT"),
         ("outliers", "WINSORIZE"),
@@ -1005,12 +1029,13 @@ def _original_target(df: pd.DataFrame, X: pd.DataFrame, target: str) -> Optional
     return None
 
 
-def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) -> RunResult:
+def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options, *, analysis_result=None) -> RunResult:
     """Ajuste AutoPreprocessor sur le train uniquement, puis transforme le test (aucune fuite)."""
     notes: List[str] = []
     config = build_config(opts)
     prep = AutoPreprocessor(config=config, task=opts.task)
-    prep.analysis_result_ = AutoPreprocessor(config=config, task=opts.task).analyze(df, target=target or None)
+    prep.analysis_result_ = (analysis_result if analysis_result is not None else
+                             AutoPreprocessor(config=config, task=opts.task).analyze(df, target=target or None))
     n_rows_in, n_cols_in = df.shape
 
     # Cas non supervisé : pas de cible
@@ -1029,6 +1054,7 @@ def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) ->
     if len(data) < 10:
         raise ValueError("Moins de 10 lignes avec une cible renseignée : traitement impossible.")
 
+    split_started = time.perf_counter()
     train_df, test_df = data, None
     if opts.test_size_pct > 0:
         stratify = data[target] if _looks_like_classification(data[target], opts.task) else None
@@ -1042,6 +1068,7 @@ def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) ->
             )
             notes.append("Découpage non stratifié (une classe est trop rare pour être stratifiée).")
 
+    split_elapsed = time.perf_counter() - split_started
     X_train, y_train = prep.fit_transform_xy(train_df, target=target)
     y_train_original = None
     if prep.target_stats_.get("transformed", False):
@@ -1056,6 +1083,7 @@ def run_preprocessing(df: pd.DataFrame, target: Optional[str], opts: Options) ->
         if prep.target_stats_.get("transformed", False):
             y_test_original = _original_target(test_df, X_test, target)
 
+    prep.stage_timings_["split"] = split_elapsed
     return RunResult(
         prep, target, X_train, np.asarray(y_train), X_test,
         None if y_test is None else np.asarray(y_test),

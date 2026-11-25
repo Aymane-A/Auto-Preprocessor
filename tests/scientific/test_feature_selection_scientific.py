@@ -87,7 +87,7 @@ def test_external_fold_is_independent_of_inner_selection(method, tmp_path, monke
 
 def test_real_housing_independent_external_split_and_unknown_category():
     """Use a tracked real dataset, including missing values and a new category."""
-    source = Path(__file__).parent / "data" / "immobilier_demo.csv"
+    source = Path(__file__).resolve().parents[2] / "data" / "immobilier_demo.csv"
     data = pd.read_csv(source)[["surface_m2", "nb_pieces", "ville", "etat", "etage", "prix_dh"]]
     data = data.iloc[:160].copy()
     target = data.pop("prix_dh").to_numpy()
@@ -111,7 +111,7 @@ def test_real_housing_independent_external_split_and_unknown_category():
 
 def test_real_titanic_binary_holdout_and_reload(tmp_path):
     """Validate on the locally available original Titanic observations."""
-    source = Path(__file__).parent / "data" / "titanic.csv"
+    source = Path(__file__).resolve().parents[2] / "data" / "titanic.csv"
     if not source.exists():
         pytest.skip("Le dataset Titanic local n'est pas livré avec le dépôt.")
     data = pd.read_csv(source)[["Pclass", "Sex", "Age", "Fare", "Embarked", "Survived"]].iloc[:160]

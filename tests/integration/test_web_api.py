@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 from api_server import create_app
 
-DATA = Path(__file__).parent / "data"
+DATA = Path(__file__).resolve().parents[2] / "data"
 
 
 def payload(response, status=200):

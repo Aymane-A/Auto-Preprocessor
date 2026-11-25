@@ -174,7 +174,7 @@ def test_web_nested_evaluation_keeps_exploratory_scores_separate(tmp_path):
 def test_real_titanic_nested_binary_validation():
     from pathlib import Path
 
-    source = Path(__file__).parent / "data" / "titanic.csv"
+    source = Path(__file__).resolve().parents[2] / "data" / "titanic.csv"
     if not source.exists():
         pytest.skip("Le dataset Titanic local n'est pas livré avec le dépôt.")
     frame = pd.read_csv(source)[["Pclass", "Sex", "Age", "Fare", "Embarked", "Survived"]].iloc[:90]

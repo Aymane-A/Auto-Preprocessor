@@ -1567,7 +1567,7 @@ def test_invariant_c4_no_unaccented_french_words_in_sources():
     import re
     from pathlib import Path
 
-    here = Path(__file__).parent
+    here = Path(__file__).resolve().parents[2]
     # « \b » n'accroche pas les identifiants techniques comme tache_detectee (le « _ » est un caractère de mot).
     forbidden = re.compile(r"\b[Tt]aches?\b")
     for name in ("app_preprocess.py", "auto_preprocessor.py"):
@@ -1579,7 +1579,7 @@ def test_invariant_c4_no_unaccented_french_words_in_sources():
 def test_invariant_c4_task_label_keeps_circumflex():
     from pathlib import Path
 
-    source = (Path(__file__).parent / "app_preprocess.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[2] / "app_preprocess.py").read_text(encoding="utf-8")
     assert "Tâche" in source
     
 

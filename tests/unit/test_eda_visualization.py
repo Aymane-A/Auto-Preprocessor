@@ -8,7 +8,7 @@ import web_processing as work
 
 
 def test_titanic_id_fixture_and_gapped_id_backend_contract(tmp_path):
-    fixture = json.loads((Path(__file__).parent / "frontend/src/__fixtures__/passengerId.json").read_text(encoding="utf-8-sig"))
+    fixture = json.loads((Path(__file__).resolve().parents[2] / "frontend/src/__fixtures__/passengerId.json").read_text(encoding="utf-8-sig"))
     assert fixture["recommended_visualization"][0]["kind"] == "summary"
     assert fixture["recommended_visualization"][0]["cardinality"] == 891
     assert fixture["recommended_visualization"][0]["examples"] == ["1", "2", "3", "4", "5"]

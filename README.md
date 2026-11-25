@@ -18,7 +18,7 @@ Le projet requiert scikit-learn ≥ 1.4.2 et < 1.11, ainsi que joblib ≥ 1.6.0.
 |-----------------------------|----------------------------------------------------------------------------------------------------|
 | `auto_preprocessor.py`      | Le module (classe `AutoPreprocessor`, compatible scikit-learn, `analyze()`, `column_overrides`)    |
 | `app_preprocess.py`         | Application Tkinter (interface graphique, onglet Analyse)                                          |
-| `test_*.py`                 | Suites de tests du moteur, de l'interface, de la sécurité et de l'isolation                         |
+| `tests/`                    | Tests Python organisés par niveau : unitaires, intégration, régression et scientifiques              |
 | `signal_check.py`           | Vérifie si un dataset contient du signal et si AutoPreprocessor aide (AUC, PR-AUC, cible mélangée) |
 | `benchmark_multi.py`        | Benchmark sur plusieurs datasets (naïf, sklearn standard, AutoPreprocessor)                        |
 | `credit_g_check.py`         | Analyse des variantes d'options sur le dataset credit_g                                            |
@@ -115,11 +115,16 @@ Les noms exacts des étapes et des actions acceptées sont dans `SUPPORTED_ACTIO
 
 ## Tests
 
+Depuis la racine du dépôt :
+
 ```
-py -m pytest
+py -m pytest --collect-only -q
+py -m pytest -ra
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-La suite contient 215 cas collectés. Voir le rapport de validation pour les résultats par environnement.
+Les tests Python sont répartis dans `tests/unit/`, `tests/integration/`, `tests/regression/` et `tests/scientific/`. Les données de démonstration de `data/` restent des ressources applicatives ; les fixtures Vitest restent dans `frontend/src/__fixtures__/`.
 
 ## Vérifier si un dataset contient du signal
 
@@ -201,7 +206,7 @@ L'exécutable n'est pas versionné dans Git (voir `.gitignore`) : le publier dan
 | Identifiants        | `client_id` (94,7 % de valeurs uniques) est recommandée `DROP` avec confiance haute ; `heure` (date) n'est pas prise pour un identifiant.                                                                                                                              |
 | Confiance           | Niveau haute / moyenne / faible calculé selon l'effectif non manquant, la distance de la mesure au seuil et la p-value.                                                                                                                                                |
 | Interface Analyse   | Onglet « 2. Analyse » : thread de calcul, sélecteur de cible, tableau triable (« — » en fin de tri, unités dans les en-têtes), infobulle sur la raison, panneau de détail redimensionnable, export `analyse_colonnes.csv` et `choix_utilisateur.json`.                  |
-| Tests               | 215 cas collectés (`python -m pytest`). |
+| Tests               | Suite pytest structurée sous `tests/` ; commandes d'exécution dans la section Tests. |
 
 ## Historique des prompts utilisés pour construire ce projet
 
@@ -367,7 +372,7 @@ Cible :
 # SORTIES ATTENDUES
 1. Le code complet dans `auto_preprocessor.py`.
 2. `report()` : tableau par colonne (type détecté, justification, transformation, colonnes créées, % de manquants, colonnes supprimées et raison), plus un résumé global (nb de features avant/après, avertissements, déséquilibre de classes, fuites suspectes).
-3. Des tests `pytest` (`test_auto_preprocessor.py`) sur un dataset synthétique contenant : numériques avec NaN et outliers, catégorielles, ordinales, binaires, dates, haute cardinalité, texte, un ID, une constante, des faux manquants ("?") et des nombres stockés en texte. Vérifier par assertions : X numérique, sans NaN ni inf ; mêmes colonnes en train et test ; catégories inconnues gérées ; sauvegarde/chargement identiques ; aucun fuite (les statistiques viennent du train seulement).
+3. Des tests `pytest` (`tests/unit/test_auto_preprocessor.py`) sur un dataset synthétique contenant : numériques avec NaN et outliers, catégorielles, ordinales, binaires, dates, haute cardinalité, texte, un ID, une constante, des faux manquants ("?") et des nombres stockés en texte. Vérifier par assertions : X numérique, sans NaN ni inf ; mêmes colonnes en train et test ; catégories inconnues gérées ; sauvegarde/chargement identiques ; aucun fuite (les statistiques viennent du train seulement).
 4. Un cas limite testé : dataset minuscule, une seule colonne, cible avec classes rares, colonne entièrement vide.
 5. Un exemple complet : `train_test_split` stratifié, fit sur train, transform sur test, entraînement d'un RandomForest, puis comparaison des scores (baseline naïve vs pipeline) pour prouver le gain.
 6. Une démonstration sur au moins un dataset réel (ex. Titanic, Adult Income ou California Housing via sklearn) pour valider la généricité.

@@ -10,7 +10,7 @@ from api_server import create_app
 
 
 def test_smote_marker_is_only_in_separate_train_provenance_csv():
-    source = Path(__file__).parent / "data" / "fraud_signal_demo.csv"
+    source = Path(__file__).resolve().parents[2] / "data" / "fraud_signal_demo.csv"
     with TestClient(create_app(), base_url="http://localhost") as client:
         uploaded = client.post("/api/upload", files={"file": (source.name, source.read_bytes())})
         assert uploaded.status_code == 200, uploaded.text

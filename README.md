@@ -1,192 +1,254 @@
-# AutoPrépa
+# AutoPrepa
 
-AutoPrépa est un outil local de préparation de jeux de données tabulaires supervisés pour la classification et la régression. Il propose une application de bureau Tkinter, un module Python réutilisable et une interface web locale React/FastAPI.
+**A local Windows application for inspecting and preparing tabular data for machine learning.**
 
-Les analyses et recommandations sont des aides exploratoires, pas une garantie de qualité statistique ni de performance prédictive. Vérifiez les transformations et les résultats dans le contexte de vos données.
+AutoPrepa is a university engineering project that provides a scikit-learn-compatible preprocessing module and a desktop application for preparing tabular datasets.
 
-## Fonctionnalités
+It supports supervised classification and regression, as well as unsupervised preprocessing. The application is designed to work with different tabular datasets without requiring dataset-specific preprocessing code.
 
-- Lecture de fichiers CSV, TSV, TXT, XLSX, XLS, JSON et Parquet.
-- Analyse descriptive des colonnes et recommandations configurables, avec choix par colonne.
-- Nettoyage, détection de types, imputation, traitement des valeurs extrêmes, transformations et mise à l'échelle.
-- Encodage des catégories, des dates et du texte; sélection de variables.
-- Prétraitement ajusté sur le train puis réutilisé sur le test. Les encodages supervisés du train utilisent des valeurs out-of-fold.
-- Aperçu, rapports, export de données transformées et sauvegarde du préprocesseur.
-- Évaluation exploratoire par validation croisée, y compris une évaluation imbriquée dans les interfaces qui la proposent.
+## Features
 
-Le pipeline web ordonne les opérations ainsi: nettoyage et détection de types, traitement des valeurs extrêmes, imputation, transformations de distribution et mise à l'échelle, encodage/extraction des variables, puis sélection finale. Les opérations précises dépendent des types et des choix configurés.
+- Import CSV, TSV, TXT, XLSX, XLS, JSON, and Parquet files.
+- Inspect missing values, distributions, outliers, duplicates, correlations, and relationships to a selected target.
+- Review and modify per-column preprocessing recommendations.
+- Configure imputation, scaling, outlier handling, categorical and text encoding, feature selection, and class-imbalance handling.
+- Compare preprocessing configurations using cross-validation, including nested evaluation options.
+- Export transformed training, testing, and full datasets, along with reports and the fitted preprocessor.
+- Run the web interface or the Tkinter desktop application locally.
 
-Les recommandations, filtres de fuite et règles métier restent heuristiques. Une alerte ou une absence d'alerte ne prouve pas qu'une variable est valide ou qu'il n'y a pas de fuite.
+Recommendations are statistical guidance, not a guarantee of predictive performance or scientific validity. Evaluate the resulting workflow using a split appropriate to the data and an independent validation protocol.
 
-## Parcours des interfaces
+## Requirements
 
-### Application de bureau
+- Windows 10 or Windows 11
+- Python 3.13 — currently validated version
+- Node.js 20.19+ or 22.12+
+- npm
 
-Lancer `app_preprocess.py` ouvre l'application Tkinter. Le parcours permet de charger un jeu de données, l'analyser, choisir la cible et les paramètres, exécuter le prétraitement, consulter le rapport et exporter les résultats. Les exports de bureau comprennent notamment `train_transforme.csv`, `test_transforme.csv` lorsqu'un jeu de test est créé, `detail_colonnes.csv`, `rapport_pretraitement.txt` et `preprocesseur.joblib`.
+Python runtime dependencies are listed in `requirements.txt`.
 
-### Application web
+Development and testing dependencies are listed in `requirements-dev.txt`.
 
-Le parcours React comprend six étapes:
+Frontend dependencies and build tools are locked in `frontend/package-lock.json`.
 
-1. **Import des données** et définition de la tâche.
-2. **Analyse statistique** des distributions, valeurs manquantes et corrélations.
-3. **Recommandations** et éléments justificatifs.
-4. **Configuration** du pipeline et choix par variable.
-5. **Aperçu et traitement** des opérations avant l'exécution.
-6. **Export des résultats** et consultation des opérations effectuées.
+## Installation and Launch
 
-L'API sert aussi les résultats EDA, l'analyse, l'aperçu, l'évaluation et les téléchargements. Les réponses et formats disponibles sont définis par le code de l'API; ils peuvent évoluer.
-
-Routes principales:
-
-| Route | Rôle |
-|---|---|
-| `POST /api/upload`, `POST /api/config` | Importer un fichier puis définir le mode, la cible et la tâche. |
-| `GET /api/eda/{session_id}` | Consulter le profil exploratoire de la session. |
-| `POST /api/analyze`, `POST /api/selection-preview`, `POST /api/preview` | Obtenir les recommandations et prévisualiser une sélection ou une transformation. |
-| `POST /api/preprocess` | Exécuter le pipeline et préparer les sorties de la session. |
-| `POST /api/evaluate`, `POST /api/evaluate-nested` | Lancer les évaluations proposées par le backend. |
-| `GET /api/report/{session_id}`, `GET /api/download/{session_id}/{kind}` | Consulter le rapport et télécharger une sortie disponible. |
-| `DELETE /api/session/{session_id}` | Fermer une session. |
-
-## Installation sous Windows
-
-Environnement de référence utilisé pour les validations récentes: Windows AMD64, CPython 3.13.15, Node.js 24.21.0 et npm 11.19.0. Ce sont des versions observées, pas une déclaration de compatibilité pour toute version de Python ou de Node.
-
-Depuis PowerShell, clonez le dépôt puis créez un environnement virtuel:
+### 1. Clone the repository
 
 ```powershell
 git clone https://github.com/Aymane-A/Auto-Preprocessor.git
-Set-Location Auto-Preprocessor
+cd Auto-Preprocessor
+```
+
+### 2. Set up the Python environment
+
+Run the following commands from the repository root:
+
+```powershell
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 3. Install and build the frontend
+
+```powershell
+Push-Location frontend
+
+npm ci
+npm run build
+
+Pop-Location
+```
+
+### 4. Start the application
+
+```powershell
+python serve.py
+```
+
+Open the application in your browser:
+
+[http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+To stop the server, press `Ctrl+C` in the terminal.
+
+### Desktop application
+
+After installing the Python requirements, launch the Tkinter desktop interface:
+
+```powershell
+python app_preprocess.py
+```
+
+### PowerShell activation alternative
+
+If PowerShell blocks virtual-environment activation, use the environment's Python executable directly:
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-Lancer l'application de bureau:
-
-```powershell
-.\.venv\Scripts\python.exe app_preprocess.py
-```
-
-Pour l'API et l'interface web de production, `requirements-web.txt` inclut les dépendances Python de base:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-web.txt
-npm --prefix frontend ci
-npm --prefix frontend run build
 .\.venv\Scripts\python.exe serve.py
 ```
 
-Ouvrez ensuite <http://127.0.0.1:8000>. Le serveur utilise le build présent dans `frontend/dist`.
+## Import and Prepare a Dataset
 
-Pour développer l'interface avec Vite, démarrez l'API dans un terminal:
+1. Select a local dataset in the Import step.
+2. Choose supervised mode and select a target column for classification or regression, or choose unsupervised mode when no target is available.
+3. Review the exploratory analysis and preprocessing recommendations.
+4. Configure the pipeline and inspect the preview.
+5. Run preprocessing.
+6. Download the transformed data and reports from the export step.
 
-```powershell
-.\.venv\Scripts\python.exe serve.py
-```
+Dataset files are processed by the local service and are not uploaded to a remote application service.
 
-Puis, dans un autre terminal à la racine:
+The web server binds to `127.0.0.1` by default.
 
-```powershell
-npm --prefix frontend ci
-npm --prefix frontend run dev
-```
+## Supported Formats and Limits
 
-Ouvrez <http://localhost:5173>. `package-lock.json` permet l'installation npm verrouillée par `npm ci`; les dépendances Python, en revanche, sont déclarées principalement par plages et ne constituent pas un lockfile exact. `requirements.txt` comprend également pytest; il n'existe pas de fichier `requirements-dev.txt` suivi dans le dépôt. XGBoost et LightGBM sont des intégrations optionnelles et ne sont pas installées par les fichiers requirements actuels.
+### File formats
 
-## Utilisation Python
-
-```python
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from auto_preprocessor import AutoPreprocessor
-
-df = pd.read_csv("donnees.csv")
-X = df.drop(columns=["cible"])
-y = df["cible"]
-
-# Adapter la stratégie de partition au problème (groupes, temps, etc.).
-X_train, X_test, y_train, _ = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-
-preprocessor = AutoPreprocessor(task="classification")
-X_train_ready = preprocessor.fit_transform(X_train, y_train)
-X_test_ready = preprocessor.transform(X_test)
-print(preprocessor.report())
-```
-
-Choisissez `task="regression"` pour une cible de régression ou `task="auto"` pour laisser le module la déterminer. Les décisions et paramètres sont configurables dans `PreprocessConfig`; `analyze()` permet d'obtenir une analyse sans ajuster le pipeline. Voir [`auto_preprocessor.py`](auto_preprocessor.py) pour l'API et les options prises en charge.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    U[Utilisateur] --> D[Application Tkinter]
-    U --> W[Interface React]
-    W <--> A[API FastAPI locale]
-    D --> C[AutoPreprocessor et modules Python]
-    A --> P[web_processing]
-    P --> C
-    A --> I[Worker de traitement isolé]
-    I --> C
-    W --> V[Vite en développement]
-```
-
-| Zone | Rôle |
+| Format | Details |
 |---|---|
-| [`auto_preprocessor.py`](auto_preprocessor.py) | Analyse, configuration, ajustement et transformation des données. |
-| [`app_preprocess.py`](app_preprocess.py) | Interface de bureau et flux de prétraitement. |
-| [`api_server.py`](api_server.py), [`web_processing.py`](web_processing.py) | API locale et orchestration des étapes web. |
-| [`web_contracts.py`](web_contracts.py) | Schémas et validation des paramètres exposés par l'API. |
-| [`feature_selection.py`](feature_selection.py) | Sélecteurs de variables configurables. |
-| [`model_evaluation.py`](model_evaluation.py), [`nested_cv.py`](nested_cv.py) | Comparaisons par validation croisée et évaluation imbriquée. |
-| [`resampling.py`](resampling.py), [`statistical_profile.py`](statistical_profile.py) | Méthodes de rééquilibrage et profil statistique. |
-| [`frontend/`](frontend/) | Interface React/TypeScript, tests Vitest et configuration Vite. |
-| [`tests/`](tests/) | Tests Python unitaires, d'intégration, de régression et scientifiques. |
-| [`data/`](data/) | Fichiers CSV de démonstration suivis par Git. |
-| [`docs/`](docs/) | Rapports et éléments de preuve historiques; tous ne décrivent pas nécessairement l'état actuel. |
+| CSV, TSV, TXT | Comma, semicolon, tab, and pipe separators are detected. UTF-8 and Latin-1 encodings are tried. |
+| XLSX | Read using `openpyxl`. |
+| XLS | Read using `xlrd`. |
+| JSON | Read as a pandas table. |
+| Parquet | Read using `pyarrow`. |
 
-Les scripts d'expérimentation et plusieurs rapports sont restés à la racine. Leur déplacement demanderait de vérifier les imports, chemins relatifs, commandes de lancement et liens entre rapports; ils n'ont pas été regroupés dans cette documentation.
+Macro-enabled XLSM files are not accepted by the web uploader. Save them as XLSX before importing.
 
-## Tests et validation
+### Resource limits
 
-Depuis la racine du dépôt:
+| Resource | Default limit |
+|---|---:|
+| Web upload size | 200 MiB |
+| Expanded Excel archive size | 300 MiB |
+| Excel archive entries | 10,000 |
+| Per-entry Excel compression ratio | 1,000 |
+| Parquet rows | 2,000,000 |
+| Parquet uncompressed size | 300 MiB |
+| Worker memory | 2 GiB |
+| Worker timeout | 120 seconds |
+| Desktop input size | 100 MiB |
+
+Web upload limits can be adjusted using:
+
+- `AUTOPREP_MAX_TABLE_MB`
+- `AUTOPREP_WORKER_MB`
+- `AUTOPREP_TIMEOUT_SECONDS`
+
+These limits are intended for trusted local workloads. They do not guarantee that a large dataset will fit in available system memory.
+
+Wrapper-based feature-selection methods are intentionally bounded and may be significantly slower than filter methods.
+
+## Testing
+
+Run the Python test suite from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest --collect-only -q
-.\.venv\Scripts\python.exe -m pytest -ra
-npm --prefix frontend test
-npm --prefix frontend run build
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-Les tests Python sont découverts sous `tests/` conformément à [`pytest.ini`](pytest.ini). Sur un checkout propre, les tests qui dépendent du fichier local non distribué `data/titanic.csv` sont ignorés lorsqu'il est absent; ils s'exécutent si ce fichier est fourni localement. Pour une validation qui exclut ces tests et ne lit pas ce fichier:
+The latest local test run completed successfully:
+
+**594 passed, 72 warnings**
+
+The suite includes unit tests, integration workflows, scientific validation, regression checks, and feature-selection tests.
+
+The reported result corresponds to the tested local project state. Re-run the suite against the current commit before making release or publication claims.
+
+### Frontend tests and build
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -ra -k "not test_complete_workflow_titanic_consistency and not test_real_titanic_binary_holdout_and_reload and not test_real_titanic_nested_binary_validation"
+Push-Location frontend
+
+npm ci
+npm test
+npm run build
+
+Pop-Location
 ```
 
-Validation exécutée dans cet environnement (Windows, CPython 3.13.15, pytest 8.0.0): `py -3.13 -m pytest --collect-only -q -p no:cacheprovider` a collecté 594 éléments (code 0). La commande sûre `py -3.13 -m pytest -ra -p no:cacheprovider -k "not test_complete_workflow_titanic_consistency and not test_real_titanic_binary_holdout_and_reload and not test_real_titanic_nested_binary_validation"` a terminé avec le code 0: 591 réussites, 3 tests Titanic désélectionnés, 72 avertissements, en 922,95 s. `PYTHONDONTWRITEBYTECODE=1` était défini durant cette exécution pour éviter les fichiers bytecode. Les avertissements incluaient des dépréciations Starlette/httpx, des avertissements de constantes et de divisions invalides en sélection de variables, ainsi que des avertissements explicites sur les validations croisées de sélecteurs.
+Run the Python and frontend checks before considering a release or publication.
 
-Les tests Vitest avaient précédemment 46 réussites et le build de production frontend avait réussi; ils n'ont pas été relancés ici, car aucun fichier frontend n'a changé. Playwright n'a pas été exécuté dans cette tâche.
+## Demo and Dataset Provenance
 
-Un essai focalisé antérieur de `/api/preview` avec `scaling: MINMAX` a reçu une réponse locale 504 après le délai configuré de 120 secondes. Des exécutions ultérieures de la suite n'ont pas reproduit systématiquement cet échec, mais son origine n'a pas été établie de façon concluante. Ne considérez pas ce problème comme résolu sur la seule base de tests ultérieurs réussis.
+The `data` directory contains deterministic, project-generated synthetic demo and test fixtures.
 
-## Sécurité, données et limites
+These fixtures contain no sourced customer or property records and are not required by the application to import or process user datasets.
 
-- `serve.py` écoute sur `127.0.0.1:8000`. L'API n'a pas de mécanisme d'authentification; ne l'exposez pas à un réseau ou à Internet. Les limites de requête et le worker isolé ne constituent pas une frontière de sécurité.
-- Les fichiers web sont traités localement dans des dossiers temporaires de session, expirant après 30 minutes d'inactivité. Cela ne constitue pas une garantie de suppression sécurisée.
-- Les valeurs par défaut de l'API sont une limite d'import de 200 Mio, une limite mémoire de worker de 2 048 Mio et un délai de 120 secondes. Elles peuvent être configurées avec `AUTOPREP_MAX_TABLE_MB`, `AUTOPREP_WORKER_MB` et `AUTOPREP_TIMEOUT_SECONDS`. Ce sont des garde-fous de ressources, pas une capacité garantie pour tous les fichiers.
-- L'application de bureau et l'API ont des limites d'entrée distinctes. Les formats compressés ou textuels peuvent demander bien plus de mémoire une fois analysés.
-- Ne chargez jamais un fichier `.joblib` non fiable: son chargement peut exécuter du code. Le worker n'est pas un bac à sable et conserve des accès au système de fichiers et au réseau.
-- Les bornes métier, les heuristiques de type, les recommandations et les contrôles de fuite doivent être vérifiés avant une utilisation opérationnelle.
-- Les trois CSV de démonstration présents sont `churn_telecom_demo.csv`, `fraud_signal_demo.csv` et `immobilier_demo.csv`. Le dépôt ne fournit pas de preuve de provenance ou de licence de redistribution pour ces données; leur présence ne doit pas être interprétée comme une autorisation de réutilisation. Le fichier Titanic mentionné par certains tests n'est pas une donnée de démonstration suivie.
-- Le code du projet est distribué sous licence [MIT](LICENSE). Cette licence ne constitue pas une autorisation de réutiliser les jeux de données ou de redistribuer les dépendances tierces; leur provenance, leurs licences et les obligations applicables doivent être vérifiées séparément.
-- Les rapports sous `docs/` et à la racine peuvent contenir des mesures ou conclusions historiques. Vérifiez leur date, leur protocole et leur périmètre avant de les citer comme validation actuelle.
+Regenerate the fixtures from the repository root:
 
-## Contribuer
+```powershell
+python data/generate_demo_fixtures.py
+```
 
-Les contributions sont les bienvenues via une branche et une pull request. Décrivez le comportement modifié, exécutez les tests pertinents ci-dessus et signalez clairement les cas non exécutés. N'ajoutez pas de secrets, de données personnelles, de jeux privés ou de fichiers générés. Pour tout jeu de données ajouté, documentez sa source et les conditions de réutilisation avant de le proposer.
+See [`DATASET_PROVENANCE.md`](DATASET_PROVENANCE.md) for details about their generation.
 
-À ce jour, les consignes de contribution détaillées ne sont pas séparées dans un fichier `CONTRIBUTING.md`.
+Common local dataset files are ignored by Git. Keep personal inputs under `local_datasets/` or `datasets/` rather than adding them to the demo fixture directory.
+
+The project's license status is documented separately. Check the repository's licensing information before redistributing or reusing the software.
+
+## Troubleshooting
+
+### The page does not load
+
+Confirm that `npm run build` completed successfully and that the server is still running at:
+
+[http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+### Upload rejected
+
+Check the file extension, size, and readability. Verify that the file does not exceed the configured limits.
+
+### Processing times out or reaches memory limits
+
+Reduce the dataset size or adjust the local worker limits for a trusted workload.
+
+Do not expose the service to a network to bypass these limits.
+
+### Excel or Parquet import fails
+
+Check that the corresponding runtime dependency is installed:
+
+- `openpyxl` for XLSX
+- `xlrd` for XLS
+- `pyarrow` for Parquet
+
+### PowerShell activation is denied
+
+Use the `.venv\Scripts\python.exe` commands described in the installation section without activating the environment.
+
+## Security and Local Processing
+
+AutoPrepa is designed for local processing.
+
+The API listens on loopback by default and processes uploads in isolated worker processes with memory and time limits.
+
+However, these limits do not restrict worker filesystem or network access, and they do not make hostile files safe.
+
+- Use trusted input files.
+- Keep the service bound to `127.0.0.1`.
+- Do not expose the application on a public interface without a separate security review.
+- Use a separately restricted environment when processing untrusted datasets.
+
+**Local processing is not a security sandbox.**
+
+## Project Status
+
+AutoPrepa is an evolving university engineering project.
+
+Its goal is to make tabular preprocessing more transparent, configurable, and reproducible while keeping data preparation separate from model evaluation.
+
+Scientific validation remains dependent on the dataset, preprocessing configuration, model, and evaluation protocol.
+
+Feedback, bug reports, and suggestions are welcome.
+
+---
+
+**Developed by [Aymane A.](https://github.com/Aymane-A)**
+
+[View the repository on GitHub](https://github.com/Aymane-A/Auto-Preprocessor)

@@ -3,6 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 import pandas as pd
+import pytest
 from openpyxl import load_workbook
 import web_processing as wp
 from auto_preprocessor import AutoPreprocessor
@@ -10,6 +11,8 @@ from auto_preprocessor import AutoPreprocessor
 
 def test_complete_workflow_titanic_consistency():
     t_path = Path(__file__).resolve().parents[2] / "data" / "titanic.csv"
+    if not t_path.is_file():
+        pytest.skip("Le dataset Titanic local n'est pas livré avec le dépôt.")
     limit = 200 * 1024 * 1024
     target = "Survived"
     task = "classification"

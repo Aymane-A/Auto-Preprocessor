@@ -142,10 +142,10 @@ La démonstration fraude a conservé `transaction_id` brut et appliqué une mise
 
 Les captures ont été prises à 1 440 px de largeur sur les quatre étapes et vérifiées visuellement.
 
-- [Import et configuration](docs/web-validation/01-import.png)
-- [Exploration des données](docs/web-validation/02-eda.png)
-- [Prétraitement et comparaison](docs/web-validation/03-pretraitement.png)
-- [Exécution et export](docs/web-validation/04-execution.png)
+- [Import et configuration](../web-validation/01-import.png)
+- [Exploration des données](../web-validation/02-eda.png)
+- [Prétraitement et comparaison](../web-validation/03-pretraitement.png)
+- [Exécution et export](../web-validation/04-execution.png)
 
 ### Test de charge
 
